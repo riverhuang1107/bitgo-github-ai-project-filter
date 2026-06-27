@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>外部推理 API 使用文档</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fa;
+      --text: #17202a;
+      --muted: #5d6878;
+      --panel: #ffffff;
+      --border: #d9dee7;
+      --accent: #1f6feb;
+      --code-bg: #eef2f7;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.65;
+    }
+
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 40px 20px 64px;
+    }
+
+    article {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 32px;
+    }
+
+    h1, h2 {
+      line-height: 1.3;
+    }
+
+    h1 {
+      margin: 0 0 16px;
+      font-size: 32px;
+    }
+
+    h2 {
+      margin-top: 36px;
+      padding-top: 8px;
+      font-size: 22px;
+      border-top: 1px solid var(--border);
+    }
+
+    p {
+      margin: 12px 0;
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f0f3f8;
+    }
+
+    code {
+      background: var(--code-bg);
+      border-radius: 4px;
+      padding: 0.15em 0.35em;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      overflow-x: auto;
+      background: #111827;
+      color: #f9fafb;
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+    }
+
+    ul, ol {
+      padding-left: 24px;
+    }
+
+    .lead {
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    @media (max-width: 640px) {
+      main {
+        padding: 20px 12px 40px;
+      }
+
+      article {
+        padding: 20px;
+      }
+
+      h1 {
+        font-size: 26px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>外部推理 API 使用文档</h1>
+      <p class="lead">本文档说明本项目如何接入、调用和排查外部推理 API。项目当前以“筛选 GitHub Trending 候选仓库、判断哪些属于 AI 项目，并生成中文分类、简介和入选原因”作为示例展示，目的是演示外部推理 API 的结构化推理调用流程。该示例场景不代表 API 只能用于 GitHub 项目筛选；同样的接入方式也可用于其他需要模型推理、分类、摘要或结构化输出的业务。</p>
+
+      <h2>1. API 定位</h2>
+      <p>外部推理 API 提供通用推理能力。本项目把它用于一个完整示例流程：</p>
+      <ol>
+        <li>从 GitHub Trending 收集候选仓库数据。</li>
+        <li>将候选数据组织为 Anthropic Messages 风格请求体。</li>
+        <li>使用 ECDSA P-256 私钥对请求进行签名。</li>
+        <li>调用外部推理 API 获取结构化 JSON 结果。</li>
+        <li>校验结果后生成 Markdown 和 HTML 日报。</li>
+      </ol>
+      <p>在该示例中，模型需要判断每个候选仓库是否属于 AI 项目，并为结果生成中文字段。实际业务可以替换输入数据、系统提示词和输出 schema。</p>
+
+      <h2>2. 默认配置</h2>
+      <p>项目默认配置位于 <code>src/github_ai_daily/config.py</code>：</p>
+      <table>
+        <thead>
+          <tr><th>配置项</th><th>默认值</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>endpoint</code></td><td><code>https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages</code></td><td>外部推理 API 请求地址</td></tr>
+          <tr><td><code>model</code></td><td><code>claude-4.6-opus</code></td><td>默认推理模型</td></tr>
+          <tr><td><code>private_key_path</code></td><td>空</td><td>ECDSA 私钥路径，需要初始化后写入</td></tr>
+        </tbody>
+      </table>
+      <p>用户配置文件中的 <code>[reasoning]</code> 配置示例：</p>
+      <pre><code>[reasoning]
+endpoint = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
+model = "claude-4.6-opus"
+private_key_path = "/secure/ecdsa-private.pem"</code></pre>
+      <p>模型也可以通过环境变量覆盖：</p>
+      <pre><code>export REASONING_API_MODEL="claude-4.6-opus"</code></pre>
+
+      <h2>3. 私钥生成与连通性测试</h2>
+      <p>生成 ECDSA P-256 私钥：</p>
+      <pre><code>.venv/bin/github-ai-daily keygen --path /secure/ecdsa-private.pem</code></pre>
+      <p>测试外部推理 API 是否可访问：</p>
+      <pre><code>.venv/bin/github-ai-daily reasoning test \
+  --model claude-4.6-opus \
+  --key /secure/ecdsa-private.pem</code></pre>
+      <p>连通性测试会发送一个轻量请求，要求服务端返回 Anthropic 风格的 <code>content</code> 字段。请求完成后，CLI 会输出 token 使用统计。</p>
+
+      <h2>4. 请求签名</h2>
+      <p>每次请求都会使用 ECDSA P-256 私钥签名。签名文本格式为：</p>
+      <pre><code>METHOD
+/path
+?raw=query
+nonce</code></pre>
+      <p>说明：</p>
+      <ul>
+        <li><code>METHOD</code> 使用大写，例如 <code>POST</code>。</li>
+        <li>第二行为 URL path；没有 path 时使用 <code>/</code>。</li>
+        <li>只有存在 query string 时才包含第三行，且保留原始 query。</li>
+        <li>最后一行为随机 nonce。</li>
+      </ul>
+      <p>签名过程：</p>
+      <ol>
+        <li>将签名文本按 UTF-8 编码。</li>
+        <li>对文本执行 SHA-256。</li>
+        <li>使用 ECDSA P-256 对摘要生成 ASN.1/DER 签名。</li>
+        <li>将签名、nonce 和公钥写入请求头。</li>
+      </ol>
+      <table>
+        <thead>
+          <tr><th>Header</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>Content-Type</code></td><td>固定为 <code>application/json</code></td></tr>
+          <tr><td><code>X-Nonce</code></td><td>每次请求生成的随机 nonce</td></tr>
+          <tr><td><code>X-Signature</code></td><td>DER 签名的 hex 编码</td></tr>
+          <tr><td><code>X-Public-Key</code></td><td>SubjectPublicKeyInfo DER 公钥的 hex 编码</td></tr>
+        </tbody>
+      </table>
+
+      <h2>5. 请求体格式</h2>
+      <p>项目使用 Anthropic Messages 风格请求体。示例场景中的正式筛选请求结构如下：</p>
+      <pre><code>{
+  "model": "claude-4.6-opus",
+  "max_tokens": 4096,
+  "system": "你是 GitHub AI 项目筛选器。只判断输入候选，不得创造仓库...",
+  "messages": [
+    {
+      "role": "user",
+      "content": "筛选以下 GitHub Trending 候选：\n[{\"full_name\":\"owner/repo\"}]"
+    }
+  ]
+}</code></pre>
+      <p>示例场景传入的候选仓库字段包括：</p>
+      <table>
+        <thead>
+          <tr><th>字段</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>full_name</code></td><td>仓库完整名称，例如 <code>owner/repo</code></td></tr>
+          <tr><td><code>description</code></td><td>仓库描述</td></tr>
+          <tr><td><code>language</code></td><td>主要语言</td></tr>
+          <tr><td><code>topics</code></td><td>GitHub topics</td></tr>
+          <tr><td><code>stars</code></td><td>总 star 数</td></tr>
+          <tr><td><code>stars_today</code></td><td>当日新增 star 数</td></tr>
+        </tbody>
+      </table>
+      <p>这些字段服务于 GitHub Trending 示例。接入其他业务时，可以按业务需要替换输入字段和提示词。</p>
+
+      <h2>6. 响应格式</h2>
+      <p>示例场景要求模型返回纯 JSON 对象：</p>
+      <pre><code>{
+  "items": [
+    {
+      "full_name": "owner/repo",
+      "is_ai": true,
+      "category": "Agent",
+      "summary_zh": "中文简介",
+      "reason_zh": "入选原因"
+    }
+  ]
+}</code></pre>
+      <p>校验规则：</p>
+      <ul>
+        <li>JSON 根节点必须是对象。</li>
+        <li>必须包含 <code>items</code> 数组。</li>
+        <li>每个输入候选都必须返回一次。</li>
+        <li>不允许返回输入之外的仓库。</li>
+        <li>不允许重复返回同一个仓库。</li>
+        <li><code>is_ai</code> 只有严格为 <code>true</code> 时才视为 AI 项目。</li>
+      </ul>
+      <p>API 响应可以通过 Anthropic 风格 <code>content</code> 字段承载文本：</p>
+      <pre><code>{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"items\":[]}"
+    }
+  ]
+}</code></pre>
+      <p>项目也兼容 <code>content</code> 为字符串，或通过 <code>text</code> 字段直接返回文本。</p>
+
+      <h2>7. Token 统计</h2>
+      <p>每次外部推理 API 请求完成后，CLI 都会输出 token 统计：</p>
+      <pre><code>外部推理 API token 统计：input=12, output=3, total=15</code></pre>
+      <p>项目读取响应中的 <code>usage</code> 字段，并兼容两组字段名：</p>
+      <table>
+        <thead>
+          <tr><th>统计项</th><th>优先字段</th><th>兼容字段</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>输入 token</td><td><code>input_tokens</code></td><td><code>prompt_tokens</code></td></tr>
+          <tr><td>输出 token</td><td><code>output_tokens</code></td><td><code>completion_tokens</code></td></tr>
+          <tr><td>总 token</td><td><code>total_tokens</code></td><td>输入与输出相加</td></tr>
+        </tbody>
+      </table>
+      <p>如果服务端没有返回对应字段，CLI 会显示：</p>
+      <pre><code>服务端未提供</code></pre>
+      <p>项目不会估算或编造服务端未提供的 token 数据。</p>
+
+      <h2>8. 常见失败场景</h2>
+      <p>项目会在以下情况下停止生成正式报告：</p>
+      <table>
+        <thead>
+          <tr><th>场景</th><th>处理方式</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>HTTP 非 2xx</td><td>抛出 <code>Reasoning API returned HTTP ...</code>，并尽量附带服务端错误信息</td></tr>
+          <tr><td>响应不是合法 JSON</td><td>抛出 <code>Reasoning API did not return valid JSON</code></td></tr>
+          <tr><td>JSON 根节点不是对象</td><td>抛出 <code>Reasoning API JSON root must be an object</code></td></tr>
+          <tr><td>缺少 <code>items</code> 数组</td><td>抛出 <code>Reasoning response must contain an items array</code></td></tr>
+          <tr><td>返回未知或重复仓库</td><td>抛出 unknown or duplicate repository 错误</td></tr>
+          <tr><td>遗漏输入候选</td><td>抛出 omitted repositories 错误</td></tr>
+          <tr><td>示例场景中没有筛选出 AI 项目</td><td>抛出 <code>Reasoning API selected no AI projects</code></td></tr>
+        </tbody>
+      </table>
+
+      <h2>9. 安全注意事项</h2>
+      <ul>
+        <li>不要将真实私钥、管理 token 或其他密钥写入仓库。</li>
+        <li>文档、示例和配置模板中只应保留占位符。</li>
+        <li>私钥文件建议放在用户配置目录或安全目录，并限制文件权限。</li>
+        <li>自动测试使用本地 mock，不会调用真实 GitHub、外部推理 API、Resend 或 SMTP。</li>
+      </ul>
+    </article>
+  </main>
+</body>
+</html>
