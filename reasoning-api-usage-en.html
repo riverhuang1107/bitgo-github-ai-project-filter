@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>External Reasoning API Usage Guide</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fa;
+      --text: #17202a;
+      --muted: #5d6878;
+      --panel: #ffffff;
+      --border: #d9dee7;
+      --accent: #1f6feb;
+      --code-bg: #eef2f7;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      line-height: 1.65;
+    }
+
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 40px 20px 64px;
+    }
+
+    article {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 32px;
+    }
+
+    h1, h2 {
+      line-height: 1.3;
+    }
+
+    h1 {
+      margin: 0 0 16px;
+      font-size: 32px;
+    }
+
+    h2 {
+      margin-top: 36px;
+      padding-top: 8px;
+      font-size: 22px;
+      border-top: 1px solid var(--border);
+    }
+
+    p {
+      margin: 12px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f0f3f8;
+    }
+
+    code {
+      background: var(--code-bg);
+      border-radius: 4px;
+      padding: 0.15em 0.35em;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      overflow-x: auto;
+      background: #111827;
+      color: #f9fafb;
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+    }
+
+    ul, ol {
+      padding-left: 24px;
+    }
+
+    .lead {
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    @media (max-width: 640px) {
+      main {
+        padding: 20px 12px 40px;
+      }
+
+      article {
+        padding: 20px;
+      }
+
+      h1 {
+        font-size: 26px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+      <h1>External Reasoning API Usage Guide</h1>
+      <p class="lead">This document explains how this project integrates with, calls, and troubleshoots the external reasoning API. The current project uses “screening GitHub Trending candidate repositories, identifying which ones are AI projects, and generating Chinese categories, summaries, and selection reasons” as a sample scenario. This scenario is only a demonstration of structured reasoning API usage; it does not mean the API can only be used for GitHub project screening. The same integration pattern can be applied to other business workflows that need model reasoning, classification, summarization, or structured output.</p>
+
+      <h2>1. API Positioning</h2>
+      <p>The external reasoning API provides general-purpose reasoning capabilities. This project demonstrates it through an end-to-end sample workflow:</p>
+      <ol>
+        <li>Collect candidate repository data from GitHub Trending.</li>
+        <li>Organize candidate data into an Anthropic Messages-style request body.</li>
+        <li>Sign the request with an ECDSA P-256 private key.</li>
+        <li>Call the external reasoning API and receive structured JSON results.</li>
+        <li>Validate the result and generate Markdown and HTML reports.</li>
+      </ol>
+      <p>In this sample, the model determines whether each candidate repository is an AI project and generates Chinese fields for the result. For other business use cases, the input data, system prompt, and output schema can be replaced as needed.</p>
+
+      <h2>2. Default Configuration</h2>
+      <p>The default project configuration is defined in <code>src/github_ai_daily/config.py</code>:</p>
+      <table>
+        <thead>
+          <tr><th>Setting</th><th>Default value</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>endpoint</code></td><td><code>https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages</code></td><td>External reasoning API endpoint</td></tr>
+          <tr><td><code>model</code></td><td><code>claude-4.6-opus</code></td><td>Default reasoning model</td></tr>
+          <tr><td><code>private_key_path</code></td><td>Empty</td><td>ECDSA private key path, written after initialization</td></tr>
+        </tbody>
+      </table>
+      <p>Example <code>[reasoning]</code> configuration:</p>
+      <pre><code>[reasoning]
+endpoint = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
+model = "claude-4.6-opus"
+private_key_path = "/secure/ecdsa-private.pem"</code></pre>
+      <p>The model can also be overridden with an environment variable:</p>
+      <pre><code>export REASONING_API_MODEL="claude-4.6-opus"</code></pre>
+
+      <h2>3. Private Key Generation and Connectivity Test</h2>
+      <p>Generate an ECDSA P-256 private key:</p>
+      <pre><code>.venv/bin/github-ai-daily keygen --path /secure/ecdsa-private.pem</code></pre>
+      <p>Test whether the external reasoning API is reachable:</p>
+      <pre><code>.venv/bin/github-ai-daily reasoning test \
+  --model claude-4.6-opus \
+  --key /secure/ecdsa-private.pem</code></pre>
+      <p>The connectivity test sends a lightweight request and expects the server to return an Anthropic-style <code>content</code> field. After the request completes, the CLI prints token usage statistics.</p>
+
+      <h2>4. Request Signing</h2>
+      <p>Every request is signed with the ECDSA P-256 private key. The signing message format is:</p>
+      <pre><code>METHOD
+/path
+?raw=query
+nonce</code></pre>
+      <p>Notes:</p>
+      <ul>
+        <li><code>METHOD</code> is uppercase, such as <code>POST</code>.</li>
+        <li>The second line is the URL path; use <code>/</code> when there is no path.</li>
+        <li>The query line is included only when the URL has a query string, and the raw query is preserved.</li>
+        <li>The final line is a random nonce.</li>
+      </ul>
+      <p>Signing process:</p>
+      <ol>
+        <li>Encode the signing message as UTF-8.</li>
+        <li>Compute SHA-256 over the message.</li>
+        <li>Generate an ASN.1/DER signature over the digest using ECDSA P-256.</li>
+        <li>Write the signature, nonce, and public key into request headers.</li>
+      </ol>
+      <table>
+        <thead>
+          <tr><th>Header</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>Content-Type</code></td><td>Always <code>application/json</code></td></tr>
+          <tr><td><code>X-Nonce</code></td><td>Random nonce generated for each request</td></tr>
+          <tr><td><code>X-Signature</code></td><td>Hex-encoded DER signature</td></tr>
+          <tr><td><code>X-Public-Key</code></td><td>Hex-encoded SubjectPublicKeyInfo DER public key</td></tr>
+        </tbody>
+      </table>
+
+      <h2>5. Request Body Format</h2>
+      <p>The project uses an Anthropic Messages-style request body. In the sample screening scenario, the production request has this structure:</p>
+      <pre><code>{
+  "model": "claude-4.6-opus",
+  "max_tokens": 4096,
+  "system": "You are a GitHub AI project screener. Only judge the input candidates; do not invent repositories...",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Screen the following GitHub Trending candidates:\n[{\"full_name\":\"owner/repo\"}]"
+    }
+  ]
+}</code></pre>
+      <p>Candidate repository fields used by the sample scenario:</p>
+      <table>
+        <thead>
+          <tr><th>Field</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>full_name</code></td><td>Full repository name, such as <code>owner/repo</code></td></tr>
+          <tr><td><code>description</code></td><td>Repository description</td></tr>
+          <tr><td><code>language</code></td><td>Primary language</td></tr>
+          <tr><td><code>topics</code></td><td>GitHub topics</td></tr>
+          <tr><td><code>stars</code></td><td>Total star count</td></tr>
+          <tr><td><code>stars_today</code></td><td>Stars added today</td></tr>
+        </tbody>
+      </table>
+      <p>These fields are specific to the GitHub Trending sample. For other business scenarios, replace the input fields and prompt according to the use case.</p>
+
+      <h2>6. Response Format</h2>
+      <p>The sample scenario requires the model to return a plain JSON object:</p>
+      <pre><code>{
+  "items": [
+    {
+      "full_name": "owner/repo",
+      "is_ai": true,
+      "category": "Agent",
+      "summary_zh": "Chinese summary",
+      "reason_zh": "Selection reason"
+    }
+  ]
+}</code></pre>
+      <p>Validation rules:</p>
+      <ul>
+        <li>The JSON root must be an object.</li>
+        <li>It must contain an <code>items</code> array.</li>
+        <li>Every input candidate must be returned exactly once.</li>
+        <li>Repositories outside the input are not allowed.</li>
+        <li>Duplicate repositories are not allowed.</li>
+        <li><code>is_ai</code> is treated as an AI project only when it is strictly <code>true</code>.</li>
+      </ul>
+      <p>The API response can carry the text through the Anthropic-style <code>content</code> field:</p>
+      <pre><code>{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"items\":[]}"
+    }
+  ]
+}</code></pre>
+      <p>The project also supports <code>content</code> as a string, or text returned directly through a <code>text</code> field.</p>
+
+      <h2>7. Token Usage</h2>
+      <p>After every external reasoning API request completes, the CLI prints token usage:</p>
+      <pre><code>External reasoning API token usage: input=12, output=3, total=15</code></pre>
+      <p>The project reads the <code>usage</code> field from the response and supports two naming conventions:</p>
+      <table>
+        <thead>
+          <tr><th>Metric</th><th>Preferred field</th><th>Compatible field</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Input tokens</td><td><code>input_tokens</code></td><td><code>prompt_tokens</code></td></tr>
+          <tr><td>Output tokens</td><td><code>output_tokens</code></td><td><code>completion_tokens</code></td></tr>
+          <tr><td>Total tokens</td><td><code>total_tokens</code></td><td>Sum of input and output</td></tr>
+        </tbody>
+      </table>
+      <p>If the server does not provide a field, the CLI displays:</p>
+      <pre><code>Not provided by server</code></pre>
+      <p>The project does not estimate or fabricate token data that the server does not return.</p>
+
+      <h2>8. Common Failure Scenarios</h2>
+      <p>The project stops formal report generation in the following cases:</p>
+      <table>
+        <thead>
+          <tr><th>Scenario</th><th>Handling</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>HTTP status is not 2xx</td><td>Raises <code>Reasoning API returned HTTP ...</code> and includes server error details when available</td></tr>
+          <tr><td>Response is not valid JSON</td><td>Raises <code>Reasoning API did not return valid JSON</code></td></tr>
+          <tr><td>JSON root is not an object</td><td>Raises <code>Reasoning API JSON root must be an object</code></td></tr>
+          <tr><td>Missing <code>items</code> array</td><td>Raises <code>Reasoning response must contain an items array</code></td></tr>
+          <tr><td>Unknown or duplicate repository returned</td><td>Raises an unknown or duplicate repository error</td></tr>
+          <tr><td>Input candidate omitted</td><td>Raises an omitted repositories error</td></tr>
+          <tr><td>No AI projects selected in the sample scenario</td><td>Raises <code>Reasoning API selected no AI projects</code></td></tr>
+        </tbody>
+      </table>
+
+      <h2>9. Security Notes</h2>
+      <ul>
+        <li>Do not commit real private keys, management tokens, or other secrets to the repository.</li>
+        <li>Documentation, examples, and configuration templates should only contain placeholders.</li>
+        <li>Store the private key in a user configuration directory or secure directory, and restrict file permissions.</li>
+        <li>Automated tests use local mocks and do not call real GitHub, the external reasoning API, Resend, or SMTP.</li>
+      </ul>
+    </article>
+  </main>
+</body>
+</html>
