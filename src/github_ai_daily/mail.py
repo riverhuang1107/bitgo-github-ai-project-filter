@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
 import os
+import shutil
 import smtplib
 import ssl
+import subprocess
+import tempfile
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -42,6 +46,118 @@ def create_message(
 
 
 def send_message(settings: Settings, store: SecretStore, message: EmailMessage) -> None:
+    backend = resolve_mail_backend(settings)
+    if backend == "agent":
+        send_agent_message(message)
+        return
+    if backend != "resend":
+        raise RuntimeError(f"Unsupported mail backend: {backend}")
+    send_smtp_message(settings, store, message)
+
+
+def resolve_mail_backend(settings: Settings) -> str:
+    backend = os.environ.get("GITHUB_AI_MAIL_BACKEND") or settings.mail_backend
+    backend = backend.strip().lower()
+    if backend in {"resend", "smtp"}:
+        return "resend"
+    if backend == "agent":
+        if not agent_mail_available():
+            raise RuntimeError("Agent Mail CLI is not available or not authorized")
+        return "agent"
+    if backend == "auto":
+        return "agent" if agent_mail_available() else "resend"
+    raise RuntimeError("mail.backend must be one of: auto, agent, resend")
+
+
+def agent_mail_available() -> bool:
+    if not shutil.which("agently-cli"):
+        return False
+    result = subprocess.run(
+        ["agently-cli", "+me"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    if result.returncode != 0:
+        return False
+    try:
+        data = _json_from_output(result.stdout)
+    except RuntimeError:
+        return False
+    return bool(data.get("ok"))
+
+
+def send_agent_message(message: EmailMessage) -> None:
+    body = message.get_body(preferencelist=("html", "plain"))
+    if body is None:
+        raise RuntimeError("Email message has no body")
+    with tempfile.TemporaryDirectory(prefix=".github-ai-daily-mail-", dir=Path.cwd()) as tmp:
+        tmp_path = Path(tmp)
+        body_path = tmp_path / ("body.html" if body.get_content_subtype() == "html" else "body.txt")
+        body_path.write_text(body.get_content(), encoding="utf-8")
+        attachments = _write_agent_attachments(message, tmp_path)
+        command = [
+            "agently-cli",
+            "message",
+            "+send",
+            "--to",
+            str(message["To"]),
+            "--subject",
+            str(message["Subject"]),
+            "--body-file",
+            _relative_to_cwd(body_path),
+        ]
+        for attachment in attachments:
+            command.extend(["--attachment", _relative_to_cwd(attachment)])
+        first = _run_agent_command(command)
+        token = first.get("data", {}).get("confirmation_token")
+        if first.get("data", {}).get("confirmation_required") and token:
+            _run_agent_command([*command, "--confirmation-token", str(token)])
+
+
+def _write_agent_attachments(message: EmailMessage, directory: Path) -> list[Path]:
+    paths = []
+    for index, part in enumerate(message.iter_attachments(), start=1):
+        filename = part.get_filename() or f"attachment-{index}"
+        path = directory / Path(filename).name
+        path.write_bytes(part.get_payload(decode=True) or b"")
+        paths.append(path)
+    return paths
+
+
+def _run_agent_command(command: list[str]) -> dict:
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise RuntimeError(f"Agent Mail send failed: {detail}")
+    return _json_from_output(result.stdout)
+
+
+def _json_from_output(output: str) -> dict:
+    start = output.find("{")
+    end = output.rfind("}")
+    if start < 0 or end < start:
+        raise RuntimeError(f"Command did not return JSON: {output.strip()}")
+    data = json.loads(output[start : end + 1])
+    if not isinstance(data, dict):
+        raise RuntimeError("Command returned non-object JSON")
+    if not data.get("ok"):
+        raise RuntimeError(f"Command failed: {data}")
+    return data
+
+
+def _relative_to_cwd(path: Path) -> str:
+    return str(path.resolve().relative_to(Path.cwd().resolve()))
+
+
+def send_smtp_message(settings: Settings, store: SecretStore, message: EmailMessage) -> None:
     password = store.get(SMTP_KEY)
     if not password:
         raise RuntimeError("SMTP credential is not initialized; run `github-ai-daily init`")

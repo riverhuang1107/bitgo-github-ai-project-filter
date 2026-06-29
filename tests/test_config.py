@@ -15,6 +15,7 @@ def test_config_round_trip(tmp_path: Path):
     actual = Settings.load(path)
     assert actual.model == expected.model
     assert actual.mail_from == expected.mail_from
+    assert actual.mail_backend == expected.mail_backend
 
 
 def test_default_mail_from_is_agent_mail():
@@ -37,6 +38,7 @@ def test_empty_mail_from_loads_default(tmp_path: Path):
                 "[mail]",
                 'from = ""',
                 'test_to = "reader@example.com"',
+                'backend = "agent"',
                 'host = "smtp.resend.com"',
                 "port = 587",
                 'username = "resend"',
@@ -48,6 +50,7 @@ def test_empty_mail_from_loads_default(tmp_path: Path):
     actual = Settings.load(path)
 
     assert actual.mail_from == DEFAULT_MAIL_FROM
+    assert actual.mail_backend == "agent"
 
 
 def test_default_model_is_verified_model():

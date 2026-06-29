@@ -1,15 +1,16 @@
 # GitHub AI Daily
 
-跨平台 Python CLI：抓取 GitHub Trending 当日项目，用指定的 ECDSA 签名推理 API筛选 AI 项目，生成 Markdown/HTML 日报；需要时也可以通过 Resend SMTP 发送 MIME 邮件。
+跨平台 Python CLI：抓取 GitHub Trending 当日项目，用指定的 ECDSA 签名推理 API筛选 AI 项目，生成 Markdown/HTML 日报。通过 agent 执行邮件命令时使用 Agent Mail；非 agent 环境才使用 Resend SMTP 发送 MIME 邮件。
 
 ## 运行要求
 
 - Python 3.11+
 - Windows、macOS 或 Linux
 - 生成报告需要访问 GitHub 和推理 API
-- 发送邮件才需要可访问 Resend，并准备一个已创建且验证发件域名的 Resend 账号
+- 通过 agent 执行邮件命令需要已授权 Agent Mail CLI
+- 非 agent 环境发送邮件才需要可访问 Resend，并准备一个已创建且验证发件域名的 Resend 账号
 
-Resend 的账号注册、域名所有权验证和服务商风控无法由本地程序绕过。只运行 `generate` 不需要 Resend，也不会发送邮件。
+Resend 的账号注册、域名所有权验证和服务商风控无法由本地程序绕过。只运行 `generate` 不需要 Agent Mail 或 Resend，也不会发送邮件。
 
 ## 安装
 
@@ -57,6 +58,7 @@ private_key_path = "$KEY_PATH"
 [mail]
 from = ""
 test_to = ""
+backend = "auto"
 host = "smtp.resend.com"
 port = 587
 username = "resend"
@@ -86,7 +88,65 @@ export GITHUB_TOKEN="ghp_..."
 
 ## 邮件初始化
 
-注入以下 Secret/配置后运行：
+邮件发送分两种环境：
+
+- 通过 agent 执行“发送邮件”“读取邮件”“整理邮件”等命令时，使用 Agent Mail CLI 和 Agent Mail skill。
+- 在非 agent 环境运行本项目 CLI 的 `run --to ...`、`send ... --to ...`、`mail test` 时，才使用 Resend SMTP。
+
+项目 CLI 默认使用 `mail.backend = "auto"`：检测到已安装且已授权的 `agently-cli` 时走 Agent Mail，否则回落 Resend SMTP。也可以通过 `GITHUB_AI_MAIL_BACKEND=agent|resend|auto` 临时覆盖。
+
+### Agent 环境：Agent Mail
+
+先在 agent 的运行环境中确认是否已经配置了 Agent Mail 发件身份。
+
+- 如果已有 Agent Mail，可以直接通过 agent 执行邮件命令。
+- 如果还没有 Agent Mail，请先按下面的步骤安装并授权 Agent Mail CLI。
+
+参考 [Agent Mail CLI setup](https://agent.qq.com/doc/cli-setup.md)。
+
+安装或更新 CLI：
+
+```bash
+npm install -g @tencent-qqmail/agently-cli
+```
+
+安装或更新 Agent Mail skill：
+
+```bash
+npx skills add https://agent.qq.com --skill -g -y
+```
+
+如果当前环境是 WorkBuddy，还需要安装 WorkBuddy skill：
+
+```bash
+if [ -d "$HOME/.workbuddy/skills" ]; then
+  TMPDIR=$(mktemp -d)
+  curl -L -o "$TMPDIR/skill.zip" "https://lightmake.site/api/v1/download?slug=agently-mail"
+  mkdir -p "$HOME/.workbuddy/skills/agently-mail"
+  unzip -o "$TMPDIR/skill.zip" -d "$HOME/.workbuddy/skills/agently-mail"
+  rm -rf "$TMPDIR"
+fi
+```
+
+执行 OAuth 授权：
+
+```bash
+agently-cli auth login
+```
+
+命令会输出授权 URL。点击或复制该链接到浏览器完成授权；授权完成后命令会自动退出。失败或超时时不要反复重试，先检查 CLI 输出的错误信息。
+
+验证授权邮箱：
+
+```bash
+agently-cli +me
+```
+
+验证成功后，agent 邮件工作流使用该邮箱收发邮件。
+
+### 非 Agent 环境：Resend SMTP
+
+非 agent 环境发送本项目生成的报告时，注入以下 Secret/配置后运行：
 
 ```bash
 export RESEND_MANAGEMENT_API_KEY="re_..."
@@ -104,16 +164,13 @@ $env:GITHUB_AI_MAIL_TEST_TO = "ops@example.com"
 .\.venv\Scripts\github-ai-daily init
 ```
 
-发件身份使用 Agent Mail。初始化前请先在 agent 的运行环境中确认是否已经配置了 Agent Mail 发件身份：
-
-- 如果已有 Agent Mail，确认该身份对应的邮箱或域名已经被 Resend 允许发信，并保持 `GITHUB_AI_MAIL_FROM` 为空即可使用项目默认发件身份。
-- 如果还没有 Agent Mail，请先在邮件服务或部署 Secret 中创建/授权一个 Agent Mail 发件身份，然后通过 `GITHUB_AI_MAIL_FROM` 注入完整 From，例如：
+Resend SMTP 的 From 必须使用已被 Resend 允许发信的邮箱或域名。如果需要显式指定 From，通过 `GITHUB_AI_MAIL_FROM` 注入完整发件身份，例如：
 
 ```bash
 export GITHUB_AI_MAIL_FROM="Agent Mail <agent@verified.example>"
 ```
 
-真实投递仍要求该 Agent Mail 邮箱或域名已被 Resend 允许发信；否则工具可以构造邮件，但 SMTP 服务端可能拒绝投递。
+真实投递仍要求该邮箱或域名已被 Resend 允许发信；否则工具可以构造邮件，但 SMTP 服务端可能拒绝投递。
 
 初始化会：
 
@@ -135,7 +192,7 @@ export GITHUB_AI_MAIL_FROM="Agent Mail <agent@verified.example>"
 
 ## Linux Secret 后端
 
-Linux 上只有邮件相关流程需要 Secret 后端，因为 SMTP Key 不能写进普通文件。桌面 Linux 默认使用 Secret Service。无桌面 Linux 必须配置三个命令：
+Linux 上只有非 agent 环境的 Resend SMTP 流程需要 Secret 后端，因为 SMTP Key 不能写进普通文件。桌面 Linux 默认使用 Secret Service。无桌面 Linux 必须配置三个命令：
 
 ```bash
 export GITHUB_AI_SECRET_GET_CMD="/opt/secrets/get"
@@ -162,7 +219,7 @@ RESEND_MANAGEMENT_API_KEY=re_... .venv/bin/github-ai-daily mail remove
 .venv/bin/github-ai-daily reasoning test --model claude-4.6-opus --key /secure/ecdsa-private.pem
 ```
 
-`generate` 只生成报告文件，不发送邮件。`run --to ...`、`send ... --to ...`、`mail test` 会发送邮件。
+`generate` 只生成报告文件，不发送邮件。通过 agent 执行邮件命令时使用 Agent Mail；在非 agent 环境中，`run --to ...`、`send ... --to ...`、`mail test` 会通过 Resend SMTP 发送邮件。
 
 ## 推理 API签名
 

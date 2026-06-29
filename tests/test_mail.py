@@ -7,6 +7,7 @@ from github_ai_daily.mail import (
     create_message,
     provision_mail,
     remove_mail,
+    send_message,
 )
 from github_ai_daily.secrets import SecretStore
 
@@ -65,6 +66,99 @@ def test_resend_provisioning_rotates_after_success(monkeypatch):
     assert store.get(SMTP_KEY) == "new-token"
     assert store.get(SMTP_KEY_ID) == "new-id"
     assert deleted == ["old-id"]
+
+
+def test_auto_backend_uses_agent_mail_when_available(monkeypatch, tmp_path: Path):
+    commands = []
+
+    class Result:
+        def __init__(self, stdout):
+            self.returncode = 0
+            self.stdout = stdout
+            self.stderr = ""
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        if command == ["agently-cli", "+me"]:
+            return Result('{"ok": true, "data": {}}')
+        if "--confirmation-token" in command:
+            return Result('{"ok": true, "data": {"queued": true}}')
+        return Result(
+            '{"ok": true, "data": {"confirmation_required": true, '
+            '"confirmation_token": "ctk_test"}}'
+        )
+
+    attachment = tmp_path / "report.html"
+    attachment.write_text("<h1>Report</h1>", encoding="utf-8")
+    message = create_message(
+        Settings().mail_from,
+        "reader@example.com",
+        "Daily",
+        "<h1>Daily</h1>",
+        [attachment],
+    )
+
+    monkeypatch.setattr("github_ai_daily.mail.shutil.which", lambda name: "/usr/bin/agently-cli")
+    monkeypatch.setattr("github_ai_daily.mail.subprocess.run", fake_run)
+
+    send_message(Settings(mail_backend="auto"), MemoryStore(), message)
+
+    assert commands[0] == ["agently-cli", "+me"]
+    assert commands[1][:3] == ["agently-cli", "message", "+send"]
+    assert "--body-file" in commands[1]
+    assert "--attachment" in commands[1]
+    assert commands[2][-2:] == ["--confirmation-token", "ctk_test"]
+
+
+def test_resend_backend_uses_smtp_secret(monkeypatch):
+    sent = {}
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            sent["host"] = host
+            sent["port"] = port
+            sent["timeout"] = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def ehlo(self):
+            pass
+
+        def starttls(self, context):
+            sent["tls"] = True
+
+        def login(self, username, password):
+            sent["username"] = username
+            sent["password"] = password
+
+        def send_message(self, message):
+            sent["to"] = message["To"]
+
+    store = MemoryStore()
+    store.set(SMTP_KEY, "smtp-token")
+    message = create_message(
+        Settings().mail_from,
+        "reader@example.com",
+        "Daily",
+        "<h1>Daily</h1>",
+    )
+    monkeypatch.setattr("github_ai_daily.mail.smtplib.SMTP", FakeSMTP)
+
+    send_message(Settings(mail_backend="resend"), store, message)
+
+    assert sent == {
+        "host": "smtp.resend.com",
+        "port": 587,
+        "timeout": 30,
+        "tls": True,
+        "username": "resend",
+        "password": "smtp-token",
+        "to": "reader@example.com",
+    }
 
 
 def test_remove_requires_management_key_for_remote_credential():

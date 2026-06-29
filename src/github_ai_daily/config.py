@@ -31,6 +31,7 @@ class Settings:
     output_dir: str = "output"
     mail_from: str = DEFAULT_MAIL_FROM
     mail_test_to: str = ""
+    mail_backend: str = "auto"
     smtp_host: str = "smtp.resend.com"
     smtp_port: int = 587
     smtp_username: str = "resend"
@@ -50,6 +51,7 @@ class Settings:
             output_dir=app.get("output_dir", "output"),
             mail_from=mail.get("from") or DEFAULT_MAIL_FROM,
             mail_test_to=mail.get("test_to", ""),
+            mail_backend=mail.get("backend", "auto"),
             smtp_host=mail.get("host", "smtp.resend.com"),
             smtp_port=int(mail.get("port", 587)),
             smtp_username=mail.get("username", "resend"),
@@ -67,6 +69,7 @@ class Settings:
             "[mail]\n"
             f'from = "{_escape(self.mail_from)}"\n'
             f'test_to = "{_escape(self.mail_test_to)}"\n'
+            f'backend = "{_escape(self.mail_backend)}"\n'
             f'host = "{_escape(self.smtp_host)}"\n'
             f"port = {self.smtp_port}\n"
             f'username = "{_escape(self.smtp_username)}"\n'
