@@ -122,10 +122,10 @@ def cmd_init(args, settings: Settings) -> int:
     settings.model = (
         os.environ.get("REASONING_API_MODEL") or settings.model or DEFAULT_MODEL
     )
-    settings.mail_from = settings.mail_from or os.environ.get("GITHUB_AI_MAIL_FROM", "")
+    settings.mail_from = os.environ.get("GITHUB_AI_MAIL_FROM") or settings.mail_from
     settings.mail_test_to = settings.mail_test_to or os.environ.get("GITHUB_AI_MAIL_TEST_TO", "")
-    if not settings.mail_from or not settings.mail_test_to:
-        raise RuntimeError("GITHUB_AI_MAIL_FROM and GITHUB_AI_MAIL_TEST_TO are required")
+    if not settings.mail_test_to:
+        raise RuntimeError("GITHUB_AI_MAIL_TEST_TO is required")
     store = get_secret_store()
     management_key = management_key_from_env()
     try:

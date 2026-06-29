@@ -10,6 +10,9 @@ import tomllib
 
 DEFAULT_ENDPOINT = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
 DEFAULT_MODEL = "claude-4.6-opus"
+DEFAULT_MAIL_ADDRESS = "hhq4326@agent.qq.com"
+DEFAULT_MAIL_DISPLAY_NAME = "Agent Mail"
+DEFAULT_MAIL_FROM = f"{DEFAULT_MAIL_DISPLAY_NAME} <{DEFAULT_MAIL_ADDRESS}>"
 
 
 def user_config_dir() -> Path:
@@ -26,7 +29,7 @@ class Settings:
     model: str = DEFAULT_MODEL
     private_key_path: str = ""
     output_dir: str = "output"
-    mail_from: str = ""
+    mail_from: str = DEFAULT_MAIL_FROM
     mail_test_to: str = ""
     smtp_host: str = "smtp.resend.com"
     smtp_port: int = 587
@@ -45,7 +48,7 @@ class Settings:
             model=reasoning.get("model", DEFAULT_MODEL),
             private_key_path=reasoning.get("private_key_path", ""),
             output_dir=app.get("output_dir", "output"),
-            mail_from=mail.get("from", ""),
+            mail_from=mail.get("from") or DEFAULT_MAIL_FROM,
             mail_test_to=mail.get("test_to", ""),
             smtp_host=mail.get("host", "smtp.resend.com"),
             smtp_port=int(mail.get("port", 587)),

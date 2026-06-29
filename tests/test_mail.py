@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from github_ai_daily.config import Settings
+from github_ai_daily.config import DEFAULT_MAIL_FROM, Settings
 from github_ai_daily.mail import (
     SMTP_KEY,
     SMTP_KEY_ID,
@@ -29,13 +29,14 @@ def test_mime_message_contains_html_and_attachment(tmp_path: Path):
     attachment = tmp_path / "report.md"
     attachment.write_text("# Report", encoding="utf-8")
     message = create_message(
-        "AI Daily <daily@example.com>",
+        Settings().mail_from,
         "reader@example.com",
         "Daily",
         "<h1>Daily</h1>",
         [attachment],
     )
     assert message.is_multipart()
+    assert message["From"] == DEFAULT_MAIL_FROM
     assert message.get_body(preferencelist=("html",)).get_content().strip() == "<h1>Daily</h1>"
     assert any(part.get_filename() == "report.md" for part in message.iter_attachments())
 

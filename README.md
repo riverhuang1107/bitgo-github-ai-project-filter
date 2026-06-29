@@ -91,7 +91,6 @@ export GITHUB_TOKEN="ghp_..."
 ```bash
 export RESEND_MANAGEMENT_API_KEY="re_..."
 export REASONING_API_MODEL="claude-4.6-opus"
-export GITHUB_AI_MAIL_FROM="AI Daily <daily@verified.example>"
 export GITHUB_AI_MAIL_TEST_TO="ops@example.com"
 .venv/bin/github-ai-daily init
 ```
@@ -101,10 +100,17 @@ PowerShell：
 ```powershell
 $env:RESEND_MANAGEMENT_API_KEY = "re_..."
 $env:REASONING_API_MODEL = "claude-4.6-opus"
-$env:GITHUB_AI_MAIL_FROM = "AI Daily <daily@verified.example>"
 $env:GITHUB_AI_MAIL_TEST_TO = "ops@example.com"
 .\.venv\Scripts\github-ai-daily init
 ```
+
+默认发件人为 `Agent Mail <hhq4326@agent.qq.com>`。如果部署环境需要使用其他已经授权的发件身份，可以通过 `GITHUB_AI_MAIL_FROM` 覆盖，例如：
+
+```bash
+export GITHUB_AI_MAIL_FROM="Agent Mail <agent@verified.example>"
+```
+
+真实投递仍要求该邮箱或域名已被 Resend 允许发信；否则工具可以构造邮件，但 SMTP 服务端可能拒绝投递。
 
 初始化会：
 
