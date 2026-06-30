@@ -156,7 +156,7 @@ def generate(settings: Settings, args) -> dict[str, Path]:
         repos = github.enrich(github.trending())
         selections = reasoning.select(repos)
     finally:
-        print(reasoning.last_usage.format())
+        print(reasoning.last_usage.format_json())
         github.close()
         reasoning.close()
     items = build_items(repos, selections, args.limit)
@@ -238,7 +238,7 @@ def cmd_reasoning(args, settings: Settings) -> int:
             raise RuntimeError("API responded, but no Anthropic-style content was returned")
         print("External reasoning API access: OK")
     finally:
-        print(reasoning.last_usage.format())
+        print(reasoning.last_usage.format_json())
         reasoning.close()
     return 0
 

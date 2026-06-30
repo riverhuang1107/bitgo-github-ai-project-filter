@@ -307,10 +307,30 @@ nonce
 - `X-Signature`（hex）
 - `X-Public-Key`（SubjectPublicKeyInfo DER hex）
 
-请求体采用 Anthropic Messages 风格。接口失败、返回非法 JSON、遗漏候选或创造仓库时，正式报告不会生成。
+请求体采用 Anthropic Messages 风格。接口失败或返回非法 JSON 时，正式报告不会生成。若模型返回未知仓库名、重复仓库名或遗漏部分候选，CLI 会丢弃问题项，并用剩余有效 AI 候选继续补位生成报告。
 
-每次外部推理 API请求完成后，CLI 都会立即输出 input、output 和 total token。
-如果服务端响应没有 `usage` 字段，会明确显示“服务端未提供”，不会估算或编造。
+每次外部推理 API请求完成后，CLI 都会立即输出服务端返回的完整 `usage` JSON，例如：
+
+```json
+{
+  "usage": {
+    "input_tokens": 2137,
+    "output_tokens": 1389,
+    "cache_read_input_tokens": 0,
+    "cache_creation_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "output_token_unit_price": 2520,
+    "consume_amount": 3500280,
+    "balance": 996499720,
+    "hash": "..."
+  }
+}
+```
+
+如果服务端响应没有 `usage` 字段，CLI 会输出 `"usage": null`，不会估算或编造。
 默认模型为已完成真实连通性验证的 `claude-4.6-opus`，仍可通过
 `REASONING_API_MODEL` 或 `reasoning test --model` 覆盖。
 

@@ -21,6 +21,7 @@ class TokenUsage:
     input_tokens: int | None = None
     output_tokens: int | None = None
     total_tokens: int | None = None
+    raw: dict | None = None
 
     @classmethod
     def from_response(cls, response: dict) -> "TokenUsage":
@@ -34,7 +35,7 @@ class TokenUsage:
         total_tokens = _integer(usage.get("total_tokens"))
         if total_tokens is None and input_tokens is not None and output_tokens is not None:
             total_tokens = input_tokens + output_tokens
-        return cls(input_tokens, output_tokens, total_tokens)
+        return cls(input_tokens, output_tokens, total_tokens, dict(usage))
 
     def format(self) -> str:
         return (
@@ -43,6 +44,9 @@ class TokenUsage:
             f"output={_display(self.output_tokens)}, "
             f"total={_display(self.total_tokens)}"
         )
+
+    def format_json(self) -> str:
+        return json.dumps({"usage": self.raw}, ensure_ascii=False, indent=2)
 
 
 class ReasoningClient:
@@ -83,7 +87,7 @@ class ReasoningClient:
         self.last_usage = TokenUsage.from_response(response_data)
         _raise_for_status(response, response_data)
         result = _extract_json(response_data)
-        return _validate_selections(result, {repo.full_name for repo in repos})
+        return _validate_selections(result, {repo.full_name for repo in repos}, strict=False)
 
     def test_access(self) -> dict:
         body = {
@@ -131,7 +135,9 @@ def _extract_json(response: dict) -> dict:
     return value
 
 
-def _validate_selections(data: dict, allowed: set[str]) -> list[Selection]:
+def _validate_selections(
+    data: dict, allowed: set[str], strict: bool = True
+) -> list[Selection]:
     raw_items = data.get("items")
     if not isinstance(raw_items, list):
         raise ValueError("Reasoning response must contain an items array")
@@ -142,7 +148,9 @@ def _validate_selections(data: dict, allowed: set[str]) -> list[Selection]:
             raise ValueError("Each reasoning item must be an object")
         name = item.get("full_name")
         if name not in allowed or name in found:
-            raise ValueError(f"Reasoning response contains unknown or duplicate repository: {name}")
+            if strict:
+                raise ValueError(f"Reasoning response contains unknown or duplicate repository: {name}")
+            continue
         found.add(name)
         selections.append(
             Selection(
@@ -154,6 +162,8 @@ def _validate_selections(data: dict, allowed: set[str]) -> list[Selection]:
             )
         )
     if found != allowed:
+        if not strict:
+            return selections
         missing = ", ".join(sorted(allowed - found))
         raise ValueError(f"Reasoning response omitted repositories: {missing}")
     return selections

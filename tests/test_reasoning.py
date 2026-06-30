@@ -45,12 +45,63 @@ def test_rejects_unknown_repository():
         )
 
 
+def test_tolerant_validation_drops_unknown_and_duplicate_repositories():
+    result = _validate_selections(
+        {
+            "items": [
+                {
+                    "full_name": "a/b",
+                    "is_ai": True,
+                    "category": "Agent",
+                    "summary_zh": "简介",
+                    "reason_zh": "原因",
+                },
+                {
+                    "full_name": "typo/repo",
+                    "is_ai": True,
+                    "category": "Agent",
+                    "summary_zh": "",
+                    "reason_zh": "",
+                },
+                {
+                    "full_name": "a/b",
+                    "is_ai": True,
+                    "category": "Agent",
+                    "summary_zh": "重复",
+                    "reason_zh": "重复",
+                },
+            ]
+        },
+        {"a/b", "c/d"},
+        strict=False,
+    )
+
+    assert [item.full_name for item in result] == ["a/b"]
+
+
 def test_token_usage_supports_anthropic_and_reports_missing():
     usage = TokenUsage.from_response(
-        {"usage": {"input_tokens": 12, "output_tokens": 3}}
+        {
+            "usage": {
+                "input_tokens": 12,
+                "output_tokens": 3,
+                "cache_read_input_tokens": 0,
+                "consume_amount": 2520,
+                "hash": "abc",
+            }
+        }
     )
     assert usage.total_tokens == 15
+    assert usage.raw == {
+        "input_tokens": 12,
+        "output_tokens": 3,
+        "cache_read_input_tokens": 0,
+        "consume_amount": 2520,
+        "hash": "abc",
+    }
     assert "input=12" in usage.format()
+    assert '"consume_amount": 2520' in usage.format_json()
+    assert '"hash": "abc"' in usage.format_json()
     assert "服务端未提供" in TokenUsage().format()
 
 

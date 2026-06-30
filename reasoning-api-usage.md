@@ -107,7 +107,7 @@ REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY" \
 .venv/bin/github-ai-daily reasoning test
 ```
 
-连通性测试会发送一个轻量请求，要求服务端返回 Anthropic 风格的 `content` 字段。请求完成后，CLI 会输出服务端返回的 token 使用统计；如果服务端未返回 `usage` 字段，CLI 不会自行估算。
+连通性测试会发送一个轻量请求，要求服务端返回 Anthropic 风格的 `content` 字段。请求完成后，CLI 会输出服务端返回的完整 `usage` JSON；如果服务端未返回 `usage` 字段，CLI 会输出 `"usage": null`，不会自行估算。
 
 ## 4. 新版 `X-Params` 钱包签名认证（默认）
 
@@ -286,29 +286,30 @@ API 响应可以通过 Anthropic 风格 `content` 字段承载文本：
 
 项目也兼容 `content` 为字符串，或通过 `text` 字段直接返回文本。
 
-## 8. Token 统计
+## 8. Usage 输出
 
-每次外部推理 API 请求完成后，CLI 都会输出 token 统计：
+每次外部推理 API 请求完成后，CLI 都会输出服务端返回的完整 `usage` JSON：
 
-```text
-外部推理 API token 统计：input=12, output=3, total=15
+```json
+{
+  "usage": {
+    "input_tokens": 2137,
+    "output_tokens": 1389,
+    "cache_read_input_tokens": 0,
+    "cache_creation_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "output_token_unit_price": 2520,
+    "consume_amount": 3500280,
+    "balance": 996499720,
+    "hash": "..."
+  }
+}
 ```
 
-项目读取响应中的 `usage` 字段，并兼容两组字段名：
-
-| 统计项 | 优先字段 | 兼容字段 |
-| --- | --- | --- |
-| 输入 token | `input_tokens` | `prompt_tokens` |
-| 输出 token | `output_tokens` | `completion_tokens` |
-| 总 token | `total_tokens` | 输入与输出相加 |
-
-如果服务端没有返回对应字段，CLI 会显示：
-
-```text
-服务端未提供
-```
-
-项目不会估算或编造服务端未提供的 token 数据。
+项目会保留服务端 `usage` 对象中的所有字段。若服务端没有返回 `usage` 字段，CLI 会输出 `"usage": null`，不会估算或编造。
 
 ## 9. 常见失败场景
 
@@ -321,8 +322,8 @@ API 响应可以通过 Anthropic 风格 `content` 字段承载文本：
 | 响应不是合法 JSON | 抛出 `Reasoning API did not return valid JSON` |
 | JSON 根节点不是对象 | 抛出 `Reasoning API JSON root must be an object` |
 | 缺少 `items` 数组 | 抛出 `Reasoning response must contain an items array` |
-| 返回未知或重复仓库 | 抛出 unknown or duplicate repository 错误 |
-| 遗漏输入候选 | 抛出 omitted repositories 错误 |
+| 返回未知或重复仓库 | 丢弃问题项，使用剩余有效候选继续生成报告 |
+| 遗漏输入候选 | 使用已返回的有效候选继续补位生成报告 |
 | 示例场景中没有筛选出 AI 项目 | 抛出 `Reasoning API selected no AI projects` |
 
 ## 10. 安全注意事项
@@ -333,4 +334,3 @@ API 响应可以通过 Anthropic 风格 `content` 字段承载文本：
 - 钱包地址、链类型、面额和面额 ID 必须与服务端登记信息一致，否则可能返回 401。
 - legacy ECDSA 私钥文件建议放在用户配置目录或安全目录，并限制文件权限。
 - 自动测试使用本地 mock，不会调用真实 GitHub、外部推理 API、Resend 或 SMTP。
-

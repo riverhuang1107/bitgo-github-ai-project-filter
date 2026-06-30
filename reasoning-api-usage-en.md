@@ -107,7 +107,7 @@ You can also put the wallet parameters in configuration or environment variables
 .venv/bin/github-ai-daily reasoning test
 ```
 
-The connectivity test sends a lightweight request and expects the server to return an Anthropic-style `content` field. After the request completes, the CLI prints token usage returned by the server; if the server does not return `usage`, the CLI does not estimate it.
+The connectivity test sends a lightweight request and expects the server to return an Anthropic-style `content` field. After the request completes, the CLI prints the complete `usage` JSON returned by the server; if the server does not return `usage`, the CLI prints `"usage": null` and does not estimate it.
 
 ## 4. New `X-Params` Wallet Signature Authentication (Default)
 
@@ -286,29 +286,30 @@ The API response can carry the text through the Anthropic-style `content` field:
 
 The project also supports `content` as a string, or text returned directly through a `text` field.
 
-## 8. Token Usage
+## 8. Usage Output
 
-After every external reasoning API request completes, the CLI prints token usage:
+After every external reasoning API request completes, the CLI prints the complete `usage` JSON returned by the server:
 
-```text
-External reasoning API token usage: input=12, output=3, total=15
+```json
+{
+  "usage": {
+    "input_tokens": 2137,
+    "output_tokens": 1389,
+    "cache_read_input_tokens": 0,
+    "cache_creation_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "output_token_unit_price": 2520,
+    "consume_amount": 3500280,
+    "balance": 996499720,
+    "hash": "..."
+  }
+}
 ```
 
-The project reads the `usage` field from the response and supports two naming conventions:
-
-| Metric | Preferred field | Compatible field |
-| --- | --- | --- |
-| Input tokens | `input_tokens` | `prompt_tokens` |
-| Output tokens | `output_tokens` | `completion_tokens` |
-| Total tokens | `total_tokens` | Sum of input and output |
-
-If the server does not provide a field, the CLI displays:
-
-```text
-Not provided by server
-```
-
-The project does not estimate or fabricate token data that the server does not return.
+The project preserves every field in the server's `usage` object. If the server does not return `usage`, the CLI prints `"usage": null` and does not estimate or fabricate usage data.
 
 ## 9. Common Failure Scenarios
 
@@ -321,8 +322,8 @@ The project stops formal report generation in the following cases:
 | Response is not valid JSON | Raises `Reasoning API did not return valid JSON` |
 | JSON root is not an object | Raises `Reasoning API JSON root must be an object` |
 | Missing `items` array | Raises `Reasoning response must contain an items array` |
-| Unknown or duplicate repository returned | Raises an unknown or duplicate repository error |
-| Input candidate omitted | Raises an omitted repositories error |
+| Unknown or duplicate repository returned | Drops the problematic item and continues report generation with the remaining valid candidates |
+| Input candidate omitted | Continues report generation with the valid candidates returned by the model |
 | No AI projects selected in the sample scenario | Raises `Reasoning API selected no AI projects` |
 
 ## 10. Security Notes
@@ -333,4 +334,3 @@ The project stops formal report generation in the following cases:
 - Wallet address, chain, amount, and amount ID must match the server registration; otherwise the API may return 401.
 - Store legacy ECDSA private key files in a user configuration directory or secure directory, and restrict file permissions.
 - Automated tests use local mocks and do not call real GitHub, the external reasoning API, Resend, or SMTP.
-

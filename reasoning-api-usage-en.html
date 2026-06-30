@@ -290,23 +290,25 @@ nonce</code></pre>
 }</code></pre>
       <p>The project also supports <code>content</code> as a string, or text returned directly through a <code>text</code> field.</p>
 
-      <h2>7. Token Usage</h2>
-      <p>After every external reasoning API request completes, the CLI prints token usage:</p>
-      <pre><code>External reasoning API token usage: input=12, output=3, total=15</code></pre>
-      <p>The project reads the <code>usage</code> field from the response and supports two naming conventions:</p>
-      <table>
-        <thead>
-          <tr><th>Metric</th><th>Preferred field</th><th>Compatible field</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>Input tokens</td><td><code>input_tokens</code></td><td><code>prompt_tokens</code></td></tr>
-          <tr><td>Output tokens</td><td><code>output_tokens</code></td><td><code>completion_tokens</code></td></tr>
-          <tr><td>Total tokens</td><td><code>total_tokens</code></td><td>Sum of input and output</td></tr>
-        </tbody>
-      </table>
-      <p>If the server does not provide a field, the CLI displays:</p>
-      <pre><code>Not provided by server</code></pre>
-      <p>The project does not estimate or fabricate token data that the server does not return.</p>
+      <h2>7. Usage Output</h2>
+      <p>After every external reasoning API request completes, the CLI prints the complete <code>usage</code> JSON returned by the server:</p>
+      <pre><code>{
+  "usage": {
+    "input_tokens": 2137,
+    "output_tokens": 1389,
+    "cache_read_input_tokens": 0,
+    "cache_creation_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "output_token_unit_price": 2520,
+    "consume_amount": 3500280,
+    "balance": 996499720,
+    "hash": "..."
+  }
+}</code></pre>
+      <p>The project preserves every field in the server's <code>usage</code> object. If the server does not return <code>usage</code>, the CLI prints <code>"usage": null</code> and does not estimate or fabricate usage data.</p>
 
       <h2>8. Common Failure Scenarios</h2>
       <p>The project stops formal report generation in the following cases:</p>
@@ -319,8 +321,8 @@ nonce</code></pre>
           <tr><td>Response is not valid JSON</td><td>Raises <code>Reasoning API did not return valid JSON</code></td></tr>
           <tr><td>JSON root is not an object</td><td>Raises <code>Reasoning API JSON root must be an object</code></td></tr>
           <tr><td>Missing <code>items</code> array</td><td>Raises <code>Reasoning response must contain an items array</code></td></tr>
-          <tr><td>Unknown or duplicate repository returned</td><td>Raises an unknown or duplicate repository error</td></tr>
-          <tr><td>Input candidate omitted</td><td>Raises an omitted repositories error</td></tr>
+          <tr><td>Unknown or duplicate repository returned</td><td>Drops the problematic item and continues report generation with the remaining valid candidates</td></tr>
+          <tr><td>Input candidate omitted</td><td>Continues report generation with the valid candidates returned by the model</td></tr>
           <tr><td>No AI projects selected in the sample scenario</td><td>Raises <code>Reasoning API selected no AI projects</code></td></tr>
         </tbody>
       </table>

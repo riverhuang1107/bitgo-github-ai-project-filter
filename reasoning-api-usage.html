@@ -294,23 +294,25 @@ nonce</code></pre>
 }</code></pre>
       <p>项目也兼容 <code>content</code> 为字符串，或通过 <code>text</code> 字段直接返回文本。</p>
 
-      <h2>7. Token 统计</h2>
-      <p>每次外部推理 API 请求完成后，CLI 都会输出 token 统计：</p>
-      <pre><code>外部推理 API token 统计：input=12, output=3, total=15</code></pre>
-      <p>项目读取响应中的 <code>usage</code> 字段，并兼容两组字段名：</p>
-      <table>
-        <thead>
-          <tr><th>统计项</th><th>优先字段</th><th>兼容字段</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>输入 token</td><td><code>input_tokens</code></td><td><code>prompt_tokens</code></td></tr>
-          <tr><td>输出 token</td><td><code>output_tokens</code></td><td><code>completion_tokens</code></td></tr>
-          <tr><td>总 token</td><td><code>total_tokens</code></td><td>输入与输出相加</td></tr>
-        </tbody>
-      </table>
-      <p>如果服务端没有返回对应字段，CLI 会显示：</p>
-      <pre><code>服务端未提供</code></pre>
-      <p>项目不会估算或编造服务端未提供的 token 数据。</p>
+      <h2>7. Usage 输出</h2>
+      <p>每次外部推理 API 请求完成后，CLI 都会输出服务端返回的完整 <code>usage</code> JSON：</p>
+      <pre><code>{
+  "usage": {
+    "input_tokens": 2137,
+    "output_tokens": 1389,
+    "cache_read_input_tokens": 0,
+    "cache_creation_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "output_token_unit_price": 2520,
+    "consume_amount": 3500280,
+    "balance": 996499720,
+    "hash": "..."
+  }
+}</code></pre>
+      <p>项目会保留服务端 <code>usage</code> 对象中的所有字段。若服务端没有返回 <code>usage</code> 字段，CLI 会输出 <code>"usage": null</code>，不会估算或编造。</p>
 
       <h2>8. 常见失败场景</h2>
       <p>项目会在以下情况下停止生成正式报告：</p>
@@ -323,8 +325,8 @@ nonce</code></pre>
           <tr><td>响应不是合法 JSON</td><td>抛出 <code>Reasoning API did not return valid JSON</code></td></tr>
           <tr><td>JSON 根节点不是对象</td><td>抛出 <code>Reasoning API JSON root must be an object</code></td></tr>
           <tr><td>缺少 <code>items</code> 数组</td><td>抛出 <code>Reasoning response must contain an items array</code></td></tr>
-          <tr><td>返回未知或重复仓库</td><td>抛出 unknown or duplicate repository 错误</td></tr>
-          <tr><td>遗漏输入候选</td><td>抛出 omitted repositories 错误</td></tr>
+          <tr><td>返回未知或重复仓库</td><td>丢弃问题项，使用剩余有效候选继续生成报告</td></tr>
+          <tr><td>遗漏输入候选</td><td>使用已返回的有效候选继续补位生成报告</td></tr>
           <tr><td>示例场景中没有筛选出 AI 项目</td><td>抛出 <code>Reasoning API selected no AI projects</code></td></tr>
         </tbody>
       </table>
