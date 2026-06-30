@@ -14,7 +14,6 @@ from typing import Any
 
 DEFAULT_ENDPOINT = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
 DEFAULT_WALLET_ADDRESS = "MTymcTbieD5u3K8Vfsa7eHN3NZuKQzwTpk"
-DEFAULT_MONEY = "10"
 DEFAULT_MONEY_ID = "20260630001"
 DEFAULT_MODEL = "deepseek-v3"
 
@@ -71,7 +70,7 @@ def parse_args() -> argparse.Namespace:
         description="Create X-Params with a Go LTC compact signature and call the reasoning API."
     )
     parser.add_argument("--wallet-address", default=DEFAULT_WALLET_ADDRESS)
-    parser.add_argument("--money", default=DEFAULT_MONEY)
+    parser.add_argument("--money", required=True)
     parser.add_argument("--money-id", default=DEFAULT_MONEY_ID)
     parser.add_argument("--private-key-wif")
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)

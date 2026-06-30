@@ -471,9 +471,9 @@
           <tbody>
             <tr><td><code>endpoint</code></td><td><code>https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages</code></td><td>External reasoning API endpoint</td></tr>
             <tr><td><code>model</code></td><td><code>claude-4.6-opus</code></td><td>Default reasoning model</td></tr>
-            <tr><td><code>wallet_chain</code></td><td><code>ltc</code></td><td>New wallet signing chain: <code>ltc</code>, <code>btc</code>, or <code>eth</code></td></tr>
+            <tr><td><code>wallet_chain</code></td><td><code>YOUR_WALLET_CHAIN</code></td><td>New wallet signing chain: <code>ltc</code>, <code>btc</code>, or <code>eth</code>; must be provided by a person</td></tr>
             <tr><td><code>wallet_address</code></td><td>Empty</td><td>Wallet address</td></tr>
-            <tr><td><code>money</code></td><td><code>10</code></td><td>Amount</td></tr>
+            <tr><td><code>money</code></td><td><code>YOUR_WALLET_MONEY</code></td><td>Amount; must be provided by a person</td></tr>
             <tr><td><code>money_id</code></td><td>Empty</td><td>Amount ID</td></tr>
             <tr><td><code>signer_command</code></td><td>Empty</td><td>Optional Go signer command path; empty uses the project default signer</td></tr>
             <tr><td><code>private_key_path</code></td><td>Empty</td><td>ECDSA private key path for legacy key-pair authentication only</td></tr>
@@ -483,9 +483,9 @@
         <pre><code>[reasoning]
 endpoint = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
 model = "claude-4.6-opus"
-wallet_chain = "ltc"
+wallet_chain = "YOUR_WALLET_CHAIN"
 wallet_address = "YOUR_WALLET_ADDRESS"
-money = "10"
+money = "YOUR_WALLET_MONEY"
 money_id = "YOUR_MONEY_ID"
 signer_command = ""
 
@@ -494,9 +494,9 @@ private_key_path = "/secure/ecdsa-private.pem"</code></pre>
         <p>The new wallet signature authentication can be overridden with environment variables. Do not write wallet private keys to configuration files or commits.</p>
         <pre><code>export REASONING_API_MODEL="claude-4.6-opus"
 export REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY"
-export REASONING_WALLET_CHAIN="ltc"
+export REASONING_WALLET_CHAIN="YOUR_WALLET_CHAIN"
 export REASONING_WALLET_ADDRESS="YOUR_WALLET_ADDRESS"
-export REASONING_MONEY="10"
+export REASONING_MONEY="YOUR_WALLET_MONEY"
 export REASONING_MONEY_ID="YOUR_MONEY_ID"
 export REASONING_SIGNER_COMMAND=""</code></pre>
       </section>
@@ -505,15 +505,15 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
         <h2>3. Multi-Chain Wallet Generation and Connectivity Test</h2>
         <p>Cryptocurrency signing is implemented only by the Go signer in <code>tools/reasoning-signer</code>. The Python runtime calls the signer, builds <code>X-Params</code>, and sends the HTTP request.</p>
         <div class="grid">
-          <div class="tile"><strong>LTC</strong><span>Generate a Litecoin mainnet wallet, export the address and WIF private key, then use <code>wallet_chain = "ltc"</code>. LTC has been verified with real requests.</span></div>
+          <div class="tile"><strong>LTC</strong><span>Generate a Litecoin mainnet wallet, export the address and WIF private key, then use <code>wallet_chain = "ltc"</code>. LTC has been verified with real requests, but the chain must still be explicitly provided by a person.</span></div>
           <div class="tile"><strong>BTC</strong><span>Generate a Bitcoin mainnet wallet, export the address and WIF private key, then use <code>wallet_chain = "btc"</code>. Regular addresses such as <code>1...</code>, <code>3...</code>, and <code>bc1q...</code> use compact ECDSA; Taproot addresses (<code>bc1p...</code>) first call <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code> to tweak the internal private key, then sign with Schnorr using the tweaked key.</span></div>
           <div class="tile"><strong>ETH</strong><span>Generate an Ethereum wallet, export the <code>0x...</code> address and hex private key, then use <code>wallet_chain = "eth"</code>.</span></div>
         </div>
         <pre><code>REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY" \
 .venv/bin/github-ai-daily reasoning test \
-  --chain ltc \
+  --chain YOUR_WALLET_CHAIN \
   --wallet-address YOUR_WALLET_ADDRESS \
-  --money 10 \
+  --money YOUR_WALLET_MONEY \
   --money-id YOUR_MONEY_ID \
   --model claude-4.6-opus</code></pre>
       </section>
@@ -531,7 +531,7 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
         <p>After base64-encoding the signature, build this JSON:</p>
         <pre><code>{
   "wallet_address": "...",
-  "money": "10",
+  "money": "YOUR_WALLET_MONEY",
   "money_id": "...",
   "signature": "..."
 }</code></pre>

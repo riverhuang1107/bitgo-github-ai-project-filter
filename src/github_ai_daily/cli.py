@@ -246,11 +246,11 @@ def cmd_reasoning(args, settings: Settings) -> int:
 def reasoning_auth(settings: Settings, args=None) -> WalletAuth:
     private_key = _arg_or_env(args, "private_key", "REASONING_PRIVATE_KEY", "")
     auth = WalletAuth(
-        chain=_arg_or_env(args, "chain", "REASONING_WALLET_CHAIN", settings.wallet_chain or "ltc"),
+        chain=_arg_or_env(args, "chain", "REASONING_WALLET_CHAIN", settings.wallet_chain),
         wallet_address=_arg_or_env(
             args, "wallet_address", "REASONING_WALLET_ADDRESS", settings.wallet_address
         ),
-        money=_arg_or_env(args, "money", "REASONING_MONEY", settings.money or "10"),
+        money=_arg_or_env(args, "money", "REASONING_MONEY", settings.money),
         money_id=_arg_or_env(args, "money_id", "REASONING_MONEY_ID", settings.money_id),
         private_key=private_key,
         signer_command=_arg_or_env(

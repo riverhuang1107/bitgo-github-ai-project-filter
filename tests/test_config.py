@@ -72,3 +72,11 @@ def test_empty_mail_from_loads_default(tmp_path: Path):
 
 def test_default_model_is_verified_model():
     assert Settings().model == DEFAULT_MODEL == "claude-4.6-opus"
+
+
+def test_money_has_no_default_amount():
+    assert Settings().money == ""
+
+
+def test_wallet_chain_has_no_default():
+    assert Settings().wallet_chain == ""

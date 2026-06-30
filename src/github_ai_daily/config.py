@@ -28,9 +28,9 @@ class Settings:
     endpoint: str = DEFAULT_ENDPOINT
     model: str = DEFAULT_MODEL
     private_key_path: str = ""
-    wallet_chain: str = "ltc"
+    wallet_chain: str = ""
     wallet_address: str = ""
-    money: str = "10"
+    money: str = ""
     money_id: str = ""
     signer_command: str = ""
     output_dir: str = "output"
@@ -53,9 +53,9 @@ class Settings:
             endpoint=reasoning.get("endpoint", DEFAULT_ENDPOINT),
             model=reasoning.get("model", DEFAULT_MODEL),
             private_key_path=reasoning.get("private_key_path", ""),
-            wallet_chain=reasoning.get("wallet_chain", "ltc"),
+            wallet_chain=reasoning.get("wallet_chain", ""),
             wallet_address=reasoning.get("wallet_address", ""),
-            money=str(reasoning.get("money", "10")),
+            money=str(reasoning.get("money", "")),
             money_id=str(reasoning.get("money_id", "")),
             signer_command=reasoning.get("signer_command", ""),
             output_dir=app.get("output_dir", "output"),

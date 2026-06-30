@@ -52,9 +52,9 @@ output_dir = "output"
 [reasoning]
 endpoint = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
 model = "claude-4.6-opus"
-wallet_chain = "ltc"
+wallet_chain = "YOUR_WALLET_CHAIN"
 wallet_address = "YOUR_WALLET_ADDRESS"
-money = "10"
+money = "YOUR_WALLET_MONEY"
 money_id = "YOUR_MONEY_ID"
 signer_command = ""
 
@@ -223,7 +223,7 @@ export GITHUB_AI_SECRET_DELETE_CMD="/opt/secrets/delete"
 .venv/bin/github-ai-daily mail test --to ops@example.com
 RESEND_MANAGEMENT_API_KEY=re_... .venv/bin/github-ai-daily mail rotate
 RESEND_MANAGEMENT_API_KEY=re_... .venv/bin/github-ai-daily mail remove
-REASONING_PRIVATE_KEY=... .venv/bin/github-ai-daily reasoning test --chain ltc --wallet-address YOUR_WALLET_ADDRESS --money 10 --money-id YOUR_MONEY_ID
+REASONING_PRIVATE_KEY=... .venv/bin/github-ai-daily reasoning test --chain YOUR_WALLET_CHAIN --wallet-address YOUR_WALLET_ADDRESS --money YOUR_WALLET_MONEY --money-id YOUR_MONEY_ID
 ```
 
 `generate` 只生成报告文件，不发送邮件。通过 agent 执行邮件命令时使用 Agent Mail；在非 agent 环境中，`run --to ...`、`send ... --to ...`、`mail test` 会通过 Resend SMTP 发送邮件。
@@ -251,7 +251,7 @@ ${wallet_address}${money}${money_id}
 ```json
 {
   "wallet_address": "...",
-  "money": "10",
+  "money": "YOUR_WALLET_MONEY",
   "money_id": "...",
   "signature": "..."
 }
@@ -270,9 +270,9 @@ X-Params: <base64-json>
 [reasoning]
 endpoint = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
 model = "claude-4.6-opus"
-wallet_chain = "ltc"
+wallet_chain = "YOUR_WALLET_CHAIN"
 wallet_address = "YOUR_WALLET_ADDRESS"
-money = "10"
+money = "YOUR_WALLET_MONEY"
 money_id = "YOUR_MONEY_ID"
 signer_command = ""
 ```
@@ -280,13 +280,13 @@ signer_command = ""
 环境变量可覆盖配置：
 
 - `REASONING_PRIVATE_KEY`：必需；`ltc/btc` 为 WIF，`eth` 为 hex 私钥。
-- `REASONING_WALLET_CHAIN`：`ltc`、`btc` 或 `eth`，默认 `ltc`。
+- `REASONING_WALLET_CHAIN`：必需；`ltc`、`btc` 或 `eth`，必须由人提供，不能默认假设为固定链。
 - `REASONING_WALLET_ADDRESS`
-- `REASONING_MONEY`
+- `REASONING_MONEY`：必需；钱包面额金额，必须由人提供，不能默认假设为固定值。
 - `REASONING_MONEY_ID`
 - `REASONING_SIGNER_COMMAND`：可选；用于指定预编译 signer 或自定义 signer 命令。
 
-`ltc` 已完成真实请求验证。`btc` 和 `eth` 已按同一协议在代码中实现，部署时需使用对应链的钱包地址和私钥验证。BTC 地址类型会影响签名算法：非 Taproot 地址走 compact ECDSA，`bc1p...` Taproot 地址走私钥 tweak 后的 Schnorr；如果服务端登记的钱包类型、地址派生方式、Taproot tweak 规则或签名算法不一致，可能返回 401。
+`ltc` 已完成真实请求验证。`btc` 和 `eth` 已按同一协议在代码中实现，部署时需使用由人提供的对应链类型、钱包地址和私钥验证。BTC 地址类型会影响签名算法：非 Taproot 地址走 compact ECDSA，`bc1p...` Taproot 地址走私钥 tweak 后的 Schnorr；如果服务端登记的钱包类型、地址派生方式、Taproot tweak 规则或签名算法不一致，可能返回 401。
 
 ### 旧版 key pair 签名（legacy）
 

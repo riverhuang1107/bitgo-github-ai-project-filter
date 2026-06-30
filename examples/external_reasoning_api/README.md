@@ -13,7 +13,7 @@ Set the private key in an environment variable so it is not committed to the rep
 
 ```powershell
 $env:EXTERNAL_REASONING_LTC_WIF = "<your Litecoin WIF private key>"
-python .\request_example.py --debug
+python .\request_example.py --money YOUR_WALLET_MONEY --debug
 ```
 
 The dry run validates that:
@@ -26,13 +26,13 @@ The dry run validates that:
 
 ```powershell
 $env:EXTERNAL_REASONING_LTC_WIF = "<your Litecoin WIF private key>"
-python .\request_example.py --send
+python .\request_example.py --money YOUR_WALLET_MONEY --send
 ```
 
-Defaults:
+Defaults and required inputs:
 
 - wallet address: `MTymcTbieD5u3K8Vfsa7eHN3NZuKQzwTpk`
-- money: `10`
+- money: required; use the amount provided by a person, for example `--money YOUR_WALLET_MONEY`
 - money id: `20260630001`
 - endpoint: `https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages`
 - model: `deepseek-v3`

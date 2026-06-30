@@ -471,9 +471,9 @@
           <tbody>
             <tr><td><code>endpoint</code></td><td><code>https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages</code></td><td>外部推理 API 请求地址</td></tr>
             <tr><td><code>model</code></td><td><code>claude-4.6-opus</code></td><td>默认推理模型</td></tr>
-            <tr><td><code>wallet_chain</code></td><td><code>ltc</code></td><td>新版钱包签名链，可选 <code>ltc</code>、<code>btc</code>、<code>eth</code></td></tr>
+            <tr><td><code>wallet_chain</code></td><td><code>YOUR_WALLET_CHAIN</code></td><td>新版钱包签名链，可选 <code>ltc</code>、<code>btc</code>、<code>eth</code>，必须由人提供</td></tr>
             <tr><td><code>wallet_address</code></td><td>空</td><td>钱包地址</td></tr>
-            <tr><td><code>money</code></td><td><code>10</code></td><td>面额</td></tr>
+            <tr><td><code>money</code></td><td><code>YOUR_WALLET_MONEY</code></td><td>面额，必须由人提供</td></tr>
             <tr><td><code>money_id</code></td><td>空</td><td>面额 ID</td></tr>
             <tr><td><code>signer_command</code></td><td>空</td><td>可选 Go signer 命令路径；为空时使用项目内默认 signer</td></tr>
             <tr><td><code>private_key_path</code></td><td>空</td><td>旧版 key-pair 认证的 ECDSA 私钥路径，仅 legacy 使用</td></tr>
@@ -483,9 +483,9 @@
         <pre><code>[reasoning]
 endpoint = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
 model = "claude-4.6-opus"
-wallet_chain = "ltc"
+wallet_chain = "YOUR_WALLET_CHAIN"
 wallet_address = "YOUR_WALLET_ADDRESS"
-money = "10"
+money = "YOUR_WALLET_MONEY"
 money_id = "YOUR_MONEY_ID"
 signer_command = ""
 
@@ -494,9 +494,9 @@ private_key_path = "/secure/ecdsa-private.pem"</code></pre>
         <p>新版钱包签名认证可通过环境变量覆盖。不要将钱包私钥写入配置文件或提交记录。</p>
         <pre><code>export REASONING_API_MODEL="claude-4.6-opus"
 export REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY"
-export REASONING_WALLET_CHAIN="ltc"
+export REASONING_WALLET_CHAIN="YOUR_WALLET_CHAIN"
 export REASONING_WALLET_ADDRESS="YOUR_WALLET_ADDRESS"
-export REASONING_MONEY="10"
+export REASONING_MONEY="YOUR_WALLET_MONEY"
 export REASONING_MONEY_ID="YOUR_MONEY_ID"
 export REASONING_SIGNER_COMMAND=""</code></pre>
       </section>
@@ -505,15 +505,15 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
         <h2>3. 多链钱包生成与连通性测试</h2>
         <p>加密货币相关签名由 Go signer 统一实现，代码位于 <code>tools/reasoning-signer</code>。Python 运行时只调用 signer、组装 <code>X-Params</code> 并发送 HTTP 请求。</p>
         <div class="grid">
-          <div class="tile"><strong>LTC</strong><span>生成 Litecoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "ltc"</code>。LTC 已通过真实请求验证。</span></div>
+          <div class="tile"><strong>LTC</strong><span>生成 Litecoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "ltc"</code>。LTC 已通过真实请求验证，但链类型仍必须由人明确提供。</span></div>
           <div class="tile"><strong>BTC</strong><span>生成 Bitcoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "btc"</code>。普通地址（如 <code>1...</code>、<code>3...</code>、<code>bc1q...</code>）使用 compact ECDSA；Taproot 地址（<code>bc1p...</code>）先用 <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code> 调整内部私钥，再用调整后的私钥执行 Schnorr 签名。</span></div>
           <div class="tile"><strong>ETH</strong><span>生成 Ethereum 钱包，导出 <code>0x...</code> 地址和 hex 私钥，配置 <code>wallet_chain = "eth"</code>。</span></div>
         </div>
         <pre><code>REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY" \
 .venv/bin/github-ai-daily reasoning test \
-  --chain ltc \
+  --chain YOUR_WALLET_CHAIN \
   --wallet-address YOUR_WALLET_ADDRESS \
-  --money 10 \
+  --money YOUR_WALLET_MONEY \
   --money-id YOUR_MONEY_ID \
   --model claude-4.6-opus</code></pre>
       </section>
@@ -531,7 +531,7 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
         <p>签名结果 base64 编码后，组装 JSON：</p>
         <pre><code>{
   "wallet_address": "...",
-  "money": "10",
+  "money": "YOUR_WALLET_MONEY",
   "money_id": "...",
   "signature": "..."
 }</code></pre>

@@ -80,7 +80,7 @@ def test_reasoning_auth_uses_cli_over_env(monkeypatch):
 
 def test_reasoning_auth_requires_private_key(monkeypatch):
     monkeypatch.delenv("REASONING_PRIVATE_KEY", raising=False)
-    settings = Settings(wallet_address="wallet", money="10", money_id="id")
+    settings = Settings(wallet_chain="ltc", wallet_address="wallet", money="10", money_id="id")
 
     try:
         reasoning_auth(settings)
@@ -88,3 +88,27 @@ def test_reasoning_auth_requires_private_key(monkeypatch):
         assert "REASONING_PRIVATE_KEY" in str(exc)
     else:
         raise AssertionError("Expected private key requirement")
+
+
+def test_reasoning_auth_requires_money(monkeypatch):
+    monkeypatch.setenv("REASONING_PRIVATE_KEY", "private")
+    settings = Settings(wallet_chain="ltc", wallet_address="wallet", money="", money_id="id")
+
+    try:
+        reasoning_auth(settings)
+    except ValueError as exc:
+        assert "reasoning money is required" in str(exc)
+    else:
+        raise AssertionError("Expected money requirement")
+
+
+def test_reasoning_auth_requires_wallet_chain(monkeypatch):
+    monkeypatch.setenv("REASONING_PRIVATE_KEY", "private")
+    settings = Settings(wallet_chain="", wallet_address="wallet", money="10", money_id="id")
+
+    try:
+        reasoning_auth(settings)
+    except ValueError as exc:
+        assert "reasoning wallet chain must be one of" in str(exc)
+    else:
+        raise AssertionError("Expected wallet chain requirement")

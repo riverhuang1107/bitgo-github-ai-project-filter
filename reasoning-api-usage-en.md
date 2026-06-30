@@ -22,9 +22,9 @@ The default project configuration is defined in `src/github_ai_daily/config.py`:
 | --- | --- | --- |
 | `endpoint` | `https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages` | External reasoning API endpoint |
 | `model` | `claude-4.6-opus` | Default reasoning model |
-| `wallet_chain` | `ltc` | New wallet signing chain: `ltc`, `btc`, or `eth` |
+| `wallet_chain` | `YOUR_WALLET_CHAIN` | New wallet signing chain: `ltc`, `btc`, or `eth`; must be provided by a person |
 | `wallet_address` | Empty | Wallet address |
-| `money` | `10` | Amount |
+| `money` | `YOUR_WALLET_MONEY` | Amount; must be provided by a person |
 | `money_id` | Empty | Amount ID |
 | `signer_command` | Empty | Optional Go signer command path; empty uses the project default signer |
 | `private_key_path` | Empty | ECDSA private key path for legacy key-pair authentication only |
@@ -35,9 +35,9 @@ Example `[reasoning]` configuration:
 [reasoning]
 endpoint = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
 model = "claude-4.6-opus"
-wallet_chain = "ltc"
+wallet_chain = "YOUR_WALLET_CHAIN"
 wallet_address = "YOUR_WALLET_ADDRESS"
-money = "10"
+money = "YOUR_WALLET_MONEY"
 money_id = "YOUR_MONEY_ID"
 signer_command = ""
 
@@ -50,9 +50,9 @@ The new wallet signature authentication can be overridden with environment varia
 ```bash
 export REASONING_API_MODEL="claude-4.6-opus"
 export REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY"
-export REASONING_WALLET_CHAIN="ltc"
+export REASONING_WALLET_CHAIN="YOUR_WALLET_CHAIN"
 export REASONING_WALLET_ADDRESS="YOUR_WALLET_ADDRESS"
-export REASONING_MONEY="10"
+export REASONING_MONEY="YOUR_WALLET_MONEY"
 export REASONING_MONEY_ID="YOUR_MONEY_ID"
 export REASONING_SIGNER_COMMAND=""
 ```
@@ -69,7 +69,7 @@ Cryptocurrency signing is implemented only by the Go signer in `tools/reasoning-
 2. Export the Litecoin address and WIF private key.
 3. Configure `wallet_chain = "ltc"` and inject the WIF private key through `REASONING_PRIVATE_KEY`.
 
-LTC is the default chain and has been verified with real external reasoning API requests.
+LTC has been verified with real external reasoning API requests, but the chain must still be explicitly provided by a person.
 
 ### BTC Wallet
 
@@ -94,9 +94,9 @@ ETH is implemented with the new `X-Params` protocol and signs the 32-byte digest
 ```bash
 REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY" \
 .venv/bin/github-ai-daily reasoning test \
-  --chain ltc \
+  --chain YOUR_WALLET_CHAIN \
   --wallet-address YOUR_WALLET_ADDRESS \
-  --money 10 \
+  --money YOUR_WALLET_MONEY \
   --money-id YOUR_MONEY_ID \
   --model claude-4.6-opus
 ```
@@ -133,7 +133,7 @@ Signing process:
 ```json
 {
   "wallet_address": "YOUR_WALLET_ADDRESS",
-  "money": "10",
+  "money": "YOUR_WALLET_MONEY",
   "money_id": "YOUR_MONEY_ID",
   "signature": "BASE64_SIGNATURE"
 }
