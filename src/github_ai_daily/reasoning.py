@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from pathlib import Path
 
 import httpx
 
-from .crypto import load_private_key, signed_headers
+from .crypto import WalletAuth, wallet_signed_headers
 from .models import Repository, Selection
 
 
@@ -47,10 +46,10 @@ class TokenUsage:
 
 
 class ReasoningClient:
-    def __init__(self, endpoint: str, model: str, private_key_path: Path, timeout: float = 90):
+    def __init__(self, endpoint: str, model: str, auth: WalletAuth, timeout: float = 90):
         self.endpoint = endpoint
         self.model = model
-        self.key = load_private_key(private_key_path)
+        self.auth = auth
         self.client = httpx.Client(timeout=timeout)
         self.last_usage = TokenUsage()
 
@@ -78,7 +77,7 @@ class ReasoningClient:
                 }
             ],
         }
-        headers = signed_headers("POST", self.endpoint, self.key)
+        headers = wallet_signed_headers(self.auth)
         response = self.client.post(self.endpoint, headers=headers, json=body)
         response_data = _response_json(response)
         self.last_usage = TokenUsage.from_response(response_data)
@@ -97,7 +96,7 @@ class ReasoningClient:
                 }
             ],
         }
-        headers = signed_headers("POST", self.endpoint, self.key)
+        headers = wallet_signed_headers(self.auth)
         response = self.client.post(self.endpoint, headers=headers, json=body)
         response_data = _response_json(response)
         self.last_usage = TokenUsage.from_response(response_data)

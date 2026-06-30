@@ -1,12 +1,45 @@
 from __future__ import annotations
 
+import base64
 import hashlib
+import json
 import secrets
+import shlex
+import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, utils
+
+SUPPORTED_WALLET_CHAINS = {"ltc", "btc", "eth"}
+
+
+@dataclass(slots=True)
+class WalletAuth:
+    chain: str
+    wallet_address: str
+    money: str
+    money_id: str
+    private_key: str
+    signer_command: str = ""
+
+    def normalized_chain(self) -> str:
+        return self.chain.strip().lower()
+
+    def validate(self) -> None:
+        chain = self.normalized_chain()
+        if chain not in SUPPORTED_WALLET_CHAINS:
+            raise ValueError("reasoning wallet chain must be one of: btc, eth, ltc")
+        if not self.wallet_address.strip():
+            raise ValueError("reasoning wallet address is required")
+        if not str(self.money).strip():
+            raise ValueError("reasoning money is required")
+        if not str(self.money_id).strip():
+            raise ValueError("reasoning money_id is required")
+        if not self.private_key.strip():
+            raise ValueError("REASONING_PRIVATE_KEY is required")
 
 
 def generate_private_key(path: Path, overwrite: bool = False) -> None:
@@ -63,3 +96,78 @@ def signed_headers(
         "X-Signature": signature.hex(),
         "X-Public-Key": public_key_hex(key),
     }
+
+
+def wallet_signed_headers(auth: WalletAuth) -> dict[str, str]:
+    return {
+        "Content-Type": "application/json",
+        "X-Params": build_x_params(auth),
+    }
+
+
+def build_x_params(auth: WalletAuth) -> str:
+    signed = run_wallet_signer(auth)
+    header_params = {
+        "wallet_address": signed["wallet_address"],
+        "money": signed["money"],
+        "money_id": signed["money_id"],
+        "signature": signed["signature"],
+    }
+    payload = json.dumps(
+        header_params, ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")
+    return base64.b64encode(payload).decode("ascii")
+
+
+def run_wallet_signer(auth: WalletAuth) -> dict[str, str]:
+    auth.validate()
+    command, cwd = _signer_command(auth.signer_command)
+    command = [
+        *command,
+        "--chain",
+        auth.normalized_chain(),
+        "--wallet-address",
+        auth.wallet_address,
+        "--money",
+        str(auth.money),
+        "--money-id",
+        str(auth.money_id),
+        "--private-key",
+        auth.private_key,
+    ]
+    completed = subprocess.run(
+        command,
+        cwd=cwd,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout).strip()
+        raise RuntimeError(f"reasoning wallet signer failed: {detail}")
+    try:
+        data = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("reasoning wallet signer did not return valid JSON") from exc
+    if not isinstance(data, dict):
+        raise RuntimeError("reasoning wallet signer JSON root must be an object")
+    required = {"wallet_address", "money", "money_id", "signature"}
+    missing = required - set(data)
+    if missing:
+        raise RuntimeError(
+            "reasoning wallet signer JSON missing fields: "
+            + ", ".join(sorted(missing))
+        )
+    signature = data.get("signature")
+    if not isinstance(signature, str) or not signature:
+        raise RuntimeError("reasoning wallet signer returned an empty signature")
+    return {key: str(data[key]) for key in required}
+
+
+def _signer_command(configured: str) -> tuple[list[str], Path | None]:
+    if configured.strip():
+        return shlex.split(configured), None
+    repo_root = Path(__file__).resolve().parents[2]
+    signer_dir = repo_root / "tools" / "reasoning-signer"
+    return ["go", "run", "."], signer_dir

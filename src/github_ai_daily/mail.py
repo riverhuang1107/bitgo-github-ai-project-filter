@@ -92,7 +92,8 @@ def send_agent_message(message: EmailMessage) -> None:
     body = message.get_body(preferencelist=("html", "plain"))
     if body is None:
         raise RuntimeError("Email message has no body")
-    with tempfile.TemporaryDirectory(prefix=".github-ai-daily-mail-", dir=Path.cwd()) as tmp:
+    tmp = tempfile.mkdtemp(prefix=".github-ai-daily-mail-", dir=Path.cwd())
+    try:
         tmp_path = Path(tmp)
         body_path = tmp_path / ("body.html" if body.get_content_subtype() == "html" else "body.txt")
         body_path.write_text(body.get_content(), encoding="utf-8")
@@ -114,6 +115,8 @@ def send_agent_message(message: EmailMessage) -> None:
         token = first.get("data", {}).get("confirmation_token")
         if first.get("data", {}).get("confirmation_required") and token:
             _run_agent_command([*command, "--confirmation-token", str(token)])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def _write_agent_attachments(message: EmailMessage, directory: Path) -> list[Path]:

@@ -8,7 +8,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from .config import DEFAULT_MODEL, Settings, default_config_path, user_config_dir
-from .crypto import generate_private_key
+from .crypto import WalletAuth, generate_private_key
 from .github import GitHubClient
 from .mail import (
     SMTP_KEY,
@@ -60,7 +60,13 @@ def parser() -> argparse.ArgumentParser:
     reasoning_sub = reasoning.add_subparsers(dest="reasoning_command", required=True)
     reasoning_test = reasoning_sub.add_parser("test")
     reasoning_test.add_argument("--model")
-    reasoning_test.add_argument("--key", type=Path)
+    reasoning_test.add_argument("--chain", choices=["ltc", "btc", "eth"])
+    reasoning_test.add_argument("--wallet-address")
+    reasoning_test.add_argument("--money")
+    reasoning_test.add_argument("--money-id")
+    reasoning_test.add_argument("--private-key")
+    reasoning_test.add_argument("--signer-command")
+    reasoning_test.add_argument("--key", type=Path, help="Legacy key-pair auth only; ignored by the default X-Params auth")
     return root
 
 
@@ -141,12 +147,11 @@ def cmd_init(args, settings: Settings) -> int:
 def generate(settings: Settings, args) -> dict[str, Path]:
     if args.limit < 1:
         raise ValueError("--limit must be greater than zero")
-    if not settings.model or not settings.private_key_path:
+    if not settings.model:
         raise RuntimeError("Tool is not initialized; run `github-ai-daily init`")
     github = GitHubClient(os.environ.get("GITHUB_TOKEN"))
-    reasoning = ReasoningClient(
-        settings.endpoint, settings.model, Path(settings.private_key_path)
-    )
+    auth = reasoning_auth(settings)
+    reasoning = ReasoningClient(settings.endpoint, settings.model, auth)
     try:
         repos = github.enrich(github.trending())
         selections = reasoning.select(repos)
@@ -223,14 +228,10 @@ def cmd_reasoning(args, settings: Settings) -> int:
         or settings.model
         or DEFAULT_MODEL
     )
-    key_path = args.key or (
-        Path(settings.private_key_path) if settings.private_key_path else None
-    )
     if not model:
         raise RuntimeError("Provide --model or REASONING_API_MODEL")
-    if not key_path or not key_path.exists():
-        raise RuntimeError("Provide an existing ECDSA private key with --key")
-    reasoning = ReasoningClient(settings.endpoint, model, key_path)
+    auth = reasoning_auth(settings, args)
+    reasoning = ReasoningClient(settings.endpoint, model, auth)
     try:
         response = reasoning.test_access()
         if not isinstance(response, dict) or not response.get("content"):
@@ -240,6 +241,31 @@ def cmd_reasoning(args, settings: Settings) -> int:
         print(reasoning.last_usage.format())
         reasoning.close()
     return 0
+
+
+def reasoning_auth(settings: Settings, args=None) -> WalletAuth:
+    private_key = _arg_or_env(args, "private_key", "REASONING_PRIVATE_KEY", "")
+    auth = WalletAuth(
+        chain=_arg_or_env(args, "chain", "REASONING_WALLET_CHAIN", settings.wallet_chain or "ltc"),
+        wallet_address=_arg_or_env(
+            args, "wallet_address", "REASONING_WALLET_ADDRESS", settings.wallet_address
+        ),
+        money=_arg_or_env(args, "money", "REASONING_MONEY", settings.money or "10"),
+        money_id=_arg_or_env(args, "money_id", "REASONING_MONEY_ID", settings.money_id),
+        private_key=private_key,
+        signer_command=_arg_or_env(
+            args, "signer_command", "REASONING_SIGNER_COMMAND", settings.signer_command
+        ),
+    )
+    auth.validate()
+    return auth
+
+
+def _arg_or_env(args, attr: str, env_name: str, default: str) -> str:
+    value = getattr(args, attr, None) if args is not None else None
+    if value:
+        return str(value)
+    return os.environ.get(env_name) or default
 
 
 def _print_paths(paths: dict[str, Path]) -> None:

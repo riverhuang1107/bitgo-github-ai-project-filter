@@ -422,7 +422,7 @@
             <p>把输入数据、提示词、签名认证和结构化输出放在一个完整产品流程里，方便复用到分类、摘要、评估和报告生成等场景。</p>
           </div>
           <div class="metrics">
-            <div class="metric"><strong>ECDSA</strong><span>P-256 签名</span></div>
+            <div class="metric"><strong>X-Params</strong><span>钱包签名</span></div>
             <div class="metric"><strong>JSON</strong><span>结构化输出</span></div>
             <div class="metric"><strong>CLI</strong><span>连通性测试</span></div>
           </div>
@@ -435,7 +435,7 @@
         <ol class="step-list">
           <li>从 GitHub Trending 收集候选仓库数据。</li>
           <li>将候选数据组织为 Anthropic Messages 风格请求体。</li>
-          <li>使用 ECDSA P-256 私钥对请求进行签名。</li>
+          <li>默认使用新版 <code>X-Params</code> 多链钱包签名认证；旧版 key-pair 签名方式保留为 legacy。</li>
           <li>调用外部推理 API 获取结构化 JSON 结果。</li>
           <li>校验结果后生成 Markdown 和 HTML 日报。</li>
         </ol>
@@ -452,48 +452,63 @@
           <tbody>
             <tr><td><code>endpoint</code></td><td><code>https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages</code></td><td>外部推理 API 请求地址</td></tr>
             <tr><td><code>model</code></td><td><code>claude-4.6-opus</code></td><td>默认推理模型</td></tr>
-            <tr><td><code>private_key_path</code></td><td>空</td><td>ECDSA 私钥路径，需要初始化后写入</td></tr>
+            <tr><td><code>wallet_chain</code></td><td><code>ltc</code></td><td>新版钱包签名链，可选 <code>ltc</code>、<code>btc</code>、<code>eth</code></td></tr>
+            <tr><td><code>wallet_address</code></td><td>空</td><td>钱包地址</td></tr>
+            <tr><td><code>money</code></td><td><code>10</code></td><td>面额</td></tr>
+            <tr><td><code>money_id</code></td><td>空</td><td>面额 ID</td></tr>
+            <tr><td><code>signer_command</code></td><td>空</td><td>可选 Go signer 命令路径；为空时使用项目内默认 signer</td></tr>
+            <tr><td><code>private_key_path</code></td><td>空</td><td>旧版 key-pair 认证的 ECDSA 私钥路径，仅 legacy 使用</td></tr>
           </tbody>
         </table>
         <p>用户配置文件中的 <code>[reasoning]</code> 配置示例：</p>
         <pre><code>[reasoning]
 endpoint = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
 model = "claude-4.6-opus"
+wallet_chain = "ltc"
+wallet_address = "YOUR_WALLET_ADDRESS"
+money = "10"
+money_id = "YOUR_MONEY_ID"
+signer_command = ""
+
+# legacy key-pair only
 private_key_path = "/secure/ecdsa-private.pem"</code></pre>
-        <p>模型也可以通过环境变量覆盖：</p>
-        <pre><code>export REASONING_API_MODEL="claude-4.6-opus"</code></pre>
+        <p>新版钱包签名认证可通过环境变量覆盖。不要将钱包私钥写入配置文件或提交记录。</p>
+        <pre><code>export REASONING_API_MODEL="claude-4.6-opus"
+export REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY"
+export REASONING_WALLET_CHAIN="ltc"
+export REASONING_WALLET_ADDRESS="YOUR_WALLET_ADDRESS"
+export REASONING_MONEY="10"
+export REASONING_MONEY_ID="YOUR_MONEY_ID"
+export REASONING_SIGNER_COMMAND=""</code></pre>
       </section>
 
       <section class="section dark">
-        <h2>3. 私钥生成与连通性测试</h2>
-        <p>生成 ECDSA P-256 私钥：</p>
-        <pre><code>.venv/bin/github-ai-daily keygen --path /secure/ecdsa-private.pem</code></pre>
-        <p>测试外部推理 API 是否可访问：</p>
-        <pre><code>.venv/bin/github-ai-daily reasoning test \
-  --model claude-4.6-opus \
-  --key /secure/ecdsa-private.pem</code></pre>
-        <p>连通性测试会发送一个轻量请求，要求服务端返回 Anthropic 风格的 <code>content</code> 字段。请求完成后，CLI 会输出 token 使用统计。</p>
+        <h2>3. 多链钱包生成与连通性测试</h2>
+        <p>加密货币相关签名由 Go signer 统一实现，代码位于 <code>tools/reasoning-signer</code>。Python 运行时只调用 signer、组装 <code>X-Params</code> 并发送 HTTP 请求。</p>
+        <div class="grid">
+          <div class="tile"><strong>LTC</strong><span>生成 Litecoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "ltc"</code>。LTC 已通过真实请求验证。</span></div>
+          <div class="tile"><strong>BTC</strong><span>生成 Bitcoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "btc"</code>。</span></div>
+          <div class="tile"><strong>ETH</strong><span>生成 Ethereum 钱包，导出 <code>0x...</code> 地址和 hex 私钥，配置 <code>wallet_chain = "eth"</code>。</span></div>
+        </div>
+        <pre><code>REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY" \
+.venv/bin/github-ai-daily reasoning test \
+  --chain ltc \
+  --wallet-address YOUR_WALLET_ADDRESS \
+  --money 10 \
+  --money-id YOUR_MONEY_ID \
+  --model claude-4.6-opus</code></pre>
       </section>
 
       <section class="section" id="auth">
         <h2>4. 请求签名</h2>
-        <p>每次请求都会使用 ECDSA P-256 私钥签名。签名文本格式为：</p>
-        <pre><code>METHOD
-/path
-?raw=query
-nonce</code></pre>
-        <div class="grid">
-          <div class="tile"><strong>METHOD</strong><span>使用大写，例如 <code>POST</code>。</span></div>
-          <div class="tile"><strong>Path</strong><span>第二行为 URL path；没有 path 时使用 <code>/</code>。</span></div>
-          <div class="tile"><strong>Query</strong><span>只有存在 query string 时才包含第三行，且保留原始 query。</span></div>
-          <div class="tile"><strong>Nonce</strong><span>最后一行为随机 nonce。</span></div>
-        </div>
-        <h3>签名过程</h3>
+        <p>默认认证使用 <code>X-Params</code>。签名消息为 <code>wallet_address + money + money_id</code>。</p>
+        <pre><code>${wallet_address}${money}${money_id}</code></pre>
+        <h3>新版 X-Params 签名过程</h3>
         <ol>
-          <li>将签名文本按 UTF-8 编码。</li>
-          <li>对文本执行 SHA-256。</li>
-          <li>使用 ECDSA P-256 对摘要生成 ASN.1/DER 签名。</li>
-          <li>将签名、nonce 和公钥写入请求头。</li>
+          <li>使用 <code>sha256.Sum256</code> 得到 32-byte digest。</li>
+          <li><code>ltc</code> 和 <code>btc</code> 解码 WIF 私钥，并调用 <code>btcec/v2/ecdsa.SignCompact</code>。</li>
+          <li><code>eth</code> 解码 hex 私钥，并调用 <code>go-ethereum/crypto.Sign</code>。</li>
+          <li>签名 base64 后组装 <code>{"wallet_address","money","money_id","signature"}</code>，再把 JSON base64 写入 <code>X-Params</code>。</li>
         </ol>
         <table>
           <thead>
@@ -501,6 +516,20 @@ nonce</code></pre>
           </thead>
           <tbody>
             <tr><td><code>Content-Type</code></td><td>固定为 <code>application/json</code></td></tr>
+            <tr><td><code>X-Params</code></td><td>base64 编码后的钱包签名参数 JSON</td></tr>
+          </tbody>
+        </table>
+        <h3>旧版 key-pair 签名</h3>
+        <p>旧版 ECDSA P-256 方法仍保留，用于仍要求 <code>X-Nonce/X-Signature/X-Public-Key</code> 的部署。使用 <code>github-ai-daily keygen</code> 生成私钥，并通过 <code>--key</code> 传入。</p>
+        <pre><code>METHOD
+/path
+?raw=query
+nonce</code></pre>
+        <table>
+          <thead>
+            <tr><th>旧版 Header</th><th>说明</th></tr>
+          </thead>
+          <tbody>
             <tr><td><code>X-Nonce</code></td><td>每次请求生成的随机 nonce</td></tr>
             <tr><td><code>X-Signature</code></td><td>DER 签名的 hex 编码</td></tr>
             <tr><td><code>X-Public-Key</code></td><td>SubjectPublicKeyInfo DER 公钥的 hex 编码</td></tr>

@@ -422,7 +422,7 @@
             <p>The guide places input data, prompts, signed authentication, and structured output into one complete product workflow that can be reused for classification, summarization, evaluation, and report generation.</p>
           </div>
           <div class="metrics">
-            <div class="metric"><strong>ECDSA</strong><span>P-256 signing</span></div>
+            <div class="metric"><strong>X-Params</strong><span>Wallet signing</span></div>
             <div class="metric"><strong>JSON</strong><span>Structured output</span></div>
             <div class="metric"><strong>CLI</strong><span>Connectivity test</span></div>
           </div>
@@ -435,7 +435,7 @@
         <ol class="step-list">
           <li>Collect candidate repository data from GitHub Trending.</li>
           <li>Organize candidate data into an Anthropic Messages-style request body.</li>
-          <li>Sign the request with an ECDSA P-256 private key.</li>
+          <li>Use the new <code>X-Params</code> multi-chain wallet signature authentication by default; keep the old key-pair signing method as legacy.</li>
           <li>Call the external reasoning API and receive structured JSON results.</li>
           <li>Validate the result and generate Markdown and HTML reports.</li>
         </ol>
@@ -452,48 +452,63 @@
           <tbody>
             <tr><td><code>endpoint</code></td><td><code>https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages</code></td><td>External reasoning API endpoint</td></tr>
             <tr><td><code>model</code></td><td><code>claude-4.6-opus</code></td><td>Default reasoning model</td></tr>
-            <tr><td><code>private_key_path</code></td><td>Empty</td><td>ECDSA private key path, written after initialization</td></tr>
+            <tr><td><code>wallet_chain</code></td><td><code>ltc</code></td><td>New wallet signing chain: <code>ltc</code>, <code>btc</code>, or <code>eth</code></td></tr>
+            <tr><td><code>wallet_address</code></td><td>Empty</td><td>Wallet address</td></tr>
+            <tr><td><code>money</code></td><td><code>10</code></td><td>Amount</td></tr>
+            <tr><td><code>money_id</code></td><td>Empty</td><td>Amount ID</td></tr>
+            <tr><td><code>signer_command</code></td><td>Empty</td><td>Optional Go signer command path; empty uses the project default signer</td></tr>
+            <tr><td><code>private_key_path</code></td><td>Empty</td><td>ECDSA private key path for legacy key-pair authentication only</td></tr>
           </tbody>
         </table>
         <p>Example <code>[reasoning]</code> configuration:</p>
         <pre><code>[reasoning]
 endpoint = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
 model = "claude-4.6-opus"
+wallet_chain = "ltc"
+wallet_address = "YOUR_WALLET_ADDRESS"
+money = "10"
+money_id = "YOUR_MONEY_ID"
+signer_command = ""
+
+# legacy key-pair only
 private_key_path = "/secure/ecdsa-private.pem"</code></pre>
-        <p>The model can also be overridden with an environment variable:</p>
-        <pre><code>export REASONING_API_MODEL="claude-4.6-opus"</code></pre>
+        <p>The new wallet signature authentication can be overridden with environment variables. Do not write wallet private keys to configuration files or commits.</p>
+        <pre><code>export REASONING_API_MODEL="claude-4.6-opus"
+export REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY"
+export REASONING_WALLET_CHAIN="ltc"
+export REASONING_WALLET_ADDRESS="YOUR_WALLET_ADDRESS"
+export REASONING_MONEY="10"
+export REASONING_MONEY_ID="YOUR_MONEY_ID"
+export REASONING_SIGNER_COMMAND=""</code></pre>
       </section>
 
       <section class="section dark">
-        <h2>3. Private Key Generation and Connectivity Test</h2>
-        <p>Generate an ECDSA P-256 private key:</p>
-        <pre><code>.venv/bin/github-ai-daily keygen --path /secure/ecdsa-private.pem</code></pre>
-        <p>Test whether the external reasoning API is reachable:</p>
-        <pre><code>.venv/bin/github-ai-daily reasoning test \
-  --model claude-4.6-opus \
-  --key /secure/ecdsa-private.pem</code></pre>
-        <p>The connectivity test sends a lightweight request and expects the server to return an Anthropic-style <code>content</code> field. After the request completes, the CLI prints token usage statistics.</p>
+        <h2>3. Multi-Chain Wallet Generation and Connectivity Test</h2>
+        <p>Cryptocurrency signing is implemented only by the Go signer in <code>tools/reasoning-signer</code>. The Python runtime calls the signer, builds <code>X-Params</code>, and sends the HTTP request.</p>
+        <div class="grid">
+          <div class="tile"><strong>LTC</strong><span>Generate a Litecoin mainnet wallet, export the address and WIF private key, then use <code>wallet_chain = "ltc"</code>. LTC has been verified with real requests.</span></div>
+          <div class="tile"><strong>BTC</strong><span>Generate a Bitcoin mainnet wallet, export the address and WIF private key, then use <code>wallet_chain = "btc"</code>.</span></div>
+          <div class="tile"><strong>ETH</strong><span>Generate an Ethereum wallet, export the <code>0x...</code> address and hex private key, then use <code>wallet_chain = "eth"</code>.</span></div>
+        </div>
+        <pre><code>REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY" \
+.venv/bin/github-ai-daily reasoning test \
+  --chain ltc \
+  --wallet-address YOUR_WALLET_ADDRESS \
+  --money 10 \
+  --money-id YOUR_MONEY_ID \
+  --model claude-4.6-opus</code></pre>
       </section>
 
       <section class="section" id="auth">
         <h2>4. Request Signing</h2>
-        <p>Every request is signed with the ECDSA P-256 private key. The signing message format is:</p>
-        <pre><code>METHOD
-/path
-?raw=query
-nonce</code></pre>
-        <div class="grid">
-          <div class="tile"><strong>METHOD</strong><span>Uppercase, such as <code>POST</code>.</span></div>
-          <div class="tile"><strong>Path</strong><span>The second line is the URL path; use <code>/</code> when there is no path.</span></div>
-          <div class="tile"><strong>Query</strong><span>Included only when the URL has a query string, preserving the raw query.</span></div>
-          <div class="tile"><strong>Nonce</strong><span>The final line is a random nonce.</span></div>
-        </div>
-        <h3>Signing process</h3>
+        <p>Default authentication uses <code>X-Params</code>. The signing message is <code>wallet_address + money + money_id</code>.</p>
+        <pre><code>${wallet_address}${money}${money_id}</code></pre>
+        <h3>New X-Params signing process</h3>
         <ol>
-          <li>Encode the signing message as UTF-8.</li>
-          <li>Compute SHA-256 over the message.</li>
-          <li>Generate an ASN.1/DER signature over the digest using ECDSA P-256.</li>
-          <li>Write the signature, nonce, and public key into request headers.</li>
+          <li>Compute a 32-byte digest with <code>sha256.Sum256</code>.</li>
+          <li><code>ltc</code> and <code>btc</code> decode WIF private keys and call <code>btcec/v2/ecdsa.SignCompact</code>.</li>
+          <li><code>eth</code> decodes a hex private key and calls <code>go-ethereum/crypto.Sign</code>.</li>
+          <li>Base64 the signature, build <code>{"wallet_address","money","money_id","signature"}</code>, then base64 the JSON into <code>X-Params</code>.</li>
         </ol>
         <table>
           <thead>
@@ -501,6 +516,20 @@ nonce</code></pre>
           </thead>
           <tbody>
             <tr><td><code>Content-Type</code></td><td>Always <code>application/json</code></td></tr>
+            <tr><td><code>X-Params</code></td><td>Base64-encoded wallet signature parameter JSON</td></tr>
+          </tbody>
+        </table>
+        <h3>Legacy key-pair signing</h3>
+        <p>The old ECDSA P-256 method is retained for deployments that still require <code>X-Nonce/X-Signature/X-Public-Key</code>. Generate the key with <code>github-ai-daily keygen</code> and pass it with <code>--key</code>.</p>
+        <pre><code>METHOD
+/path
+?raw=query
+nonce</code></pre>
+        <table>
+          <thead>
+            <tr><th>Legacy header</th><th>Description</th></tr>
+          </thead>
+          <tbody>
             <tr><td><code>X-Nonce</code></td><td>Random nonce generated for each request</td></tr>
             <tr><td><code>X-Signature</code></td><td>Hex-encoded DER signature</td></tr>
             <tr><td><code>X-Public-Key</code></td><td>Hex-encoded SubjectPublicKeyInfo DER public key</td></tr>

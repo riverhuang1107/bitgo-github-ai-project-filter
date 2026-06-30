@@ -1,14 +1,21 @@
 from hashlib import sha256
 from pathlib import Path
+from types import SimpleNamespace
+import base64
+import json
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, utils
 
 from github_ai_daily.crypto import (
+    WalletAuth,
+    build_x_params,
     generate_private_key,
     load_private_key,
+    run_wallet_signer,
     signature_message,
     signed_headers,
+    wallet_signed_headers,
 )
 
 
@@ -32,3 +39,82 @@ def test_generated_signature_verifies_prehashed(tmp_path: Path):
     )
     assert bytes.fromhex(headers["X-Public-Key"]).startswith(b"0")
 
+
+def test_build_x_params_from_wallet_signer(monkeypatch):
+    auth = WalletAuth(
+        chain="ltc",
+        wallet_address="wallet",
+        money="10",
+        money_id="20260630001",
+        private_key="private",
+    )
+
+    def fake_run(command, **kwargs):
+        assert "--chain" in command
+        assert "ltc" in command
+        assert "--private-key" in command
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "wallet_address": "wallet",
+                    "money": "10",
+                    "money_id": "20260630001",
+                    "signature": "signature",
+                }
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr("github_ai_daily.crypto.subprocess.run", fake_run)
+
+    x_params = build_x_params(auth)
+    decoded = json.loads(base64.b64decode(x_params).decode("utf-8"))
+
+    assert decoded == {
+        "wallet_address": "wallet",
+        "money": "10",
+        "money_id": "20260630001",
+        "signature": "signature",
+    }
+    assert wallet_signed_headers(auth)["X-Params"]
+
+
+def test_wallet_auth_rejects_missing_private_key():
+    auth = WalletAuth(
+        chain="ltc",
+        wallet_address="wallet",
+        money="10",
+        money_id="20260630001",
+        private_key="",
+    )
+
+    try:
+        auth.validate()
+    except ValueError as exc:
+        assert "REASONING_PRIVATE_KEY" in str(exc)
+    else:
+        raise AssertionError("Expected missing private key to fail")
+
+
+def test_wallet_signer_error_includes_detail(monkeypatch):
+    auth = WalletAuth(
+        chain="ltc",
+        wallet_address="wallet",
+        money="10",
+        money_id="20260630001",
+        private_key="private",
+    )
+    monkeypatch.setattr(
+        "github_ai_daily.crypto.subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=1, stdout="", stderr="unsupported chain"
+        ),
+    )
+
+    try:
+        run_wallet_signer(auth)
+    except RuntimeError as exc:
+        assert "unsupported chain" in str(exc)
+    else:
+        raise AssertionError("Expected signer failure")

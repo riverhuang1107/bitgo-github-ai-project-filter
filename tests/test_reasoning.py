@@ -1,7 +1,9 @@
 import pytest
 import httpx
 
+from github_ai_daily.crypto import WalletAuth
 from github_ai_daily.reasoning import (
+    ReasoningClient,
     TokenUsage,
     _extract_json,
     _raise_for_status,
@@ -57,3 +59,38 @@ def test_http_error_includes_safe_server_detail():
     response = httpx.Response(400, request=request)
     with pytest.raises(RuntimeError, match="invalid model"):
         _raise_for_status(response, {"error": {"message": "invalid model"}})
+
+
+def test_reasoning_client_uses_x_params_headers(monkeypatch):
+    captured = {}
+
+    class FakeClient:
+        def post(self, endpoint, headers, json):
+            captured["endpoint"] = endpoint
+            captured["headers"] = headers
+            captured["body"] = json
+            request = httpx.Request("POST", endpoint)
+            return httpx.Response(
+                200,
+                request=request,
+                json={"content": [{"type": "text", "text": "{\"status\":\"ok\"}"}]},
+            )
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        "github_ai_daily.reasoning.wallet_signed_headers",
+        lambda auth: {"Content-Type": "application/json", "X-Params": "encoded"},
+    )
+    auth = WalletAuth("ltc", "wallet", "10", "id", "private")
+    client = ReasoningClient("https://example.test/v1/messages", "model-a", auth)
+    client.client = FakeClient()
+
+    client.test_access()
+
+    assert captured["headers"]["X-Params"] == "encoded"
+    assert "X-Public-Key" not in captured["headers"]
+    assert "X-Signature" not in captured["headers"]
+    assert "X-Nonce" not in captured["headers"]
+    assert captured["body"]["model"] == "model-a"

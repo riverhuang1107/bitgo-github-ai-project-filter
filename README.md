@@ -1,10 +1,11 @@
 # GitHub AI Daily
 
-跨平台 Python CLI：抓取 GitHub Trending 当日项目，用指定的 ECDSA 签名推理 API筛选 AI 项目，生成 Markdown/HTML 日报。通过 agent 执行邮件命令时使用 Agent Mail；非 agent 环境才使用 Resend SMTP 发送 MIME 邮件。
+跨平台 Python CLI：抓取 GitHub Trending 当日项目，用新版 `X-Params` 钱包签名认证的推理 API 筛选 AI 项目，生成 Markdown/HTML 日报。通过 agent 执行邮件命令时使用 Agent Mail；非 agent 环境才使用 Resend SMTP 发送 MIME 邮件。
 
 ## 运行要求
 
 - Python 3.11+
+- Go 1.20+（用于推理 API 钱包签名）
 - Windows、macOS 或 Linux
 - 生成报告需要访问 GitHub 和推理 API
 - 通过 agent 执行邮件命令需要已授权 Agent Mail CLI
@@ -35,16 +36,14 @@ python -m venv .venv
 
 ## 只生成报告的初始化
 
-如果只执行 `github-ai-daily generate`，不发送邮件，可以做最小初始化：生成 ECDSA 私钥，并写入本机配置文件。这个流程不会调用 Resend，也不会写入 SMTP Secret。
+如果只执行 `github-ai-daily generate`，不发送邮件，可以做最小初始化：写入推理 API 配置，并通过环境变量或部署平台 Secret 注入钱包私钥。这个流程不会调用 Resend，也不会写入 SMTP Secret。
 
 macOS/Linux：
 
 ```bash
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/github-ai-daily"
-KEY_PATH="$CONFIG_DIR/ecdsa-private.pem"
 
 mkdir -p "$CONFIG_DIR"
-test -f "$KEY_PATH" || .venv/bin/github-ai-daily keygen --path "$KEY_PATH"
 
 cat > "$CONFIG_DIR/config.toml" <<EOF
 [app]
@@ -53,7 +52,11 @@ output_dir = "output"
 [reasoning]
 endpoint = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
 model = "claude-4.6-opus"
-private_key_path = "$KEY_PATH"
+wallet_chain = "ltc"
+wallet_address = "YOUR_WALLET_ADDRESS"
+money = "10"
+money_id = "YOUR_MONEY_ID"
+signer_command = ""
 
 [mail]
 from = ""
@@ -65,7 +68,11 @@ username = "resend"
 EOF
 ```
 
-Linux 服务器上建议用运行任务的同一个系统用户执行以上命令，确保后续定时任务能读取同一份配置和私钥。
+Linux 服务器上建议用运行任务的同一个系统用户执行以上命令，确保后续定时任务能读取同一份配置。私钥不要写入配置文件，请使用环境变量或 Secret 管理器注入：
+
+```bash
+export REASONING_PRIVATE_KEY="ltc-or-btc-wif-or-eth-hex-private-key"
+```
 
 然后运行：
 
@@ -175,7 +182,7 @@ export GITHUB_AI_MAIL_FROM="Agent Mail <agent@verified.example>"
 初始化会：
 
 1. 在当前目录初始化 Git（如果尚未初始化）。
-2. 在用户配置目录生成权限受限的 ECDSA P-256 私钥。
+2. 保留生成 legacy ECDSA P-256 私钥的兼容流程；新版推理认证不使用它。
 3. 调用 Resend API创建 `sending_access` 子 Key。
 4. 将子 Key写入安全 Secret 后端，并通过 `smtp.resend.com:587` 发测试邮件。
 5. 将非敏感配置写入用户配置目录。
@@ -202,7 +209,7 @@ export GITHUB_AI_SECRET_DELETE_CMD="/opt/secrets/delete"
 
 工具把 Secret 名称追加为最后一个参数；`put` 从标准输入接收值，`get` 向标准输出返回值。适配脚本可连接 Kubernetes Secret、systemd credentials、Vault 或其他组织批准的 Secret 管理器。未配置安全后端时工具会失败，不会把 SMTP Key写进普通文件。
 
-只运行 `keygen` 和 `generate` 不需要配置这三个命令。
+只运行 `generate` 不需要配置这三个 SMTP Secret 命令，但仍需要通过 `REASONING_PRIVATE_KEY` 或部署 Secret 注入推理 API 钱包私钥。`keygen` 仅用于 legacy key pair 签名方法。
 
 ## 使用
 
@@ -216,12 +223,74 @@ export GITHUB_AI_SECRET_DELETE_CMD="/opt/secrets/delete"
 .venv/bin/github-ai-daily mail test --to ops@example.com
 RESEND_MANAGEMENT_API_KEY=re_... .venv/bin/github-ai-daily mail rotate
 RESEND_MANAGEMENT_API_KEY=re_... .venv/bin/github-ai-daily mail remove
-.venv/bin/github-ai-daily reasoning test --model claude-4.6-opus --key /secure/ecdsa-private.pem
+REASONING_PRIVATE_KEY=... .venv/bin/github-ai-daily reasoning test --chain ltc --wallet-address YOUR_WALLET_ADDRESS --money 10 --money-id YOUR_MONEY_ID
 ```
 
 `generate` 只生成报告文件，不发送邮件。通过 agent 执行邮件命令时使用 Agent Mail；在非 agent 环境中，`run --to ...`、`send ... --to ...`、`mail test` 会通过 Resend SMTP 发送邮件。
 
-## 推理 API签名
+## 推理 API 签名
+
+### 新版 X-Params 钱包签名（默认）
+
+默认认证方法使用 `X-Params` header。Python CLI 负责组装请求和调用推理 API；所有加密货币私钥签名都由 Go signer 完成。
+
+签名消息为：
+
+```text
+${wallet_address}${money}${money_id}
+```
+
+工具对该消息执行 `sha256.Sum256` 得到 32-byte digest，然后按 `wallet_chain` 选择签名方式：
+
+- `ltc`：Litecoin mainnet WIF 私钥，使用 `github.com/btcsuite/btcd/btcec/v2/ecdsa.SignCompact`。
+- `btc`：Bitcoin mainnet WIF 私钥，使用 `github.com/btcsuite/btcd/btcec/v2/ecdsa.SignCompact`。
+- `eth`：Ethereum hex 私钥（可带或不带 `0x`），使用 `github.com/ethereum/go-ethereum/crypto.Sign`。
+
+签名结果 base64 编码后，组装 JSON：
+
+```json
+{
+  "wallet_address": "...",
+  "money": "10",
+  "money_id": "...",
+  "signature": "..."
+}
+```
+
+该 JSON 字符串再 base64 编码，放入请求 header：
+
+```text
+Content-Type: application/json
+X-Params: <base64-json>
+```
+
+配置字段：
+
+```toml
+[reasoning]
+endpoint = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
+model = "claude-4.6-opus"
+wallet_chain = "ltc"
+wallet_address = "YOUR_WALLET_ADDRESS"
+money = "10"
+money_id = "YOUR_MONEY_ID"
+signer_command = ""
+```
+
+环境变量可覆盖配置：
+
+- `REASONING_PRIVATE_KEY`：必需；`ltc/btc` 为 WIF，`eth` 为 hex 私钥。
+- `REASONING_WALLET_CHAIN`：`ltc`、`btc` 或 `eth`，默认 `ltc`。
+- `REASONING_WALLET_ADDRESS`
+- `REASONING_MONEY`
+- `REASONING_MONEY_ID`
+- `REASONING_SIGNER_COMMAND`：可选；用于指定预编译 signer 或自定义 signer 命令。
+
+`ltc` 已完成真实请求验证。`btc` 和 `eth` 已按同一协议在代码中实现，部署时需使用对应链的钱包地址和私钥验证。
+
+### 旧版 key pair 签名（legacy）
+
+旧方法保留为兼容说明和 legacy helper，不再是默认推理认证路径。
 
 请求签名文本严格为：
 

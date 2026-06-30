@@ -28,6 +28,11 @@ class Settings:
     endpoint: str = DEFAULT_ENDPOINT
     model: str = DEFAULT_MODEL
     private_key_path: str = ""
+    wallet_chain: str = "ltc"
+    wallet_address: str = ""
+    money: str = "10"
+    money_id: str = ""
+    signer_command: str = ""
     output_dir: str = "output"
     mail_from: str = DEFAULT_MAIL_FROM
     mail_test_to: str = ""
@@ -48,6 +53,11 @@ class Settings:
             endpoint=reasoning.get("endpoint", DEFAULT_ENDPOINT),
             model=reasoning.get("model", DEFAULT_MODEL),
             private_key_path=reasoning.get("private_key_path", ""),
+            wallet_chain=reasoning.get("wallet_chain", "ltc"),
+            wallet_address=reasoning.get("wallet_address", ""),
+            money=str(reasoning.get("money", "10")),
+            money_id=str(reasoning.get("money_id", "")),
+            signer_command=reasoning.get("signer_command", ""),
             output_dir=app.get("output_dir", "output"),
             mail_from=mail.get("from") or DEFAULT_MAIL_FROM,
             mail_test_to=mail.get("test_to", ""),
@@ -66,6 +76,11 @@ class Settings:
             f'endpoint = "{_escape(self.endpoint)}"\n'
             f'model = "{_escape(self.model)}"\n'
             f'private_key_path = "{_escape(self.private_key_path)}"\n\n'
+            f'wallet_chain = "{_escape(self.wallet_chain)}"\n'
+            f'wallet_address = "{_escape(self.wallet_address)}"\n'
+            f'money = "{_escape(self.money)}"\n'
+            f'money_id = "{_escape(self.money_id)}"\n'
+            f'signer_command = "{_escape(self.signer_command)}"\n\n'
             "[mail]\n"
             f'from = "{_escape(self.mail_from)}"\n'
             f'test_to = "{_escape(self.mail_test_to)}"\n'

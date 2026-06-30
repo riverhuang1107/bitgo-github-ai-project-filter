@@ -8,12 +8,22 @@ def test_config_round_trip(tmp_path: Path):
     expected = Settings(
         model="model-a",
         private_key_path="/secure/key.pem",
+        wallet_chain="btc",
+        wallet_address="1wallet",
+        money="20",
+        money_id="money-id",
+        signer_command="custom-signer",
         mail_from="daily@example.com",
         mail_test_to="reader@example.com",
     )
     expected.save(path)
     actual = Settings.load(path)
     assert actual.model == expected.model
+    assert actual.wallet_chain == expected.wallet_chain
+    assert actual.wallet_address == expected.wallet_address
+    assert actual.money == expected.money
+    assert actual.money_id == expected.money_id
+    assert actual.signer_command == expected.signer_command
     assert actual.mail_from == expected.mail_from
     assert actual.mail_backend == expected.mail_backend
 
@@ -34,6 +44,11 @@ def test_empty_mail_from_loads_default(tmp_path: Path):
                 'endpoint = "https://example.test/v1/messages"',
                 'model = "claude-4.6-opus"',
                 'private_key_path = "/secure/key.pem"',
+                'wallet_chain = "eth"',
+                'wallet_address = "0xwallet"',
+                'money = "10"',
+                'money_id = "20260630001"',
+                'signer_command = ""',
                 "",
                 "[mail]",
                 'from = ""',
@@ -51,6 +66,8 @@ def test_empty_mail_from_loads_default(tmp_path: Path):
 
     assert actual.mail_from == DEFAULT_MAIL_FROM
     assert actual.mail_backend == "agent"
+    assert actual.wallet_chain == "eth"
+    assert actual.wallet_address == "0xwallet"
 
 
 def test_default_model_is_verified_model():
