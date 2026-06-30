@@ -526,9 +526,16 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
         <ol>
           <li>Compute a 32-byte digest with <code>sha256.Sum256</code>.</li>
           <li><code>ltc</code> decodes WIF private keys and calls <code>btcec/v2/ecdsa.SignCompact</code>; <code>btc</code> decodes WIF private keys and selects the signing algorithm by address type: regular addresses call <code>btcec/v2/ecdsa.SignCompact</code>, while Taproot <code>bc1p...</code> addresses first call <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code>, then call <code>btcec/v2/schnorr.Sign</code> with the tweaked private key.</li>
-          <li><code>eth</code> decodes a hex private key and calls <code>go-ethereum/crypto.Sign</code>.</li>
-          <li>Base64 the signature, build <code>{"wallet_address","money","money_id","signature"}</code>, then base64 the JSON into <code>X-Params</code>.</li>
+          <li><code>eth</code>: use an Ethereum hex private key, with or without the <code>0x</code> prefix, and call <code>github.com/ethereum/go-ethereum/crypto.Sign</code>.</li>
         </ol>
+        <p>After base64-encoding the signature, build this JSON:</p>
+        <pre><code>{
+  "wallet_address": "...",
+  "money": "10",
+  "money_id": "...",
+  "signature": "..."
+}</code></pre>
+        <p>Then UTF-8 encode and base64 the JSON string, and write it to <code>X-Params</code>.</p>
         <table>
           <thead>
             <tr><th>Header</th><th>Description</th></tr>

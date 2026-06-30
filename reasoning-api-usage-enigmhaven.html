@@ -526,9 +526,16 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
         <ol>
           <li>使用 <code>sha256.Sum256</code> 得到 32-byte digest。</li>
           <li><code>ltc</code> 解码 WIF 私钥，并调用 <code>btcec/v2/ecdsa.SignCompact</code>；<code>btc</code> 解码 WIF 私钥后按地址类型选择签名：普通地址调用 <code>btcec/v2/ecdsa.SignCompact</code>，Taproot <code>bc1p...</code> 地址先调用 <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code>，再用调整后的私钥调用 <code>btcec/v2/schnorr.Sign</code>。</li>
-          <li><code>eth</code> 解码 hex 私钥，并调用 <code>go-ethereum/crypto.Sign</code>。</li>
-          <li>签名 base64 后组装 <code>{"wallet_address","money","money_id","signature"}</code>，再把 JSON base64 写入 <code>X-Params</code>。</li>
+          <li><code>eth</code>：Ethereum hex 私钥（可带或不带 <code>0x</code>），使用 <code>github.com/ethereum/go-ethereum/crypto.Sign</code>。</li>
         </ol>
+        <p>签名结果 base64 编码后，组装 JSON：</p>
+        <pre><code>{
+  "wallet_address": "...",
+  "money": "10",
+  "money_id": "...",
+  "signature": "..."
+}</code></pre>
+        <p>该 JSON 字符串再 base64 编码，写入 <code>X-Params</code>。</p>
         <table>
           <thead>
             <tr><th>Header</th><th>说明</th></tr>
