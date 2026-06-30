@@ -243,7 +243,7 @@ ${wallet_address}${money}${money_id}
 工具对该消息执行 `sha256.Sum256` 得到 32-byte digest，然后按 `wallet_chain` 选择签名方式：
 
 - `ltc`：Litecoin mainnet WIF 私钥，使用 `github.com/btcsuite/btcd/btcec/v2/ecdsa.SignCompact`。
-- `btc`：Bitcoin mainnet WIF 私钥，使用 `github.com/btcsuite/btcd/btcec/v2/ecdsa.SignCompact`。
+- `btc`：Bitcoin mainnet WIF 私钥。普通 BTC 地址（如 `1...`、`3...`、`bc1q...`）使用 `github.com/btcsuite/btcd/btcec/v2/ecdsa.SignCompact`；Taproot 地址（`bc1p...`）先用 `github.com/btcsuite/btcd/txscript.TweakTaprootPrivKey(*privateKey, []byte{})` 调整 WIF 解码得到的内部私钥，再使用调整后的私钥调用 `github.com/btcsuite/btcd/btcec/v2/schnorr.Sign`，签名结果为 64-byte Schnorr signature 后再 base64。
 - `eth`：Ethereum hex 私钥（可带或不带 `0x`），使用 `github.com/ethereum/go-ethereum/crypto.Sign`。
 
 签名结果 base64 编码后，组装 JSON：
@@ -286,7 +286,7 @@ signer_command = ""
 - `REASONING_MONEY_ID`
 - `REASONING_SIGNER_COMMAND`：可选；用于指定预编译 signer 或自定义 signer 命令。
 
-`ltc` 已完成真实请求验证。`btc` 和 `eth` 已按同一协议在代码中实现，部署时需使用对应链的钱包地址和私钥验证。
+`ltc` 已完成真实请求验证。`btc` 和 `eth` 已按同一协议在代码中实现，部署时需使用对应链的钱包地址和私钥验证。BTC 地址类型会影响签名算法：非 Taproot 地址走 compact ECDSA，`bc1p...` Taproot 地址走私钥 tweak 后的 Schnorr；如果服务端登记的钱包类型、地址派生方式、Taproot tweak 规则或签名算法不一致，可能返回 401。
 
 ### 旧版 key pair 签名（legacy）
 

@@ -182,7 +182,7 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
       <p>Cryptocurrency signing is implemented only by the Go signer in <code>tools/reasoning-signer</code>. The Python runtime calls the signer, builds <code>X-Params</code>, and sends the HTTP request.</p>
       <ul>
         <li><strong>LTC:</strong> generate a Litecoin mainnet wallet, export the address and WIF private key, then use <code>wallet_chain = "ltc"</code>. LTC is the default chain and has been verified with real requests.</li>
-        <li><strong>BTC:</strong> generate a Bitcoin mainnet wallet, export the address and WIF private key, then use <code>wallet_chain = "btc"</code>. Server acceptance depends on registered wallet data.</li>
+        <li><strong>BTC:</strong> generate a Bitcoin mainnet wallet, export the address and WIF private key, then use <code>wallet_chain = "btc"</code>. Regular addresses such as <code>1...</code>, <code>3...</code>, and <code>bc1q...</code> use compact ECDSA; Taproot addresses (<code>bc1p...</code>) first call <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code> to tweak the internal private key, then sign with Schnorr using the tweaked key.</li>
         <li><strong>ETH:</strong> generate an Ethereum wallet, export the <code>0x...</code> address and hex private key, then use <code>wallet_chain = "eth"</code>.</li>
       </ul>
       <pre><code>REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY" \
@@ -198,7 +198,7 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
       <pre><code>${wallet_address}${money}${money_id}</code></pre>
       <ol>
         <li>Compute a 32-byte digest with <code>sha256.Sum256</code>.</li>
-        <li><code>ltc</code> and <code>btc</code> decode WIF private keys and call <code>btcec/v2/ecdsa.SignCompact</code>.</li>
+        <li><code>ltc</code> decodes WIF private keys and calls <code>btcec/v2/ecdsa.SignCompact</code>; <code>btc</code> decodes WIF private keys and selects the signing algorithm by address type: regular addresses call <code>btcec/v2/ecdsa.SignCompact</code>, while Taproot <code>bc1p...</code> addresses first call <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code>, then call <code>btcec/v2/schnorr.Sign</code> with the tweaked private key.</li>
         <li><code>eth</code> decodes a hex private key and calls <code>go-ethereum/crypto.Sign</code>.</li>
         <li>Base64 the signature, build <code>{"wallet_address","money","money_id","signature"}</code>, then base64 the JSON into <code>X-Params</code>.</li>
       </ol>

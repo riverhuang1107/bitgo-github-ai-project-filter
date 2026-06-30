@@ -74,10 +74,12 @@ LTC 是当前默认链，并已通过真实外部推理 API 请求验证。
 ### BTC 钱包
 
 1. 使用可信的 Bitcoin 钱包或部署方指定工具生成 Bitcoin mainnet 钱包。
-2. 导出 Bitcoin 地址和 WIF 私钥。地址可以是服务端已登记支持的 `1...`、`3...` 或 `bc1...` 格式。
+2. 导出 Bitcoin 地址和 WIF 私钥。地址可以是服务端已登记支持的 `1...`、`3...`、`bc1q...` 或 `bc1p...` 格式。
 3. 配置 `wallet_chain = "btc"`，并通过 `REASONING_PRIVATE_KEY` 注入 WIF 私钥。
 
-BTC 按同一协议完成代码支持；服务端是否接受取决于对应钱包、地址、面额和面额 ID 是否完成登记与验证。
+BTC 按同一协议完成代码支持；服务端是否接受取决于对应钱包、地址、面额和面额 ID 是否完成登记与验证。不同 BTC 地址类型使用不同签名算法：普通地址（如 `1...`、`3...`、`bc1q...`）使用 compact ECDSA；Taproot 地址（`bc1p...`）使用私钥 tweak 后的 Schnorr。
+
+Taproot 地址签名时，WIF 解码得到的是内部私钥。Go signer 会先调用 `github.com/btcsuite/btcd/txscript.TweakTaprootPrivKey(*privateKey, []byte{})` 生成 Taproot 调整后的私钥；当前示例使用 key-path/no-script-root 场景，因此第二个参数为 `[]byte{}`。随后使用调整后的私钥调用 `github.com/btcsuite/btcd/btcec/v2/schnorr.Sign` 对 32-byte digest 签名，得到 64-byte Schnorr signature，再 base64 成 `signature` 字段。
 
 ### ETH 钱包
 
@@ -123,7 +125,7 @@ ${wallet_address}${money}${money_id}
 2. 对消息执行 `sha256.Sum256`，得到 32-byte digest。
 3. 根据链类型使用 Go 完成签名：
    - `ltc`：按 Litecoin mainnet WIF 解码私钥，使用 `github.com/btcsuite/btcd/btcec/v2/ecdsa.SignCompact`。
-   - `btc`：按 Bitcoin mainnet WIF 解码私钥，使用 `github.com/btcsuite/btcd/btcec/v2/ecdsa.SignCompact`。
+   - `btc`：按 Bitcoin mainnet WIF 解码私钥；普通地址（如 `1...`、`3...`、`bc1q...`）使用 `github.com/btcsuite/btcd/btcec/v2/ecdsa.SignCompact`；Taproot 地址（`bc1p...`）先使用 `github.com/btcsuite/btcd/txscript.TweakTaprootPrivKey(*privateKey, []byte{})` 调整私钥，再用调整后的私钥调用 `github.com/btcsuite/btcd/btcec/v2/schnorr.Sign`。
    - `eth`：按 Ethereum hex 私钥解码，使用 `github.com/ethereum/go-ethereum/crypto.Sign`。
 4. 将签名字节 base64 编码为 `signature`。
 5. 组装参数 JSON：
@@ -315,7 +317,7 @@ API 响应可以通过 Anthropic 风格 `content` 字段承载文本：
 | 场景 | 处理方式 |
 | --- | --- |
 | HTTP 非 2xx | 抛出 `Reasoning API returned HTTP ...`，并尽量附带服务端错误信息 |
-| `X-Params` 认证失败或返回 401 | 检查链类型、钱包地址、私钥、面额、面额 ID 是否与服务端登记信息一致 |
+| `X-Params` 认证失败或返回 401 | 检查链类型、钱包地址、私钥、面额、面额 ID 是否与服务端登记信息一致；BTC 还需确认地址类型对应的签名算法是否与服务端登记一致 |
 | 响应不是合法 JSON | 抛出 `Reasoning API did not return valid JSON` |
 | JSON 根节点不是对象 | 抛出 `Reasoning API JSON root must be an object` |
 | 缺少 `items` 数组 | 抛出 `Reasoning response must contain an items array` |

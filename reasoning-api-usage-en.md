@@ -74,10 +74,12 @@ LTC is the default chain and has been verified with real external reasoning API 
 ### BTC Wallet
 
 1. Generate a Bitcoin mainnet wallet with a trusted Bitcoin wallet or a tool specified by the deployment operator.
-2. Export the Bitcoin address and WIF private key. The address may be a server-registered `1...`, `3...`, or `bc1...` address.
+2. Export the Bitcoin address and WIF private key. The address may be a server-registered `1...`, `3...`, `bc1q...`, or `bc1p...` address.
 3. Configure `wallet_chain = "btc"` and inject the WIF private key through `REASONING_PRIVATE_KEY`.
 
-BTC is implemented with the same protocol; server acceptance depends on whether the wallet, address, amount, and amount ID have been registered and verified.
+BTC is implemented with the same protocol; server acceptance depends on whether the wallet, address, amount, and amount ID have been registered and verified. Different BTC address types use different signing algorithms: regular addresses such as `1...`, `3...`, and `bc1q...` use compact ECDSA, while Taproot addresses (`bc1p...`) use Schnorr after private-key tweaking.
+
+For Taproot addresses, the WIF-decoded key is the internal private key. The Go signer first calls `github.com/btcsuite/btcd/txscript.TweakTaprootPrivKey(*privateKey, []byte{})` to derive the tweaked Taproot private key; this example uses the key-path/no-script-root case, so the second argument is `[]byte{}`. It then calls `github.com/btcsuite/btcd/btcec/v2/schnorr.Sign` with the tweaked private key to sign the 32-byte digest, producing a 64-byte Schnorr signature that is base64-encoded into the `signature` field.
 
 ### ETH Wallet
 
@@ -123,7 +125,7 @@ Signing process:
 2. Compute `sha256.Sum256` over the message to get a 32-byte digest.
 3. Sign the digest in Go according to the chain:
    - `ltc`: decode a Litecoin mainnet WIF private key and call `github.com/btcsuite/btcd/btcec/v2/ecdsa.SignCompact`.
-   - `btc`: decode a Bitcoin mainnet WIF private key and call `github.com/btcsuite/btcd/btcec/v2/ecdsa.SignCompact`.
+   - `btc`: decode a Bitcoin mainnet WIF private key; regular addresses such as `1...`, `3...`, and `bc1q...` call `github.com/btcsuite/btcd/btcec/v2/ecdsa.SignCompact`; Taproot addresses (`bc1p...`) first call `github.com/btcsuite/btcd/txscript.TweakTaprootPrivKey(*privateKey, []byte{})`, then call `github.com/btcsuite/btcd/btcec/v2/schnorr.Sign` with the tweaked private key.
    - `eth`: decode an Ethereum hex private key and call `github.com/ethereum/go-ethereum/crypto.Sign`.
 4. Base64-encode the signature bytes as `signature`.
 5. Build the parameter JSON:
@@ -315,7 +317,7 @@ The project stops formal report generation in the following cases:
 | Scenario | Handling |
 | --- | --- |
 | HTTP status is not 2xx | Raises `Reasoning API returned HTTP ...` and includes server error details when available |
-| `X-Params` authentication fails or returns 401 | Check that chain, wallet address, private key, amount, and amount ID match the server registration |
+| `X-Params` authentication fails or returns 401 | Check that chain, wallet address, private key, amount, and amount ID match the server registration; for BTC, also confirm that the signing algorithm matches the registered address type |
 | Response is not valid JSON | Raises `Reasoning API did not return valid JSON` |
 | JSON root is not an object | Raises `Reasoning API JSON root must be an object` |
 | Missing `items` array | Raises `Reasoning response must contain an items array` |

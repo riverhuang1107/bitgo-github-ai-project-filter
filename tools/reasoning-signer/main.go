@@ -15,6 +15,8 @@ import (
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	btcEcdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
+	"github.com/btcsuite/btcd/txscript"
 	ethCrypto "github.com/ethereum/go-ethereum/crypto"
 )
 
@@ -80,12 +82,19 @@ func signMessage(chain, walletAddress, money, moneyID, privateKey string) (strin
 	case "ltc":
 		return signWIF(digest, privateKey, ltcMainnetWIFVersion)
 	case "btc":
+		if isTaprootAddress(walletAddress) {
+			return signWIFSchnorr(digest, privateKey, btcMainnetWIFVersion)
+		}
 		return signWIF(digest, privateKey, btcMainnetWIFVersion)
 	case "eth":
 		return signETH(digest, privateKey)
 	default:
 		return "", digest, fmt.Errorf("unsupported chain %q; expected ltc, btc, or eth", chain)
 	}
+}
+
+func isTaprootAddress(walletAddress string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(walletAddress)), "bc1p")
 }
 
 func signWIF(digest [32]byte, privateKeyWIF string, expectedVersion byte) (string, [32]byte, error) {
@@ -97,6 +106,21 @@ func signWIF(digest [32]byte, privateKeyWIF string, expectedVersion byte) (strin
 	privateKey, _ := btcec.PrivKeyFromBytes(keyBytes)
 	signature := btcEcdsa.SignCompact(privateKey, digest[:], compressed)
 	return base64.StdEncoding.EncodeToString(signature), digest, nil
+}
+
+func signWIFSchnorr(digest [32]byte, privateKeyWIF string, expectedVersion byte) (string, [32]byte, error) {
+	keyBytes, _, err := decodeMainnetWIF(privateKeyWIF, expectedVersion)
+	if err != nil {
+		return "", digest, err
+	}
+
+	privateKey, _ := btcec.PrivKeyFromBytes(keyBytes)
+	tweakedPrivateKey := txscript.TweakTaprootPrivKey(*privateKey, []byte{})
+	signature, err := schnorr.Sign(tweakedPrivateKey, digest[:])
+	if err != nil {
+		return "", digest, err
+	}
+	return base64.StdEncoding.EncodeToString(signature.Serialize()), digest, nil
 }
 
 func signETH(digest [32]byte, privateKeyHex string) (string, [32]byte, error) {

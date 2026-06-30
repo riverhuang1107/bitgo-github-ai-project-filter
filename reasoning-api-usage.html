@@ -186,7 +186,7 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
       <p>加密货币相关签名由 Go signer 统一实现，代码位于 <code>tools/reasoning-signer</code>。Python 运行时只调用 signer、组装 <code>X-Params</code> 并发送 HTTP 请求。</p>
       <ul>
         <li><strong>LTC：</strong>生成 Litecoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "ltc"</code>。LTC 是默认链，并已通过真实请求验证。</li>
-        <li><strong>BTC：</strong>生成 Bitcoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "btc"</code>。服务端是否接受取决于登记的钱包数据。</li>
+        <li><strong>BTC：</strong>生成 Bitcoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "btc"</code>。普通地址（如 <code>1...</code>、<code>3...</code>、<code>bc1q...</code>）使用 compact ECDSA；Taproot 地址（<code>bc1p...</code>）先用 <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code> 调整内部私钥，再用调整后的私钥执行 Schnorr 签名。</li>
         <li><strong>ETH：</strong>生成 Ethereum 钱包，导出 <code>0x...</code> 地址和 hex 私钥，配置 <code>wallet_chain = "eth"</code>。</li>
       </ul>
       <pre><code>REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY" \
@@ -202,7 +202,7 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
       <pre><code>${wallet_address}${money}${money_id}</code></pre>
       <ol>
         <li>使用 <code>sha256.Sum256</code> 得到 32-byte digest。</li>
-        <li><code>ltc</code> 和 <code>btc</code> 解码 WIF 私钥，并调用 <code>btcec/v2/ecdsa.SignCompact</code>。</li>
+        <li><code>ltc</code> 解码 WIF 私钥，并调用 <code>btcec/v2/ecdsa.SignCompact</code>；<code>btc</code> 解码 WIF 私钥后按地址类型选择签名：普通地址调用 <code>btcec/v2/ecdsa.SignCompact</code>，Taproot <code>bc1p...</code> 地址先调用 <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code>，再用调整后的私钥调用 <code>btcec/v2/schnorr.Sign</code>。</li>
         <li><code>eth</code> 解码 hex 私钥，并调用 <code>go-ethereum/crypto.Sign</code>。</li>
         <li>签名 base64 后组装 <code>{"wallet_address","money","money_id","signature"}</code>，再把 JSON base64 写入 <code>X-Params</code>。</li>
       </ol>

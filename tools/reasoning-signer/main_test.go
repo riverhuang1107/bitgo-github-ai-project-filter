@@ -24,6 +24,14 @@ func TestSignBTC(t *testing.T) {
 	assertDigestAndSignature(t, signature, digest)
 }
 
+func TestSignBTCTaprootUsesSchnorr(t *testing.T) {
+	signature, digest, err := signMessage("btc", "bc1pexample", "10", "20260630001", testWIF(btcMainnetWIFVersion))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertDigestAndSignatureSize(t, signature, digest, 64)
+}
+
 func TestSignETH(t *testing.T) {
 	signature, digest, err := signMessage("eth", "0x0000000000000000000000000000000000000001", "10", "20260630001", testETHPrivateKey())
 	if err != nil {
@@ -63,6 +71,11 @@ func TestSignedParamsJSON(t *testing.T) {
 
 func assertDigestAndSignature(t *testing.T, signature string, digest [32]byte) {
 	t.Helper()
+	assertDigestAndSignatureSize(t, signature, digest, 65)
+}
+
+func assertDigestAndSignatureSize(t *testing.T, signature string, digest [32]byte, expectedSize int) {
+	t.Helper()
 	if len(digest) != 32 {
 		t.Fatalf("digest length = %d", len(digest))
 	}
@@ -70,7 +83,7 @@ func assertDigestAndSignature(t *testing.T, signature string, digest [32]byte) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(decoded) != 65 {
+	if len(decoded) != expectedSize {
 		t.Fatalf("signature length = %d", len(decoded))
 	}
 }
