@@ -8,7 +8,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from .config import DEFAULT_MODEL, Settings, default_config_path, user_config_dir
-from .crypto import WalletAuth, generate_private_key
+from .crypto import WalletAuth, generate_private_key, load_private_key
 from .github import GitHubClient
 from .mail import (
     SMTP_KEY,
@@ -66,7 +66,7 @@ def parser() -> argparse.ArgumentParser:
     reasoning_test.add_argument("--money-id")
     reasoning_test.add_argument("--private-key")
     reasoning_test.add_argument("--signer-command")
-    reasoning_test.add_argument("--key", type=Path, help="Legacy key-pair auth only; ignored by the default X-Params auth")
+    reasoning_test.add_argument("--key", type=Path, help="ECDSA interface signing key path")
     return root
 
 
@@ -151,7 +151,9 @@ def generate(settings: Settings, args) -> dict[str, Path]:
         raise RuntimeError("Tool is not initialized; run `github-ai-daily init`")
     github = GitHubClient(os.environ.get("GITHUB_TOKEN"))
     auth = reasoning_auth(settings)
-    reasoning = ReasoningClient(settings.endpoint, settings.model, auth)
+    reasoning = ReasoningClient(
+        settings.endpoint, settings.model, auth, reasoning_interface_key(settings)
+    )
     try:
         repos = github.enrich(github.trending())
         selections = reasoning.select(repos)
@@ -231,7 +233,9 @@ def cmd_reasoning(args, settings: Settings) -> int:
     if not model:
         raise RuntimeError("Provide --model or REASONING_API_MODEL")
     auth = reasoning_auth(settings, args)
-    reasoning = ReasoningClient(settings.endpoint, model, auth)
+    reasoning = ReasoningClient(
+        settings.endpoint, model, auth, reasoning_interface_key(settings, args)
+    )
     try:
         response = reasoning.test_access()
         if not isinstance(response, dict) or not response.get("content"):
@@ -259,6 +263,21 @@ def reasoning_auth(settings: Settings, args=None) -> WalletAuth:
     )
     auth.validate()
     return auth
+
+
+def reasoning_interface_key(settings: Settings, args=None):
+    configured = getattr(args, "key", None) if args is not None else None
+    key_path = configured or (
+        Path(settings.private_key_path)
+        if settings.private_key_path
+        else user_config_dir() / "ecdsa-private.pem"
+    )
+    if not key_path.exists():
+        raise RuntimeError(
+            "Reasoning interface ECDSA key is required; run "
+            f"`github-ai-daily keygen --path {key_path}`"
+        )
+    return load_private_key(key_path)
 
 
 def _arg_or_env(args, attr: str, env_name: str, default: str) -> str:

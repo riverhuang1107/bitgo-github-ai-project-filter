@@ -8,7 +8,7 @@ The external reasoning API provides general-purpose reasoning capabilities. This
 
 1. Collect candidate repository data from GitHub Trending.
 2. Organize candidate data into an Anthropic Messages-style request body.
-3. Use the new `X-Params` multi-chain wallet signature authentication by default; keep the old key-pair signing method as legacy.
+3. Use the new `X-Params` multi-chain wallet signature authentication by default, together with interface-level `X-Nonce`, `X-Signature`, and `X-Public-Key` ECDSA headers.
 4. Call the external reasoning API and receive structured JSON results.
 5. Validate the result and generate Markdown and HTML reports.
 
@@ -27,7 +27,7 @@ The default project configuration is defined in `src/github_ai_daily/config.py`:
 | `money` | `YOUR_WALLET_MONEY` | Amount; must be provided by a person |
 | `money_id` | Empty | Amount ID |
 | `signer_command` | Empty | Optional Go signer command path; empty uses the project default signer |
-| `private_key_path` | Empty | ECDSA private key path for legacy key-pair authentication only |
+| `private_key_path` | Empty | Interface-level ECDSA P-256 private key path used to generate `X-Signature` and `X-Public-Key` |
 
 Example `[reasoning]` configuration:
 
@@ -41,7 +41,7 @@ money = "YOUR_WALLET_MONEY"
 money_id = "YOUR_MONEY_ID"
 signer_command = ""
 
-# legacy key-pair only
+# interface-level ECDSA signing key
 private_key_path = "/secure/ecdsa-private.pem"
 ```
 
@@ -61,7 +61,7 @@ Do not write `REASONING_PRIVATE_KEY` to configuration files, README files, test 
 
 ## 3. Multi-Chain Wallet Generation and Connectivity Test
 
-Cryptocurrency signing is implemented only by the Go signer in `tools/reasoning-signer`. The Python runtime calls the signer, builds `X-Params`, and sends the HTTP request; it does not directly implement wallet private-key signing.
+Cryptocurrency signing is implemented only by the Go signer in `tools/reasoning-signer`. The Python runtime calls the signer to build `X-Params`, then uses the local ECDSA P-256 private key to sign `X-Params + X-Nonce` for the interface-level headers before sending the complete HTTP request; it does not directly implement wallet private-key signing.
 
 ### LTC Wallet
 
@@ -111,7 +111,7 @@ The connectivity test sends a lightweight request and expects the server to retu
 
 ## 4. New `X-Params` Wallet Signature Authentication (Default)
 
-The new authentication method builds a JSON object containing the wallet address, amount, amount ID, and signature, then base64-encodes it into the HTTP `X-Params` header.
+The new authentication method builds a JSON object containing the wallet address, amount, amount ID, and signature, then base64-encodes it into the HTTP `X-Params` header. Each request also carries interface-level ECDSA headers signed over `X-Params + X-Nonce`.
 
 Signing message:
 
@@ -124,7 +124,7 @@ Signing process:
 1. Encode `wallet_address + money + money_id` as UTF-8.
 2. Compute `sha256.Sum256` over the message to get a 32-byte digest.
 3. Sign the digest in Go according to the chain:
-   - `ltc`: decode a Litecoin mainnet WIF private key and call `github.com/btcsuite/btcd/btcec/v2/ecdsa.SignCompact`.
+   - `ltc`: decode a Litecoin mainnet WIF private key; regular addresses call `github.com/btcsuite/btcd/btcec/v2/ecdsa.SignCompact`, and Taproot addresses (`ltc1p...`) call `github.com/btcsuite/btcd/btcec/v2/schnorr.Sign`.
    - `btc`: decode a Bitcoin mainnet WIF private key; regular addresses such as `1...`, `3...`, and `bc1q...` call `github.com/btcsuite/btcd/btcec/v2/ecdsa.SignCompact`; Taproot addresses (`bc1p...`) first call `github.com/btcsuite/btcd/txscript.TweakTaprootPrivKey(*privateKey, []byte{})`, then call `github.com/btcsuite/btcd/btcec/v2/schnorr.Sign` with the tweaked private key.
    - `eth`: decode an Ethereum hex private key and call `github.com/ethereum/go-ethereum/crypto.Sign`.
 4. Base64-encode the signature bytes as `signature`.
@@ -140,6 +140,8 @@ Signing process:
 ```
 
 6. UTF-8 encode and base64 the JSON string, then write it to `X-Params`.
+7. Generate a random `X-Nonce`, concatenate `X-Params + X-Nonce`, and compute SHA-256.
+8. Sign the digest with the local ECDSA P-256 private key as ASN.1/DER hex in `X-Signature`, and send the DER public key hex in `X-Public-Key`.
 
 Request headers:
 
@@ -147,6 +149,9 @@ Request headers:
 | --- | --- |
 | `Content-Type` | Always `application/json` |
 | `X-Params` | Base64-encoded wallet signature parameter JSON |
+| `X-Nonce` | Random string used in the interface-level ECDSA signature |
+| `X-Signature` | ASN.1/DER hex signature over `X-Params + X-Nonce` |
+| `X-Public-Key` | Local ECDSA DER public key hex |
 
 Request example:
 
@@ -154,6 +159,9 @@ Request example:
 curl --location --request POST "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages" \
   --header "Content-Type: application/json" \
   --header "X-Params: BASE64_WALLET_PARAMS_JSON" \
+  --header "X-Nonce: RANDOM_NONCE" \
+  --header "X-Signature: ECDSA_SIGNATURE_HEX" \
+  --header "X-Public-Key: ECDSA_PUBLIC_KEY_HEX" \
   --data-raw '{
     "model": "claude-4.6-opus",
     "messages": [{"role": "user", "content": "你好"}],
@@ -161,24 +169,16 @@ curl --location --request POST "https://api-token-enigmhaven.expvent.com.cn:1111
   }'
 ```
 
-At runtime, `ReasoningClient` sends `Content-Type` and `X-Params` by default. It no longer sends the legacy `X-Nonce/X-Signature/X-Public-Key` headers by default. To use a prebuilt signer, set `REASONING_SIGNER_COMMAND` or `signer_command`.
+At runtime, `ReasoningClient` sends `Content-Type`, `X-Params`, `X-Nonce`, `X-Signature`, and `X-Public-Key` by default. To use a prebuilt wallet signer, set `REASONING_SIGNER_COMMAND` or `signer_command`.
 
-## 5. Legacy Key-Pair Signature Authentication (Retained)
+## 5. Legacy Key-Pair Signature Format (Retained for Reference)
 
-The old method signs each request with an ECDSA P-256 private key. It is retained for compatibility with old deployments and historical request debugging, but it is not the default authentication path.
+The historical method signed each request with an ECDSA P-256 private key over `METHOD/path/query/nonce`. The current default authentication path is now wallet `X-Params` plus interface-level ECDSA headers; this section is retained only for debugging old requests or understanding historical deployments.
 
 Generate an ECDSA P-256 private key:
 
 ```bash
 .venv/bin/github-ai-daily keygen --path /secure/ecdsa-private.pem
-```
-
-Legacy connectivity test:
-
-```bash
-.venv/bin/github-ai-daily reasoning test \
-  --model claude-4.6-opus \
-  --key /secure/ecdsa-private.pem
 ```
 
 Legacy signing message format:
@@ -204,7 +204,7 @@ Legacy signing process:
 3. Generate an ASN.1/DER signature over the digest using ECDSA P-256.
 4. Write the signature, nonce, and public key into request headers.
 
-Legacy request headers:
+Historical request headers:
 
 | Header | Description |
 | --- | --- |

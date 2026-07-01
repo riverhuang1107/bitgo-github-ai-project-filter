@@ -138,7 +138,7 @@
       <ol>
         <li>从 GitHub Trending 收集候选仓库数据。</li>
         <li>将候选数据组织为 Anthropic Messages 风格请求体。</li>
-        <li>默认使用新版 <code>X-Params</code> 多链钱包签名认证；旧版 key-pair 签名方式保留为 legacy。</li>
+        <li>默认使用新版 <code>X-Params</code> 多链钱包签名认证，并叠加接口级 <code>X-Nonce</code>、<code>X-Signature</code>、<code>X-Public-Key</code> ECDSA 签名。</li>
         <li>调用外部推理 API 获取结构化 JSON 结果。</li>
         <li>校验结果后生成 Markdown 和 HTML 日报。</li>
       </ol>
@@ -158,7 +158,7 @@
           <tr><td><code>money</code></td><td><code>YOUR_WALLET_MONEY</code></td><td>面额，必须由人提供</td></tr>
           <tr><td><code>money_id</code></td><td>空</td><td>面额 ID</td></tr>
           <tr><td><code>signer_command</code></td><td>空</td><td>可选 Go signer 命令路径；为空时使用项目内默认 signer</td></tr>
-          <tr><td><code>private_key_path</code></td><td>空</td><td>旧版 key-pair 认证的 ECDSA 私钥路径，仅 legacy 使用</td></tr>
+          <tr><td><code>private_key_path</code></td><td>空</td><td>接口级 ECDSA P-256 私钥路径，用于生成 <code>X-Signature</code> 和 <code>X-Public-Key</code></td></tr>
         </tbody>
       </table>
       <p>用户配置文件中的 <code>[reasoning]</code> 配置示例：</p>
@@ -171,7 +171,7 @@ money = "YOUR_WALLET_MONEY"
 money_id = "YOUR_MONEY_ID"
 signer_command = ""
 
-# legacy key-pair only
+# interface-level ECDSA signing key
 private_key_path = "/secure/ecdsa-private.pem"</code></pre>
       <p>新版钱包签名认证可通过环境变量覆盖。不要将钱包私钥写入配置文件或提交记录。</p>
       <pre><code>export REASONING_API_MODEL="claude-4.6-opus"
@@ -183,7 +183,7 @@ export REASONING_MONEY_ID="YOUR_MONEY_ID"
 export REASONING_SIGNER_COMMAND=""</code></pre>
 
       <h2>3. 多链钱包生成与连通性测试</h2>
-      <p>加密货币相关签名由 Go signer 统一实现，代码位于 <code>tools/reasoning-signer</code>。Python 运行时只调用 signer、组装 <code>X-Params</code> 并发送 HTTP 请求。</p>
+      <p>加密货币相关签名由 Go signer 统一实现，代码位于 <code>tools/reasoning-signer</code>。Python 运行时调用 signer 组装 <code>X-Params</code>，再使用本地 ECDSA P-256 私钥为 <code>X-Params + X-Nonce</code> 生成接口级签名，最后发送完整 HTTP 请求。</p>
       <ul>
         <li><strong>LTC：</strong>生成 Litecoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "ltc"</code>。LTC 已通过真实请求验证，但链类型仍必须由人明确提供。</li>
         <li><strong>BTC：</strong>生成 Bitcoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "btc"</code>。普通地址（如 <code>1...</code>、<code>3...</code>、<code>bc1q...</code>）使用 compact ECDSA；Taproot 地址（<code>bc1p...</code>）先用 <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code> 调整内部私钥，再用调整后的私钥执行 Schnorr 签名。</li>
@@ -198,13 +198,14 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
   --model claude-4.6-opus</code></pre>
 
       <h2>4. 新版 <code>X-Params</code> 钱包签名认证（默认）</h2>
-      <p>新版认证对 <code>wallet_address + money + money_id</code> 签名，然后把参数 JSON base64 编码到 HTTP header <code>X-Params</code> 中。</p>
+      <p>新版认证对 <code>wallet_address + money + money_id</code> 签名，然后把参数 JSON base64 编码到 HTTP header <code>X-Params</code> 中；请求还会携带基于 <code>X-Params + X-Nonce</code> 的接口级 ECDSA 签名 header。</p>
       <pre><code>${wallet_address}${money}${money_id}</code></pre>
       <ol>
         <li>使用 <code>sha256.Sum256</code> 得到 32-byte digest。</li>
-        <li><code>ltc</code> 解码 WIF 私钥，并调用 <code>btcec/v2/ecdsa.SignCompact</code>；<code>btc</code> 解码 WIF 私钥后按地址类型选择签名：普通地址调用 <code>btcec/v2/ecdsa.SignCompact</code>，Taproot <code>bc1p...</code> 地址先调用 <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code>，再用调整后的私钥调用 <code>btcec/v2/schnorr.Sign</code>。</li>
+        <li><code>ltc</code> 解码 WIF 私钥后按地址类型选择签名：普通地址调用 <code>btcec/v2/ecdsa.SignCompact</code>，Taproot <code>ltc1p...</code> 地址调用 <code>btcec/v2/schnorr.Sign</code>；<code>btc</code> 解码 WIF 私钥后按地址类型选择签名：普通地址调用 <code>btcec/v2/ecdsa.SignCompact</code>，Taproot <code>bc1p...</code> 地址先调用 <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code>，再用调整后的私钥调用 <code>btcec/v2/schnorr.Sign</code>。</li>
         <li><code>eth</code> 解码 hex 私钥，并调用 <code>go-ethereum/crypto.Sign</code>。</li>
         <li>签名 base64 后组装 <code>{"wallet_address","money","money_id","signature"}</code>，再把 JSON base64 写入 <code>X-Params</code>。</li>
+        <li>生成随机 <code>X-Nonce</code>，将 <code>X-Params + X-Nonce</code> 直接拼接后执行 SHA-256，再使用本地 ECDSA P-256 私钥生成 ASN.1/DER 签名 hex 写入 <code>X-Signature</code>，并把本地公钥 DER hex 写入 <code>X-Public-Key</code>。</li>
       </ol>
       <table>
         <thead>
@@ -213,17 +214,20 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
         <tbody>
           <tr><td><code>Content-Type</code></td><td>固定为 <code>application/json</code></td></tr>
           <tr><td><code>X-Params</code></td><td>base64 编码后的钱包签名参数 JSON</td></tr>
+          <tr><td><code>X-Nonce</code></td><td>随机字符串，参与接口级 ECDSA 签名</td></tr>
+          <tr><td><code>X-Signature</code></td><td>对 <code>X-Params + X-Nonce</code> 签名后的 ASN.1/DER hex</td></tr>
+          <tr><td><code>X-Public-Key</code></td><td>本地 ECDSA 公钥 DER hex</td></tr>
         </tbody>
       </table>
-      <h3>旧版 key-pair 认证</h3>
-      <p>旧版 key-pair 认证仍然保留：使用 <code>github-ai-daily keygen</code> 生成 ECDSA P-256 私钥，并通过 <code>--key</code> 兼容仍要求 <code>X-Nonce/X-Signature/X-Public-Key</code> 的旧部署。</p>
+      <h3>历史 key-pair 签名格式</h3>
+      <p>历史方式使用 ECDSA P-256 私钥按 <code>METHOD/path/query/nonce</code> 对请求进行签名。当前默认认证路径已经改为“钱包 <code>X-Params</code> + 接口级 ECDSA 签名”，本节仅用于排查旧请求或理解历史部署。</p>
       <pre><code>METHOD
 /path
 ?raw=query
 nonce</code></pre>
       <table>
         <thead>
-          <tr><th>旧版 Header</th><th>说明</th></tr>
+          <tr><th>历史 Header</th><th>说明</th></tr>
         </thead>
         <tbody>
           <tr><td><code>X-Nonce</code></td><td>每次请求生成的随机 nonce</td></tr>

@@ -98,10 +98,31 @@ def signed_headers(
     }
 
 
-def wallet_signed_headers(auth: WalletAuth) -> dict[str, str]:
+def interface_signature_message(x_params: str, nonce: str) -> bytes:
+    return f"{x_params}{nonce}".encode("utf-8")
+
+
+def interface_signed_headers(
+    x_params: str, key: ec.EllipticCurvePrivateKey, nonce: str | None = None
+) -> dict[str, str]:
+    nonce = nonce or secrets.token_hex(16)
+    digest = hashlib.sha256(interface_signature_message(x_params, nonce)).digest()
+    signature = key.sign(digest, ec.ECDSA(utils.Prehashed(hashes.SHA256())))
+    return {
+        "X-Nonce": nonce,
+        "X-Signature": signature.hex(),
+        "X-Public-Key": public_key_hex(key),
+    }
+
+
+def wallet_signed_headers(
+    auth: WalletAuth, key: ec.EllipticCurvePrivateKey, nonce: str | None = None
+) -> dict[str, str]:
+    x_params = build_x_params(auth)
     return {
         "Content-Type": "application/json",
-        "X-Params": build_x_params(auth),
+        "X-Params": x_params,
+        **interface_signed_headers(x_params, key, nonce),
     }
 
 

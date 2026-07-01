@@ -522,7 +522,7 @@
           <div class="tile"><strong>Agent 友好接入</strong><span>agent 可根据人提供的信息完成钱包配置、请求签名、连通性测试和推理 API 调用，减少人工拼接 header 与请求体的成本。</span></div>
           <div class="tile"><strong>多钱包管理</strong><span>以链上地址作为唯一识别 ID，同一个地址可以关联多个钱包，用于区分不同软件、不同 agent 或不同业务线的推理消耗。</span></div>
           <div class="tile"><strong>链上充值</strong><span>人从交易所或中心化钱包向官方地址提币，充值到账后即可用于推理 token 消费，链上确认过程可查询。</span></div>
-          <div class="tile"><strong>签名调用</strong><span>推理请求通过钱包私钥签名生成 <code>X-Params</code>，服务端可识别调用方、钱包金额和授权参数。</span></div>
+          <div class="tile"><strong>签名调用</strong><span>推理请求通过钱包私钥签名生成 <code>X-Params</code>，并叠加 <code>X-Nonce</code>、<code>X-Signature</code>、<code>X-Public-Key</code> 接口级 ECDSA 签名，服务端可识别调用方、钱包金额和授权参数。</span></div>
           <div class="tile"><strong>推理 token 消费</strong><span>API 返回 usage 后，可以把输入、输出、消耗金额和余额作为 agent 软件开发过程中的可追踪成本信息。</span></div>
           <div class="tile"><strong>广泛 agent 工作流</strong><span>适用于代码生成、代码审查、数据分析、内容生成、业务自动化、智能工作流和软件内置推理等场景。</span></div>
         </div>
@@ -569,6 +569,9 @@
             <tr><td><code>method</code></td><td><code>POST</code></td><td>发送 JSON 请求体</td></tr>
             <tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>固定使用 JSON</td></tr>
             <tr><td><code>X-Params</code></td><td><code>BASE64_ENCODED_WALLET_PARAMS</code></td><td>钱包签名认证参数，由 agent 使用 signer 生成</td></tr>
+            <tr><td><code>X-Nonce</code></td><td><code>RANDOM_NONCE</code></td><td>随机字符串，参与接口级 ECDSA 签名</td></tr>
+            <tr><td><code>X-Signature</code></td><td><code>ECDSA_SIGNATURE_HEX</code></td><td>对 <code>X-Params + X-Nonce</code> 签名后的 ASN.1/DER hex</td></tr>
+            <tr><td><code>X-Public-Key</code></td><td><code>ECDSA_PUBLIC_KEY_HEX</code></td><td>本地 ECDSA 公钥 DER hex，用于服务端验签</td></tr>
           </tbody>
         </table>
         <h3>请求体参数</h3>
@@ -584,10 +587,13 @@
             <tr><td><code>stream</code></td><td>boolean</td><td>可选。示例请求使用 <code>false</code>，表示一次性返回结果。</td></tr>
           </tbody>
         </table>
-        <h3>请求“你好”的示例</h3>
+        <h3>接口请求示例</h3>
         <pre><code>POST https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages
 Content-Type: application/json
 X-Params: BASE64_ENCODED_WALLET_PARAMS
+X-Nonce: RANDOM_NONCE
+X-Signature: ECDSA_SIGNATURE_HEX
+X-Public-Key: ECDSA_PUBLIC_KEY_HEX
 
 {
   "model": "deepseek-v3",
@@ -616,7 +622,7 @@ X-Params: BASE64_ENCODED_WALLET_PARAMS
     "hash": "..."
   }
 }</code></pre>
-        <p class="callout">真实请求必须先完成钱包创建、充值确认和 <code>X-Params</code> 签名。示例中的 <code>X-Params</code> 是占位符，不应把真实签名 header 写入文档或日志。</p>
+        <p class="callout">真实请求必须先完成钱包创建、充值确认、<code>X-Params</code> 钱包签名和接口级 ECDSA 签名。示例中的签名 header 都是占位符，不应把真实 <code>X-Params</code>、<code>X-Signature</code> 或私钥写入文档或日志。</p>
       </section>
 
       <section class="section" id="models">
@@ -670,36 +676,48 @@ X-Params: BASE64_ENCODED_WALLET_PARAMS
 
       <section class="section dark" id="connectivity">
         <h2>6. 多链钱包生成与连通性测试</h2>
-        <p>加密货币相关签名由 Go signer 统一完成。agent 或软件运行时只需要调用 signer、组装 <code>X-Params</code>，再发送推理 API 请求。不同链的钱包生成和签名方式如下：</p>
+        <p>加密货币相关签名由 Go signer 统一完成。agent 或软件运行时调用 signer 组装 <code>X-Params</code>，再使用本地 ECDSA P-256 私钥为 <code>X-Params + X-Nonce</code> 生成接口级签名，最后发送完整推理 API 请求。不同链的钱包生成和签名方式如下：</p>
         <div class="grid">
-          <div class="tile"><strong>LTC</strong><span>生成 Litecoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "ltc"</code>。LTC 已通过真实请求验证，但链类型仍必须由人明确提供。</span></div>
+          <div class="tile"><strong>LTC</strong><span>生成 Litecoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "ltc"</code>。普通地址使用 compact ECDSA；Taproot 地址 <code>ltc1p...</code> 使用 Schnorr 签名。LTC 已通过真实请求验证，但链类型仍必须由人明确提供。</span></div>
           <div class="tile"><strong>BTC</strong><span>生成 Bitcoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "btc"</code>。普通地址如 <code>1...</code>、<code>3...</code>、<code>bc1q...</code> 使用 compact ECDSA；Taproot 地址 <code>bc1p...</code> 使用 tweak 后的 Schnorr 签名。</span></div>
           <div class="tile"><strong>ETH</strong><span>生成 Ethereum 钱包，导出 <code>0x...</code> 地址和 hex 私钥，配置 <code>wallet_chain = "eth"</code>，由 signer 使用 Ethereum 签名方式生成授权参数。</span></div>
         </div>
-        <pre><code>REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY" \
-.venv/bin/github-ai-daily reasoning test \
-  --chain YOUR_WALLET_CHAIN \
-  --wallet-address YOUR_WALLET_ADDRESS \
-  --money YOUR_WALLET_MONEY \
-  --money-id YOUR_MONEY_ID \
-  --model claude-4.6-opus</code></pre>
-        <p class="callout">连通性测试成功后，说明钱包签名、<code>X-Params</code> 组装、模型选择和推理 API 访问链路已经打通。agent 可把同一套链路复用到代码生成、审查、数据分析、业务自动化或软件内部推理任务。</p>
+        <pre><code>curl -X POST "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages" \
+  -H "Content-Type: application/json" \
+  -H "X-Params: BASE64_ENCODED_WALLET_PARAMS" \
+  -H "X-Nonce: RANDOM_NONCE" \
+  -H "X-Signature: ECDSA_SIGNATURE_HEX" \
+  -H "X-Public-Key: ECDSA_PUBLIC_KEY_HEX" \
+  --data-raw '{
+    "model": "claude-4.6-opus",
+    "max_tokens": 1024,
+    "stream": false,
+    "messages": [
+      {
+        "role": "user",
+        "content": "你好"
+      }
+    ]
+  }'</code></pre>
+        <p class="callout">连通性测试成功后，说明钱包签名、<code>X-Params</code> 组装、接口级 ECDSA 签名、模型选择和推理 API 访问链路已经打通。agent 可把同一套链路复用到代码生成、审查、数据分析、业务自动化或软件内部推理任务。</p>
       </section>
 
       <section class="section" id="signing">
         <h2>7. 钱包签名调用推理 API</h2>
-        <p>推理 API 使用 <code>X-Params</code> 钱包签名认证。签名消息由钱包地址、金额和金额 ID 直接拼接得到：</p>
+        <p>推理 API 使用 <code>X-Params</code> 钱包业务签名，并叠加 <code>X-Nonce</code>、<code>X-Signature</code>、<code>X-Public-Key</code> 接口级 ECDSA 签名。钱包签名消息由钱包地址、金额和金额 ID 直接拼接得到：</p>
         <pre><code>${wallet_address}${money}${money_id}</code></pre>
         <h3>X-Params 签名过程</h3>
         <ol>
           <li>人提供 <code>wallet_chain</code>、<code>wallet_address</code>、<code>money</code>、<code>money_id</code> 和安全注入的私钥。</li>
           <li>agent 将 <code>wallet_address + money + money_id</code> 拼接为签名消息。</li>
           <li>signer 对签名消息执行 <code>sha256.Sum256</code>，得到 32-byte digest。</li>
-          <li><code>ltc</code> 解码 Litecoin mainnet WIF 私钥，并调用 <code>btcec/v2/ecdsa.SignCompact</code>。</li>
+          <li><code>ltc</code> 解码 Litecoin mainnet WIF 私钥后按地址类型选择签名：普通地址调用 <code>btcec/v2/ecdsa.SignCompact</code>，Taproot 地址 <code>ltc1p...</code> 调用 <code>btcec/v2/schnorr.Sign</code>。</li>
           <li><code>btc</code> 解码 Bitcoin mainnet WIF 私钥；普通地址如 <code>1...</code>、<code>3...</code>、<code>bc1q...</code> 使用 <code>btcec/v2/ecdsa.SignCompact</code>；Taproot 地址 <code>bc1p...</code> 先调用 <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code> 调整内部私钥，再使用 <code>btcec/v2/schnorr.Sign</code>。</li>
           <li><code>eth</code> 使用 Ethereum hex 私钥，可带或不带 <code>0x</code>，并调用 <code>github.com/ethereum/go-ethereum/crypto.Sign</code>。</li>
           <li>签名结果 base64 编码后，与 <code>wallet_address</code>、<code>money</code>、<code>money_id</code> 组装为 JSON。</li>
           <li>将该 JSON 字符串再次 base64 编码，最终写入 HTTP header 的 <code>X-Params</code>。</li>
+          <li>生成随机 <code>X-Nonce</code>，将 <code>X-Params + X-Nonce</code> 直接拼接后执行 SHA-256。</li>
+          <li>使用本地 ECDSA P-256 私钥生成 ASN.1/DER 签名 hex，写入 <code>X-Signature</code>，并把本地 ECDSA 公钥 DER hex 写入 <code>X-Public-Key</code>。</li>
         </ol>
         <table>
           <thead>
@@ -712,15 +730,18 @@ X-Params: BASE64_ENCODED_WALLET_PARAMS
             <tr><td><code>signature</code></td><td>对 <code>wallet_address + money + money_id</code> 签名后的 base64 字符串</td></tr>
           </tbody>
         </table>
-        <p>签名字段组装为 JSON 后再次 base64，放入请求 header：</p>
+        <p>签名字段组装为 JSON 后再次 base64，放入请求 header，并为接口级请求生成 ECDSA 签名：</p>
         <pre><code>{
   "wallet_address": "YOUR_WALLET_ADDRESS",
   "money": "YOUR_WALLET_MONEY",
   "money_id": "YOUR_MONEY_ID",
   "signature": "BASE64_SIGNATURE"
 }</code></pre>
-        <pre><code>Content-Type: application/json
-X-Params: BASE64_ENCODED_WALLET_PARAMS</code></pre>
+<pre><code>Content-Type: application/json
+X-Params: BASE64_ENCODED_WALLET_PARAMS
+X-Nonce: RANDOM_NONCE
+X-Signature: ECDSA_SIGNATURE_HEX
+X-Public-Key: ECDSA_PUBLIC_KEY_HEX</code></pre>
         <p>推理请求体使用 Anthropic Messages 风格。agent 可以把代码上下文、数据样本、业务指令或软件内部任务写入 <code>messages</code>，由 bitgo 钱包签名授权后调用模型。</p>
         <pre><code>{
   "model": "claude-4.6-opus",
@@ -740,7 +761,7 @@ X-Params: BASE64_ENCODED_WALLET_PARAMS</code></pre>
         <ol class="step-list">
           <li>人完成链上充值，并确认资金已入账。</li>
           <li>人提供链类型、钱包地址、金额、<code>money_id</code> 和安全注入的私钥。</li>
-          <li>agent 创建钱包配置，使用 signer 生成 <code>X-Params</code>。</li>
+          <li>agent 创建钱包配置，使用 signer 生成 <code>X-Params</code>，并生成 <code>X-Nonce</code>、<code>X-Signature</code>、<code>X-Public-Key</code> 接口级签名 header。</li>
           <li>agent 调用推理 API，对 GitHub Trending 候选仓库执行 AI 相关性判断。</li>
           <li>服务端返回结构化 JSON 与 usage，系统生成报告并记录 token 消费。</li>
         </ol>
@@ -780,7 +801,7 @@ X-Params: BASE64_ENCODED_WALLET_PARAMS</code></pre>
       <section class="section" id="security">
         <h2>9. 安全事项</h2>
         <ul>
-          <li>不要将真实私钥、完整签名、完整 <code>X-Params</code> 或管理 token 写入仓库。</li>
+          <li>不要将真实私钥、完整 <code>X-Params</code>、完整 <code>X-Signature</code>、<code>X-Public-Key</code> 或管理 token 写入仓库。</li>
           <li>链类型、充值网络、金额和 <code>money_id</code> 必须由人确认后交给 agent 使用。</li>
           <li>私钥应通过环境变量、Secret 管理器或部署平台安全注入，不应出现在配置模板中。</li>
           <li>充值前必须核对官方接收地址和主网，转错地址或转错网络无法由 agent 或软件自动挽回。</li>

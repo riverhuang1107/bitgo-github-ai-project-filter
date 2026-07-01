@@ -8,7 +8,7 @@
 
 1. 从 GitHub Trending 收集候选仓库数据。
 2. 将候选数据组织为 Anthropic Messages 风格请求体。
-3. 默认使用新版 `X-Params` 多链钱包签名认证；旧版 key-pair 签名方式保留为 legacy。
+3. 默认使用新版 `X-Params` 多链钱包签名认证，并叠加接口级 `X-Nonce`、`X-Signature`、`X-Public-Key` ECDSA 签名。
 4. 调用外部推理 API 获取结构化 JSON 结果。
 5. 校验结果后生成 Markdown 和 HTML 日报。
 
@@ -27,7 +27,7 @@
 | `money` | `YOUR_WALLET_MONEY` | 面额，必须由人提供 |
 | `money_id` | 空 | 面额 ID |
 | `signer_command` | 空 | 可选 Go signer 命令路径；为空时使用项目内默认 signer |
-| `private_key_path` | 空 | 旧版 key-pair 认证的 ECDSA 私钥路径，仅 legacy 使用 |
+| `private_key_path` | 空 | 接口级 ECDSA P-256 私钥路径，用于生成 `X-Signature` 和 `X-Public-Key` |
 
 用户配置文件中的 `[reasoning]` 配置示例：
 
@@ -41,7 +41,7 @@ money = "YOUR_WALLET_MONEY"
 money_id = "YOUR_MONEY_ID"
 signer_command = ""
 
-# legacy key-pair only
+# interface-level ECDSA signing key
 private_key_path = "/secure/ecdsa-private.pem"
 ```
 
@@ -61,7 +61,7 @@ export REASONING_SIGNER_COMMAND=""
 
 ## 3. 多链钱包生成与连通性测试
 
-加密货币相关签名由 Go signer 统一实现，代码位于 `tools/reasoning-signer`。Python 运行时只调用 signer、组装 `X-Params` 并发送 HTTP 请求，不直接实现钱包私钥签名。
+加密货币相关签名由 Go signer 统一实现，代码位于 `tools/reasoning-signer`。Python 运行时调用 signer 组装 `X-Params`，再使用本地 ECDSA P-256 私钥为 `X-Params + X-Nonce` 生成接口级签名，最后发送完整 HTTP 请求；Python 不直接实现钱包私钥签名。
 
 ### LTC 钱包
 
@@ -111,7 +111,7 @@ REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY" \
 
 ## 4. 新版 `X-Params` 钱包签名认证（默认）
 
-新版认证把钱包地址、面额、面额 ID 和签名组装为 JSON，然后 base64 编码到 HTTP header `X-Params` 中。
+新版认证把钱包地址、面额、面额 ID 和签名组装为 JSON，然后 base64 编码到 HTTP header `X-Params` 中；请求还会携带基于 `X-Params + X-Nonce` 的接口级 ECDSA 签名 header。
 
 签名消息为：
 
@@ -124,7 +124,7 @@ ${wallet_address}${money}${money_id}
 1. 将 `wallet_address + money + money_id` 按 UTF-8 编码。
 2. 对消息执行 `sha256.Sum256`，得到 32-byte digest。
 3. 根据链类型使用 Go 完成签名：
-   - `ltc`：按 Litecoin mainnet WIF 解码私钥，使用 `github.com/btcsuite/btcd/btcec/v2/ecdsa.SignCompact`。
+   - `ltc`：按 Litecoin mainnet WIF 解码私钥；普通地址使用 `github.com/btcsuite/btcd/btcec/v2/ecdsa.SignCompact`，Taproot 地址（`ltc1p...`）使用 `github.com/btcsuite/btcd/btcec/v2/schnorr.Sign`。
    - `btc`：按 Bitcoin mainnet WIF 解码私钥；普通地址（如 `1...`、`3...`、`bc1q...`）使用 `github.com/btcsuite/btcd/btcec/v2/ecdsa.SignCompact`；Taproot 地址（`bc1p...`）先使用 `github.com/btcsuite/btcd/txscript.TweakTaprootPrivKey(*privateKey, []byte{})` 调整私钥，再用调整后的私钥调用 `github.com/btcsuite/btcd/btcec/v2/schnorr.Sign`。
    - `eth`：按 Ethereum hex 私钥解码，使用 `github.com/ethereum/go-ethereum/crypto.Sign`。
 4. 将签名字节 base64 编码为 `signature`。
@@ -140,6 +140,8 @@ ${wallet_address}${money}${money_id}
 ```
 
 6. 将上面的 JSON 字符串按 UTF-8 编码后 base64，写入 `X-Params`。
+7. 生成随机 `X-Nonce`，将 `X-Params + X-Nonce` 直接拼接后执行 SHA-256。
+8. 使用本地 ECDSA P-256 私钥生成 ASN.1/DER 签名 hex，写入 `X-Signature`，并把本地公钥 DER hex 写入 `X-Public-Key`。
 
 请求头：
 
@@ -147,6 +149,9 @@ ${wallet_address}${money}${money_id}
 | --- | --- |
 | `Content-Type` | 固定为 `application/json` |
 | `X-Params` | base64 编码后的钱包签名参数 JSON |
+| `X-Nonce` | 随机字符串，参与接口级 ECDSA 签名 |
+| `X-Signature` | 对 `X-Params + X-Nonce` 签名后的 ASN.1/DER hex |
+| `X-Public-Key` | 本地 ECDSA 公钥 DER hex |
 
 请求示例：
 
@@ -154,6 +159,9 @@ ${wallet_address}${money}${money_id}
 curl --location --request POST "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages" \
   --header "Content-Type: application/json" \
   --header "X-Params: BASE64_WALLET_PARAMS_JSON" \
+  --header "X-Nonce: RANDOM_NONCE" \
+  --header "X-Signature: ECDSA_SIGNATURE_HEX" \
+  --header "X-Public-Key: ECDSA_PUBLIC_KEY_HEX" \
   --data-raw '{
     "model": "claude-4.6-opus",
     "messages": [{"role": "user", "content": "你好"}],
@@ -161,24 +169,16 @@ curl --location --request POST "https://api-token-enigmhaven.expvent.com.cn:1111
   }'
 ```
 
-在项目运行时，`ReasoningClient` 默认发送 `Content-Type` 和 `X-Params`，不再默认发送旧版 `X-Nonce/X-Signature/X-Public-Key`。如需使用预编译 signer，可设置 `REASONING_SIGNER_COMMAND` 或配置 `signer_command`。
+在项目运行时，`ReasoningClient` 默认同时发送 `Content-Type`、`X-Params`、`X-Nonce`、`X-Signature` 和 `X-Public-Key`。如需使用预编译 signer，可设置 `REASONING_SIGNER_COMMAND` 或配置 `signer_command`。
 
-## 5. 旧版 key-pair 签名认证（legacy，保留）
+## 5. 历史 key-pair 签名格式（legacy，保留说明）
 
-旧版方式使用 ECDSA P-256 私钥对请求进行签名。该方式保留用于兼容旧部署或排查历史请求，不作为默认认证路径。
+历史方式使用 ECDSA P-256 私钥按 `METHOD/path/query/nonce` 对请求进行签名。当前默认认证路径已经改为“钱包 `X-Params` + 接口级 ECDSA 签名”，本节仅用于排查旧请求或理解历史部署。
 
 生成 ECDSA P-256 私钥：
 
 ```bash
 .venv/bin/github-ai-daily keygen --path /secure/ecdsa-private.pem
-```
-
-旧版连通性测试：
-
-```bash
-.venv/bin/github-ai-daily reasoning test \
-  --model claude-4.6-opus \
-  --key /secure/ecdsa-private.pem
 ```
 
 旧版签名文本格式为：
@@ -204,7 +204,7 @@ nonce
 3. 使用 ECDSA P-256 对摘要生成 ASN.1/DER 签名。
 4. 将签名、nonce 和公钥写入请求头。
 
-旧版请求头包括：
+历史请求头包括：
 
 | Header | 说明 |
 | --- | --- |

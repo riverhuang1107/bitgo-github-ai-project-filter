@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 
 import httpx
+from cryptography.hazmat.primitives.asymmetric import ec
 
 from .crypto import WalletAuth, wallet_signed_headers
 from .models import Repository, Selection
@@ -50,10 +51,18 @@ class TokenUsage:
 
 
 class ReasoningClient:
-    def __init__(self, endpoint: str, model: str, auth: WalletAuth, timeout: float = 90):
+    def __init__(
+        self,
+        endpoint: str,
+        model: str,
+        auth: WalletAuth,
+        interface_key: ec.EllipticCurvePrivateKey,
+        timeout: float = 90,
+    ):
         self.endpoint = endpoint
         self.model = model
         self.auth = auth
+        self.interface_key = interface_key
         self.client = httpx.Client(timeout=timeout)
         self.last_usage = TokenUsage()
 
@@ -81,7 +90,7 @@ class ReasoningClient:
                 }
             ],
         }
-        headers = wallet_signed_headers(self.auth)
+        headers = wallet_signed_headers(self.auth, self.interface_key)
         response = self.client.post(self.endpoint, headers=headers, json=body)
         response_data = _response_json(response)
         self.last_usage = TokenUsage.from_response(response_data)
@@ -100,7 +109,7 @@ class ReasoningClient:
                 }
             ],
         }
-        headers = wallet_signed_headers(self.auth)
+        headers = wallet_signed_headers(self.auth, self.interface_key)
         response = self.client.post(self.endpoint, headers=headers, json=body)
         response_data = _response_json(response)
         self.last_usage = TokenUsage.from_response(response_data)

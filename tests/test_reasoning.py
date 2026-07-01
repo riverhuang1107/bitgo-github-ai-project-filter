@@ -1,5 +1,6 @@
 import pytest
 import httpx
+from cryptography.hazmat.primitives.asymmetric import ec
 
 from github_ai_daily.crypto import WalletAuth
 from github_ai_daily.reasoning import (
@@ -132,16 +133,23 @@ def test_reasoning_client_uses_x_params_headers(monkeypatch):
 
     monkeypatch.setattr(
         "github_ai_daily.reasoning.wallet_signed_headers",
-        lambda auth: {"Content-Type": "application/json", "X-Params": "encoded"},
+        lambda auth, key: {
+            "Content-Type": "application/json",
+            "X-Params": "encoded",
+            "X-Nonce": "nonce",
+            "X-Signature": "signature",
+            "X-Public-Key": "public-key",
+        },
     )
     auth = WalletAuth("ltc", "wallet", "10", "id", "private")
-    client = ReasoningClient("https://example.test/v1/messages", "model-a", auth)
+    key = ec.generate_private_key(ec.SECP256R1())
+    client = ReasoningClient("https://example.test/v1/messages", "model-a", auth, key)
     client.client = FakeClient()
 
     client.test_access()
 
     assert captured["headers"]["X-Params"] == "encoded"
-    assert "X-Public-Key" not in captured["headers"]
-    assert "X-Signature" not in captured["headers"]
-    assert "X-Nonce" not in captured["headers"]
+    assert captured["headers"]["X-Public-Key"] == "public-key"
+    assert captured["headers"]["X-Signature"] == "signature"
+    assert captured["headers"]["X-Nonce"] == "nonce"
     assert captured["body"]["model"] == "model-a"

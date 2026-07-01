@@ -16,6 +16,14 @@ func TestSignLTC(t *testing.T) {
 	assertDigestAndSignature(t, signature, digest)
 }
 
+func TestSignLTCTaprootUsesSchnorr(t *testing.T) {
+	signature, digest, err := signMessage("ltc", "ltc1pexample", "10", "20260630001", testWIF(ltcMainnetWIFVersion))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertDigestAndSignatureSize(t, signature, digest, 64)
+}
+
 func TestSignBTC(t *testing.T) {
 	signature, digest, err := signMessage("btc", "1example", "10", "20260630001", testWIF(btcMainnetWIFVersion))
 	if err != nil {
@@ -25,11 +33,20 @@ func TestSignBTC(t *testing.T) {
 }
 
 func TestSignBTCTaprootUsesSchnorr(t *testing.T) {
-	signature, digest, err := signMessage("btc", "bc1pexample", "10", "20260630001", testWIF(btcMainnetWIFVersion))
+	wif := testWIF(btcMainnetWIFVersion)
+	signature, digest, err := signMessage("btc", "bc1pexample", "10", "20260630001", wif)
 	if err != nil {
 		t.Fatal(err)
 	}
 	assertDigestAndSignatureSize(t, signature, digest, 64)
+
+	untweakedSignature, _, err := signWIFSchnorr(digest, wif, btcMainnetWIFVersion, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if signature == untweakedSignature {
+		t.Fatal("expected BTC Taproot signature to use tweaked private key")
+	}
 }
 
 func TestSignETH(t *testing.T) {

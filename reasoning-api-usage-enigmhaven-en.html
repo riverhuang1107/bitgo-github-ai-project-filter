@@ -454,7 +454,7 @@
         <ol class="step-list">
           <li>Collect candidate repository data from GitHub Trending.</li>
           <li>Organize candidate data into an Anthropic Messages-style request body.</li>
-          <li>Use the new <code>X-Params</code> multi-chain wallet signature authentication by default; keep the old key-pair signing method as legacy.</li>
+          <li>Use the new <code>X-Params</code> multi-chain wallet signature authentication by default, together with interface-level <code>X-Nonce</code>, <code>X-Signature</code>, and <code>X-Public-Key</code> ECDSA headers.</li>
           <li>Call the external reasoning API and receive structured JSON results.</li>
           <li>Validate the result and generate Markdown and HTML reports.</li>
         </ol>
@@ -476,7 +476,7 @@
             <tr><td><code>money</code></td><td><code>YOUR_WALLET_MONEY</code></td><td>Amount; must be provided by a person</td></tr>
             <tr><td><code>money_id</code></td><td>Empty</td><td>Amount ID</td></tr>
             <tr><td><code>signer_command</code></td><td>Empty</td><td>Optional Go signer command path; empty uses the project default signer</td></tr>
-            <tr><td><code>private_key_path</code></td><td>Empty</td><td>ECDSA private key path for legacy key-pair authentication only</td></tr>
+            <tr><td><code>private_key_path</code></td><td>Empty</td><td>Interface-level ECDSA P-256 private key path used to generate <code>X-Signature</code> and <code>X-Public-Key</code></td></tr>
           </tbody>
         </table>
         <p>Example <code>[reasoning]</code> configuration:</p>
@@ -489,7 +489,7 @@ money = "YOUR_WALLET_MONEY"
 money_id = "YOUR_MONEY_ID"
 signer_command = ""
 
-# legacy key-pair only
+# interface-level ECDSA signing key
 private_key_path = "/secure/ecdsa-private.pem"</code></pre>
         <p>The new wallet signature authentication can be overridden with environment variables. Do not write wallet private keys to configuration files or commits.</p>
         <pre><code>export REASONING_API_MODEL="claude-4.6-opus"
@@ -503,7 +503,7 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
 
       <section class="section dark">
         <h2>3. Multi-Chain Wallet Generation and Connectivity Test</h2>
-        <p>Cryptocurrency signing is implemented only by the Go signer in <code>tools/reasoning-signer</code>. The Python runtime calls the signer, builds <code>X-Params</code>, and sends the HTTP request.</p>
+        <p>Cryptocurrency signing is implemented only by the Go signer in <code>tools/reasoning-signer</code>. The Python runtime calls the signer to build <code>X-Params</code>, then uses the local ECDSA P-256 private key to sign <code>X-Params + X-Nonce</code> for the interface-level headers before sending the complete HTTP request.</p>
         <div class="grid">
           <div class="tile"><strong>LTC</strong><span>Generate a Litecoin mainnet wallet, export the address and WIF private key, then use <code>wallet_chain = "ltc"</code>. LTC has been verified with real requests, but the chain must still be explicitly provided by a person.</span></div>
           <div class="tile"><strong>BTC</strong><span>Generate a Bitcoin mainnet wallet, export the address and WIF private key, then use <code>wallet_chain = "btc"</code>. Regular addresses such as <code>1...</code>, <code>3...</code>, and <code>bc1q...</code> use compact ECDSA; Taproot addresses (<code>bc1p...</code>) first call <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code> to tweak the internal private key, then sign with Schnorr using the tweaked key.</span></div>
@@ -520,12 +520,12 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
 
       <section class="section" id="auth">
         <h2>4. Request Signing</h2>
-        <p>Default authentication uses <code>X-Params</code>. The signing message is <code>wallet_address + money + money_id</code>.</p>
+        <p>Default authentication uses the <code>X-Params</code> wallet business signature together with interface-level ECDSA headers signed over <code>X-Params + X-Nonce</code>. The wallet signing message is <code>wallet_address + money + money_id</code>.</p>
         <pre><code>${wallet_address}${money}${money_id}</code></pre>
         <h3>New X-Params signing process</h3>
         <ol>
           <li>Compute a 32-byte digest with <code>sha256.Sum256</code>.</li>
-          <li><code>ltc</code> decodes WIF private keys and calls <code>btcec/v2/ecdsa.SignCompact</code>; <code>btc</code> decodes WIF private keys and selects the signing algorithm by address type: regular addresses call <code>btcec/v2/ecdsa.SignCompact</code>, while Taproot <code>bc1p...</code> addresses first call <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code>, then call <code>btcec/v2/schnorr.Sign</code> with the tweaked private key.</li>
+          <li><code>ltc</code> decodes WIF private keys and selects the signing algorithm by address type: regular addresses call <code>btcec/v2/ecdsa.SignCompact</code>, while Taproot <code>ltc1p...</code> addresses call <code>btcec/v2/schnorr.Sign</code>; <code>btc</code> decodes WIF private keys and selects the signing algorithm by address type: regular addresses call <code>btcec/v2/ecdsa.SignCompact</code>, while Taproot <code>bc1p...</code> addresses first call <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code>, then call <code>btcec/v2/schnorr.Sign</code> with the tweaked private key.</li>
           <li><code>eth</code>: use an Ethereum hex private key, with or without the <code>0x</code> prefix, and call <code>github.com/ethereum/go-ethereum/crypto.Sign</code>.</li>
         </ol>
         <p>After base64-encoding the signature, build this JSON:</p>
@@ -535,7 +535,7 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
   "money_id": "...",
   "signature": "..."
 }</code></pre>
-        <p>Then UTF-8 encode and base64 the JSON string, and write it to <code>X-Params</code>.</p>
+        <p>Then UTF-8 encode and base64 the JSON string, and write it to <code>X-Params</code>. Generate a random <code>X-Nonce</code>, concatenate <code>X-Params + X-Nonce</code>, compute SHA-256, sign the digest with the local ECDSA P-256 private key as ASN.1/DER hex in <code>X-Signature</code>, and send the DER public key hex in <code>X-Public-Key</code>.</p>
         <table>
           <thead>
             <tr><th>Header</th><th>Description</th></tr>
@@ -543,17 +543,20 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
           <tbody>
             <tr><td><code>Content-Type</code></td><td>Always <code>application/json</code></td></tr>
             <tr><td><code>X-Params</code></td><td>Base64-encoded wallet signature parameter JSON</td></tr>
+            <tr><td><code>X-Nonce</code></td><td>Random string used in the interface-level ECDSA signature</td></tr>
+            <tr><td><code>X-Signature</code></td><td>ASN.1/DER hex signature over <code>X-Params + X-Nonce</code></td></tr>
+            <tr><td><code>X-Public-Key</code></td><td>Local ECDSA DER public key hex</td></tr>
           </tbody>
         </table>
-        <h3>Legacy key-pair signing</h3>
-        <p>The old ECDSA P-256 method is retained for deployments that still require <code>X-Nonce/X-Signature/X-Public-Key</code>. Generate the key with <code>github-ai-daily keygen</code> and pass it with <code>--key</code>.</p>
+        <h3>Legacy key-pair signature format</h3>
+        <p>The historical method signed each request with an ECDSA P-256 private key over <code>METHOD/path/query/nonce</code>. The current default authentication path is now wallet <code>X-Params</code> plus interface-level ECDSA headers; this section is retained only for debugging old requests or understanding historical deployments.</p>
         <pre><code>METHOD
 /path
 ?raw=query
 nonce</code></pre>
         <table>
           <thead>
-            <tr><th>Legacy header</th><th>Description</th></tr>
+            <tr><th>Historical header</th><th>Description</th></tr>
           </thead>
           <tbody>
             <tr><td><code>X-Nonce</code></td><td>Random nonce generated for each request</td></tr>

@@ -80,10 +80,13 @@ func signMessage(chain, walletAddress, money, moneyID, privateKey string) (strin
 
 	switch strings.ToLower(strings.TrimSpace(chain)) {
 	case "ltc":
+		if isLitecoinTaprootAddress(walletAddress) {
+			return signWIFSchnorr(digest, privateKey, ltcMainnetWIFVersion, false)
+		}
 		return signWIF(digest, privateKey, ltcMainnetWIFVersion)
 	case "btc":
-		if isTaprootAddress(walletAddress) {
-			return signWIFSchnorr(digest, privateKey, btcMainnetWIFVersion)
+		if isBitcoinTaprootAddress(walletAddress) {
+			return signWIFSchnorr(digest, privateKey, btcMainnetWIFVersion, true)
 		}
 		return signWIF(digest, privateKey, btcMainnetWIFVersion)
 	case "eth":
@@ -93,8 +96,12 @@ func signMessage(chain, walletAddress, money, moneyID, privateKey string) (strin
 	}
 }
 
-func isTaprootAddress(walletAddress string) bool {
+func isBitcoinTaprootAddress(walletAddress string) bool {
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(walletAddress)), "bc1p")
+}
+
+func isLitecoinTaprootAddress(walletAddress string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(walletAddress)), "ltc1p")
 }
 
 func signWIF(digest [32]byte, privateKeyWIF string, expectedVersion byte) (string, [32]byte, error) {
@@ -108,15 +115,19 @@ func signWIF(digest [32]byte, privateKeyWIF string, expectedVersion byte) (strin
 	return base64.StdEncoding.EncodeToString(signature), digest, nil
 }
 
-func signWIFSchnorr(digest [32]byte, privateKeyWIF string, expectedVersion byte) (string, [32]byte, error) {
+func signWIFSchnorr(digest [32]byte, privateKeyWIF string, expectedVersion byte, tweak bool) (string, [32]byte, error) {
 	keyBytes, _, err := decodeMainnetWIF(privateKeyWIF, expectedVersion)
 	if err != nil {
 		return "", digest, err
 	}
 
 	privateKey, _ := btcec.PrivKeyFromBytes(keyBytes)
-	tweakedPrivateKey := txscript.TweakTaprootPrivKey(*privateKey, []byte{})
-	signature, err := schnorr.Sign(tweakedPrivateKey, digest[:])
+	signingKey := privateKey
+	if tweak {
+		tweakedPrivateKey := txscript.TweakTaprootPrivKey(*privateKey, []byte{})
+		signingKey = tweakedPrivateKey
+	}
+	signature, err := schnorr.Sign(signingKey, digest[:])
 	if err != nil {
 		return "", digest, err
 	}

@@ -11,6 +11,7 @@ from github_ai_daily.crypto import (
     WalletAuth,
     build_x_params,
     generate_private_key,
+    interface_signature_message,
     load_private_key,
     run_wallet_signer,
     signature_message,
@@ -40,7 +41,7 @@ def test_generated_signature_verifies_prehashed(tmp_path: Path):
     assert bytes.fromhex(headers["X-Public-Key"]).startswith(b"0")
 
 
-def test_build_x_params_from_wallet_signer(monkeypatch):
+def test_build_x_params_from_wallet_signer(monkeypatch, tmp_path: Path):
     auth = WalletAuth(
         chain="ltc",
         wallet_address="wallet",
@@ -77,7 +78,22 @@ def test_build_x_params_from_wallet_signer(monkeypatch):
         "money_id": "20260630001",
         "signature": "signature",
     }
-    assert wallet_signed_headers(auth)["X-Params"]
+
+    path = tmp_path / "interface-key.pem"
+    generate_private_key(path)
+    key = load_private_key(path)
+    headers = wallet_signed_headers(auth, key, nonce="fixed-nonce")
+    assert headers["X-Params"] == x_params
+    assert headers["X-Nonce"] == "fixed-nonce"
+    assert headers["X-Signature"]
+    assert headers["X-Public-Key"]
+
+    digest = sha256(interface_signature_message(x_params, "fixed-nonce")).digest()
+    key.public_key().verify(
+        bytes.fromhex(headers["X-Signature"]),
+        digest,
+        ec.ECDSA(utils.Prehashed(hashes.SHA256())),
+    )
 
 
 def test_wallet_auth_rejects_missing_private_key():
