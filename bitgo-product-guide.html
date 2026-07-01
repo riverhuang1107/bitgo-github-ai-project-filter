@@ -1,0 +1,795 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>bitgo Agent 软件开发推理产品说明</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #0b1324;
+      --muted: #53627a;
+      --paper: #f7fbff;
+      --soft: #eef6ff;
+      --line: #c9d9ef;
+      --blue: #0069ff;
+      --blue-dark: #003ea8;
+      --blue-soft: #dcecff;
+      --black: #06111f;
+      --white: #ffffff;
+      --code: #171717;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.68;
+    }
+
+    .shell {
+      min-height: 100vh;
+      background:
+        linear-gradient(180deg, rgba(0, 105, 255, 0.14), rgba(247, 251, 255, 0) 340px),
+        radial-gradient(circle at top right, rgba(0, 105, 255, 0.16), transparent 360px);
+    }
+
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      background: rgba(247, 251, 255, 0.92);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid rgba(201, 217, 239, 0.72);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--blue);
+      color: var(--white);
+      font-weight: 900;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 18px;
+      font-size: 14px;
+    }
+
+    .nav-links a {
+      color: var(--ink);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+    }
+
+    .nav-links a:hover {
+      border-color: var(--ink);
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 56px 24px 88px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.12fr) minmax(280px, 0.88fr);
+      gap: 34px;
+      align-items: stretch;
+      margin-bottom: 46px;
+    }
+
+    .hero-copy {
+      padding: 30px 0 20px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+      padding: 7px 12px;
+      border: 1px solid var(--blue);
+      border-radius: 999px;
+      background: var(--blue);
+      color: var(--white);
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 780px;
+      margin: 0;
+      font-size: clamp(40px, 7vw, 86px);
+      line-height: 0.96;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 760px;
+      margin: 24px 0 0;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .hero-card {
+      align-self: stretch;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 380px;
+      padding: 26px;
+      border: 2px solid var(--black);
+      border-radius: 8px;
+      background: var(--black);
+      color: var(--white);
+      box-shadow: 12px 12px 0 var(--blue);
+    }
+
+    .hero-card h2 {
+      margin: 0;
+      color: #8fc2ff;
+      font-size: 24px;
+      border: 0;
+      padding: 0;
+    }
+
+    .hero-card p {
+      color: #e9f3ff;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .metric {
+      padding: 14px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      border-radius: 8px;
+    }
+
+    .metric strong {
+      display: block;
+      color: #8fc2ff;
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 8px;
+      color: #c5d8f2;
+      font-size: 12px;
+    }
+
+    .section {
+      margin-top: 28px;
+      padding: 32px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .section.dark {
+      border-color: var(--black);
+      background: var(--black);
+      color: var(--white);
+    }
+
+    .section.dark p,
+    .section.dark li {
+      color: #e9f3ff;
+    }
+
+    .section.dark h2,
+    .section.dark h3 {
+      color: #8fc2ff;
+    }
+
+    .section h2 {
+      margin: 0 0 16px;
+      padding: 0;
+      border: 0;
+      font-size: 28px;
+      line-height: 1.2;
+    }
+
+    .section h3 {
+      margin: 24px 0 10px;
+      font-size: 18px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .grid.three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .tile {
+      min-width: 0;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--soft);
+      overflow-wrap: anywhere;
+    }
+
+    .tile strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 17px;
+    }
+
+    .tile span {
+      color: #34445c;
+    }
+
+    .section.dark .tile {
+      border-color: #c9d9ef;
+      background: #f4f9ff;
+      color: var(--ink);
+    }
+
+    .section.dark .tile strong {
+      color: var(--ink);
+    }
+
+    .section.dark .tile span {
+      color: #34445c;
+    }
+
+    .section.dark .tile code {
+      background: var(--blue-soft);
+      color: var(--blue-dark);
+    }
+
+    .section.dark .callout {
+      color: var(--ink);
+    }
+
+    .section.dark .callout code {
+      background: var(--white);
+      color: var(--blue-dark);
+      font-weight: 800;
+    }
+
+    .section.dark .step-list li {
+      color: var(--ink);
+    }
+
+    .section.dark .step-list li code {
+      background: var(--blue-soft);
+      color: var(--blue-dark);
+      font-weight: 800;
+    }
+
+    .step-list {
+      counter-reset: steps;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .step-list li {
+      counter-increment: steps;
+      min-width: 0;
+      min-height: 154px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--white);
+      color: var(--ink);
+      overflow-wrap: anywhere;
+    }
+
+    .step-list li::before {
+      content: counter(steps, decimal-leading-zero);
+      display: inline-flex;
+      margin-bottom: 12px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: var(--blue);
+      color: var(--white);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 18px 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .table-scroll {
+      overflow-x: auto;
+      margin: 18px 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .table-scroll table {
+      min-width: 980px;
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--black);
+      color: #8fc2ff;
+      font-weight: 800;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    code {
+      border-radius: 5px;
+      background: rgba(0, 105, 255, 0.14);
+      color: var(--blue-dark);
+      padding: 0.16em 0.36em;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .dark code,
+    .hero-card code {
+      background: rgba(0, 105, 255, 0.18);
+      color: #8fc2ff;
+    }
+
+    pre {
+      overflow-x: auto;
+      margin: 16px 0;
+      padding: 18px;
+      border: 1px solid rgba(0, 105, 255, 0.34);
+      border-radius: 8px;
+      background: var(--code);
+      color: #f4f9ff;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+      overflow-wrap: normal;
+      word-break: normal;
+    }
+
+    ul, ol {
+      padding-left: 24px;
+    }
+
+    .callout {
+      margin-top: 18px;
+      padding: 18px 20px;
+      border-left: 6px solid var(--blue);
+      background: var(--blue-soft);
+      border-radius: 8px;
+      font-weight: 700;
+    }
+
+    .warning {
+      margin-top: 18px;
+      padding: 18px 20px;
+      border-left: 6px solid #cc3a3a;
+      background: #fff0f0;
+      border-radius: 8px;
+      color: #7c1d1d;
+      font-weight: 700;
+    }
+
+    .footer-note {
+      margin-top: 34px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      .hero {
+        grid-template-columns: 1fr;
+      }
+
+      .step-list,
+      .grid,
+      .grid.three {
+        grid-template-columns: 1fr;
+      }
+
+      .nav {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .nav-links {
+        flex-wrap: wrap;
+      }
+    }
+
+    @media (max-width: 640px) {
+      main {
+        padding: 34px 14px 56px;
+      }
+
+      .section,
+      .hero-card {
+        padding: 22px;
+      }
+
+      .metrics {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <nav class="nav" aria-label="页面导航">
+      <div class="brand">
+        <span class="brand-mark">b</span>
+        <span>bitgo Product Docs</span>
+      </div>
+      <div class="nav-links">
+        <a href="#highlights">产品亮点</a>
+        <a href="#deposit">链上充值</a>
+        <a href="#wallets">钱包创建</a>
+        <a href="#api-request">API 请求</a>
+        <a href="#models">支持模型</a>
+        <a href="#connectivity">连通测试</a>
+        <a href="#signing">签名调用</a>
+        <a href="#example">完整示例</a>
+        <a href="#security">安全事项</a>
+      </div>
+    </nav>
+
+    <main>
+      <header class="hero">
+        <div class="hero-copy">
+          <span class="eyebrow">Agent Reasoning Wallet</span>
+          <h1>bitgo</h1>
+          <p class="lead">bitgo 面向 agent 软件开发场景，为 agent 在开发软件过程中，以及 agent 开发出来的软件在自身业务流程中调用大模型推理时，提供链上钱包计费、签名授权和推理 token 消费能力。它不是单一项目筛选工具，而是让 agent 工作流和软件内部推理能力都能稳定接入模型服务的支付与认证层。</p>
+        </div>
+        <aside class="hero-card" aria-label="产品摘要">
+          <div>
+            <h2>为 agent 和软件内置推理而设计</h2>
+            <p>人负责确认链、地址、金额和授权信息；agent 负责创建钱包、生成签名请求并把推理能力接入开发流程或软件运行逻辑。</p>
+          </div>
+          <div class="metrics">
+            <div class="metric"><strong>Agent</strong><span>友好接入</span></div>
+            <div class="metric"><strong>Wallet</strong><span>链上身份</span></div>
+            <div class="metric"><strong>Token</strong><span>推理消费</span></div>
+          </div>
+        </aside>
+      </header>
+
+      <section class="section" id="highlights">
+        <h2>1. 产品亮点</h2>
+        <p>bitgo 把链上充值、钱包身份、请求签名和模型推理 token 消费组织成一个 agent 可执行的产品流程。它适用于 agent 开发软件时的推理调用，也适用于被开发出来的软件在运行过程中内置大模型推理能力。</p>
+        <div class="grid three">
+          <div class="tile"><strong>Agent 友好接入</strong><span>agent 可根据人提供的信息完成钱包配置、请求签名、连通性测试和推理 API 调用，减少人工拼接 header 与请求体的成本。</span></div>
+          <div class="tile"><strong>多钱包管理</strong><span>以链上地址作为唯一识别 ID，同一个地址可以关联多个钱包，用于区分不同软件、不同 agent 或不同业务线的推理消耗。</span></div>
+          <div class="tile"><strong>链上充值</strong><span>人从交易所或中心化钱包向官方地址提币，充值到账后即可用于推理 token 消费，链上确认过程可查询。</span></div>
+          <div class="tile"><strong>签名调用</strong><span>推理请求通过钱包私钥签名生成 <code>X-Params</code>，服务端可识别调用方、钱包金额和授权参数。</span></div>
+          <div class="tile"><strong>推理 token 消费</strong><span>API 返回 usage 后，可以把输入、输出、消耗金额和余额作为 agent 软件开发过程中的可追踪成本信息。</span></div>
+          <div class="tile"><strong>广泛 agent 工作流</strong><span>适用于代码生成、代码审查、数据分析、内容生成、业务自动化、智能工作流和软件内置推理等场景。</span></div>
+        </div>
+        <p class="callout">GitHub 热门 AI 项目筛选只是本文的演示样例，用来展示充值、钱包创建、签名调用、推理消费和结构化结果返回的完整链路；bitgo 的使用范围不局限于项目筛选。</p>
+      </section>
+
+      <section class="section" id="deposit">
+        <h2>2. 加密货币充值流程</h2>
+        <p>充值操作主要由人完成。请登录交易所或中心化钱包，选择对应币种与正确主网，将资产直接提币到 bitgo 官方接收地址。转账发起前必须逐字核对地址和网络，链上转账具有不可逆性。</p>
+        <div class="grid three">
+          <div class="tile"><strong>以太坊 ETH</strong><span>官方接收地址：<code>0xa52d609f23f110d588606a9c82c7c53a0143b6b0</code><br>网络选择：ETH / ERC-20<br>预计到账：5 - 15 分钟</span></div>
+          <div class="tile"><strong>莱特币 LTC</strong><span>官方接收地址：<code>MUVwWW6MbBcn9oPnuRU1iEmVAf8JgLgox7</code><br>网络选择：LTC / Litecoin<br>预计到账：10 - 25 分钟</span></div>
+          <div class="tile"><strong>比特币 BTC</strong><span>官方接收地址：<code>bc1p8fhgdj7hz234rmhff8nrw8zrq6hpft3m4dp7c6749weteq0rkhksmyckre</code><br>网络选择：BTC-Taproot<br>预计到账：30 - 40 分钟</span></div>
+        </div>
+        <ol class="step-list">
+          <li>在人持有资产的钱包或交易所中选择币种。</li>
+          <li>选择与官方地址严格匹配的主网。</li>
+          <li>填写官方接收地址并提交提币申请。</li>
+          <li>等待区块链网络确认，通常约 5 - 40 分钟。</li>
+          <li>在到账查询平台输入付款账户地址，确认资金是否入账。</li>
+        </ol>
+        <div class="warning">安全提示：地址填错、主网选错或 Taproot/ERC-20 等网络类型不匹配，可能导致资产永久丢失。刚提交提币后的前几分钟，由于区块尚未打包，查询平台可能短暂延迟。</div>
+      </section>
+
+      <section class="section dark" id="wallets">
+        <h2>3. 链上地址与钱包创建</h2>
+        <p>bitgo 以链上地址作为用户唯一识别 ID。一个链上地址可以对应多个钱包，用来支持不同 agent、不同软件项目、不同运行环境或不同业务模块的推理 token 消费隔离。</p>
+        <div class="grid">
+          <div class="tile"><strong>人提供的信息</strong><span>链类型 <code>ltc</code>、<code>btc</code> 或 <code>eth</code>，钱包地址，充值金额或面额，<code>money_id</code>，以及通过安全方式注入的私钥。</span></div>
+          <div class="tile"><strong>agent 完成的动作</strong><span>创建或配置钱包记录，生成签名请求，测试推理 API 连通性，并把模型调用接入 agent 开发流程或软件内部业务逻辑。</span></div>
+        </div>
+        <p class="callout">链类型、金额和授权信息必须由人明确提供。agent 不应根据地址外观擅自推断业务金额，也不应把真实私钥写入仓库、文档、日志或示例代码。</p>
+      </section>
+
+      <section class="section" id="api-request">
+        <h2>4. 推理 API 请求 endpoint 与参数说明</h2>
+        <p>bitgo 通过钱包签名后的 HTTP 请求调用外部推理 API。agent 在开发软件时，或软件内部需要执行模型推理时，都可以把任务上下文放入请求体并发送到以下 endpoint。</p>
+        <table>
+          <thead>
+            <tr><th>项目</th><th>值</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>endpoint</code></td><td><code>https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages</code></td><td>推理 API 请求地址</td></tr>
+            <tr><td><code>method</code></td><td><code>POST</code></td><td>发送 JSON 请求体</td></tr>
+            <tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>固定使用 JSON</td></tr>
+            <tr><td><code>X-Params</code></td><td><code>BASE64_ENCODED_WALLET_PARAMS</code></td><td>钱包签名认证参数，由 agent 使用 signer 生成</td></tr>
+          </tbody>
+        </table>
+        <h3>请求体参数</h3>
+        <table>
+          <thead>
+            <tr><th>参数</th><th>类型</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>model</code></td><td>string</td><td>模型 ID。可选择的模型列表见下一节“支持模型列表”。</td></tr>
+            <tr><td><code>max_tokens</code></td><td>number</td><td>本次推理允许生成的最大 token 数；简单连通性测试可设置较小值。</td></tr>
+            <tr><td><code>system</code></td><td>string</td><td>可选。用于定义模型角色、约束和输出格式。</td></tr>
+            <tr><td><code>messages</code></td><td>array</td><td>对话消息数组，常用格式为 <code>{"role":"user","content":"..."}</code>。</td></tr>
+            <tr><td><code>stream</code></td><td>boolean</td><td>可选。示例请求使用 <code>false</code>，表示一次性返回结果。</td></tr>
+          </tbody>
+        </table>
+        <h3>请求“你好”的示例</h3>
+        <pre><code>POST https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages
+Content-Type: application/json
+X-Params: BASE64_ENCODED_WALLET_PARAMS
+
+{
+  "model": "deepseek-v3",
+  "stream": false,
+  "messages": [
+    {
+      "role": "user",
+      "content": "你好"
+    }
+  ]
+}</code></pre>
+        <h3>接口返回中的 usage</h3>
+        <pre><code>{
+  "usage": {
+    "input_tokens": 2137,
+    "output_tokens": 1389,
+    "cache_read_input_tokens": 0,
+    "cache_creation_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "output_token_unit_price": 2520,
+    "consume_amount": 3500280,
+    "balance": 996499720,
+    "hash": "..."
+  }
+}</code></pre>
+        <p class="callout">真实请求必须先完成钱包创建、充值确认和 <code>X-Params</code> 签名。示例中的 <code>X-Params</code> 是占位符，不应把真实签名 header 写入文档或日志。</p>
+      </section>
+
+      <section class="section" id="models">
+        <h2>5. 支持模型列表</h2>
+        <p>bitgo 调用的推理 API 通过 <code>model</code> 字段选择模型。agent 在开发软件或把推理能力接入软件内部业务流程时，可以按任务质量、延迟和成本选择下列模型；单价按 USD / 1,000,000 token 展示。</p>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr><th>模型 ID</th><th>模型名称</th><th>发行商</th><th>输入单价</th><th>输出单价</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>deepseek-v3</code></td><td>DeepSeek-V3</td><td>DeepSeek</td><td>0.28</td><td>1.11</td></tr>
+              <tr><td><code>deepseek-v3.1</code></td><td>DeepSeek-V3.1</td><td>DeepSeek</td><td>0.56</td><td>1.67</td></tr>
+              <tr><td><code>deepseek/deepseek-v4-flash</code></td><td>DeepSeek-V4-Flash</td><td>DeepSeek</td><td>0.14</td><td>0.28</td></tr>
+              <tr><td><code>deepseek/deepseek-v4-pro</code></td><td>DeepSeek-V4-Pro</td><td>DeepSeek</td><td>1.67</td><td>3.33</td></tr>
+              <tr><td><code>deepseek/deepseek-v3.2-exp</code></td><td>DeepSeek/DeepSeek-V3.2-Exp</td><td>DeepSeek</td><td>0.28</td><td>0.42</td></tr>
+              <tr><td><code>deepseek/deepseek-v3.2-exp-thinking</code></td><td>DeepSeek/DeepSeek-V3.2-Exp-Thinking</td><td>DeepSeek</td><td>0.28</td><td>0.42</td></tr>
+              <tr><td><code>deepseek/deepseek-v3.2-251201</code></td><td>Deepseek/DeepSeek-V3.2</td><td>DeepSeek</td><td>0.28</td><td>0.42</td></tr>
+              <tr><td><code>claude-4.1-opus</code></td><td>Claude 4.1 Opus</td><td>Anthropic</td><td>15</td><td>75.6</td></tr>
+              <tr><td><code>claude-4.5-haiku</code></td><td>Claude 4.5 Haiku</td><td>Anthropic</td><td>5</td><td>5.04</td></tr>
+              <tr><td><code>claude-4.5-opus</code></td><td>Claude 4.5 Opus</td><td>Anthropic</td><td>5</td><td>25.2</td></tr>
+              <tr><td><code>claude-4.5-sonnet</code></td><td>Claude 4.5 Sonnet</td><td>Anthropic</td><td>3</td><td>15.12</td></tr>
+              <tr><td><code>claude-4.6-opus</code></td><td>Claude 4.6 Opus</td><td>Anthropic</td><td>5</td><td>25.2</td></tr>
+              <tr><td><code>claude-4.6-sonnet</code></td><td>Claude 4.6 Sonnet</td><td>Anthropic</td><td>3</td><td>15.12</td></tr>
+              <tr><td><code>anthropic/claude-4.7-opus</code></td><td>Claude 4.7 Opus</td><td>Anthropic</td><td>5</td><td>25.2</td></tr>
+              <tr><td><code>anthropic/claude-4.8-opus</code></td><td>Claude 4.8 Opus</td><td>Anthropic</td><td>5</td><td>25.2</td></tr>
+              <tr><td><code>MiniMax-M1</code></td><td>MiniMax M1</td><td>Minimax</td><td>0.56</td><td>2.22</td></tr>
+              <tr><td><code>minimax/minimax-m2.5</code></td><td>Minimax/Minimax-M2.5</td><td>Minimax</td><td>0.29</td><td>1.17</td></tr>
+              <tr><td><code>minimax/minimax-m2.5-highspeed</code></td><td>Minimax/Minimax-M2.5 Highspeed</td><td>Minimax</td><td>0.58</td><td>2.33</td></tr>
+              <tr><td><code>minimax/minimax-m2.7</code></td><td>Minimax/Minimax-M2.7</td><td>Minimax</td><td>0.29</td><td>1.17</td></tr>
+              <tr><td><code>minimax/minimax-m3</code></td><td>Minimax/Minimax-M3</td><td>Minimax</td><td>0.29</td><td>11.67</td></tr>
+              <tr><td><code>openai/gpt-5</code></td><td>OpenAI/GPT-5</td><td>OpenAI</td><td>1.26</td><td>10.08</td></tr>
+              <tr><td><code>openai/gpt-5-nano</code></td><td>OpenAI/GPT-5 Nano</td><td>OpenAI</td><td>0.0504</td><td>0.4032</td></tr>
+              <tr><td><code>openai/gpt-5.2</code></td><td>OpenAI/GPT-5.2</td><td>OpenAI</td><td>1.764</td><td>14.112</td></tr>
+              <tr><td><code>openai/gpt-5-mini</code></td><td>Openai/GPT-5 Mini</td><td>OpenAI</td><td>0.252</td><td>2.016</td></tr>
+              <tr><td><code>openai/gpt-5-pro</code></td><td>Openai/GPT-5 Pro</td><td>OpenAI</td><td>15.12</td><td>120.96</td></tr>
+              <tr><td><code>openai/gpt-5.2-codex</code></td><td>Openai/GPT-5.2 Codex</td><td>OpenAI</td><td>1.764</td><td>14.112</td></tr>
+              <tr><td><code>openai/gpt-5.3-codex</code></td><td>Openai/GPT-5.3 Codex</td><td>OpenAI</td><td>1.764</td><td>14.112</td></tr>
+              <tr><td><code>openai/gpt-5.4</code></td><td>Openai/GPT-5.4</td><td>OpenAI</td><td>2.52</td><td>15.12</td></tr>
+              <tr><td><code>openai/gpt-5.4-mini</code></td><td>Openai/GPT-5.4 Mini</td><td>OpenAI</td><td>0.756</td><td>4.536</td></tr>
+              <tr><td><code>openai/gpt-5.4-nano</code></td><td>Openai/GPT-5.4 Nano</td><td>OpenAI</td><td>0.2016</td><td>1.26</td></tr>
+              <tr><td><code>openai/gpt-5.4-pro</code></td><td>Openai/GPT-5.4 Pro</td><td>OpenAI</td><td>30.24</td><td>181.44</td></tr>
+              <tr><td><code>openai/gpt-5.5</code></td><td>Openai/GPT-5.5</td><td>OpenAI</td><td>5.04</td><td>30.24</td></tr>
+              <tr><td><code>moonshotai/kimi-k2.5</code></td><td>Moonshotai/Kimi-K2.5</td><td>Moonshot-Kimi</td><td>0.56</td><td>2.92</td></tr>
+              <tr><td><code>moonshotai/kimi-k2.6</code></td><td>Moonshotai/Kimi-K2.6</td><td>Moonshot-Kimi</td><td>0.9</td><td>3.75</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="callout">agent 或软件运行时可将目标模型 ID 写入 <code>REASONING_API_MODEL</code>，或写入配置文件的 <code>[reasoning].model</code>。文档示例默认使用 <code>claude-4.6-opus</code>。</p>
+      </section>
+
+      <section class="section dark" id="connectivity">
+        <h2>6. 多链钱包生成与连通性测试</h2>
+        <p>加密货币相关签名由 Go signer 统一完成。agent 或软件运行时只需要调用 signer、组装 <code>X-Params</code>，再发送推理 API 请求。不同链的钱包生成和签名方式如下：</p>
+        <div class="grid">
+          <div class="tile"><strong>LTC</strong><span>生成 Litecoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "ltc"</code>。LTC 已通过真实请求验证，但链类型仍必须由人明确提供。</span></div>
+          <div class="tile"><strong>BTC</strong><span>生成 Bitcoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "btc"</code>。普通地址如 <code>1...</code>、<code>3...</code>、<code>bc1q...</code> 使用 compact ECDSA；Taproot 地址 <code>bc1p...</code> 使用 tweak 后的 Schnorr 签名。</span></div>
+          <div class="tile"><strong>ETH</strong><span>生成 Ethereum 钱包，导出 <code>0x...</code> 地址和 hex 私钥，配置 <code>wallet_chain = "eth"</code>，由 signer 使用 Ethereum 签名方式生成授权参数。</span></div>
+        </div>
+        <pre><code>REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY" \
+.venv/bin/github-ai-daily reasoning test \
+  --chain YOUR_WALLET_CHAIN \
+  --wallet-address YOUR_WALLET_ADDRESS \
+  --money YOUR_WALLET_MONEY \
+  --money-id YOUR_MONEY_ID \
+  --model claude-4.6-opus</code></pre>
+        <p class="callout">连通性测试成功后，说明钱包签名、<code>X-Params</code> 组装、模型选择和推理 API 访问链路已经打通。agent 可把同一套链路复用到代码生成、审查、数据分析、业务自动化或软件内部推理任务。</p>
+      </section>
+
+      <section class="section" id="signing">
+        <h2>7. 钱包签名调用推理 API</h2>
+        <p>推理 API 使用 <code>X-Params</code> 钱包签名认证。签名消息由钱包地址、金额和金额 ID 直接拼接得到：</p>
+        <pre><code>${wallet_address}${money}${money_id}</code></pre>
+        <h3>X-Params 签名过程</h3>
+        <ol>
+          <li>人提供 <code>wallet_chain</code>、<code>wallet_address</code>、<code>money</code>、<code>money_id</code> 和安全注入的私钥。</li>
+          <li>agent 将 <code>wallet_address + money + money_id</code> 拼接为签名消息。</li>
+          <li>signer 对签名消息执行 <code>sha256.Sum256</code>，得到 32-byte digest。</li>
+          <li><code>ltc</code> 解码 Litecoin mainnet WIF 私钥，并调用 <code>btcec/v2/ecdsa.SignCompact</code>。</li>
+          <li><code>btc</code> 解码 Bitcoin mainnet WIF 私钥；普通地址如 <code>1...</code>、<code>3...</code>、<code>bc1q...</code> 使用 <code>btcec/v2/ecdsa.SignCompact</code>；Taproot 地址 <code>bc1p...</code> 先调用 <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code> 调整内部私钥，再使用 <code>btcec/v2/schnorr.Sign</code>。</li>
+          <li><code>eth</code> 使用 Ethereum hex 私钥，可带或不带 <code>0x</code>，并调用 <code>github.com/ethereum/go-ethereum/crypto.Sign</code>。</li>
+          <li>签名结果 base64 编码后，与 <code>wallet_address</code>、<code>money</code>、<code>money_id</code> 组装为 JSON。</li>
+          <li>将该 JSON 字符串再次 base64 编码，最终写入 HTTP header 的 <code>X-Params</code>。</li>
+        </ol>
+        <table>
+          <thead>
+            <tr><th>字段</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>wallet_address</code></td><td>链上地址，也是 bitgo 识别用户和钱包的关键 ID</td></tr>
+            <tr><td><code>money</code></td><td>人提供的金额或面额，不由 agent 猜测</td></tr>
+            <tr><td><code>money_id</code></td><td>金额记录或钱包记录 ID，用于服务端识别</td></tr>
+            <tr><td><code>signature</code></td><td>对 <code>wallet_address + money + money_id</code> 签名后的 base64 字符串</td></tr>
+          </tbody>
+        </table>
+        <p>签名字段组装为 JSON 后再次 base64，放入请求 header：</p>
+        <pre><code>{
+  "wallet_address": "YOUR_WALLET_ADDRESS",
+  "money": "YOUR_WALLET_MONEY",
+  "money_id": "YOUR_MONEY_ID",
+  "signature": "BASE64_SIGNATURE"
+}</code></pre>
+        <pre><code>Content-Type: application/json
+X-Params: BASE64_ENCODED_WALLET_PARAMS</code></pre>
+        <p>推理请求体使用 Anthropic Messages 风格。agent 可以把代码上下文、数据样本、业务指令或软件内部任务写入 <code>messages</code>，由 bitgo 钱包签名授权后调用模型。</p>
+        <pre><code>{
+  "model": "claude-4.6-opus",
+  "max_tokens": 4096,
+  "messages": [
+    {
+      "role": "user",
+      "content": "根据软件当前业务上下文执行一次大模型推理任务。"
+    }
+  ]
+}</code></pre>
+      </section>
+
+      <section class="section dark" id="example">
+        <h2>8. 完整示例：GitHub 热门 AI 项目筛选</h2>
+        <p>该示例展示的是一条完整 bitgo 调用链路，不代表 bitgo 只能用于项目筛选。任何 agent 开发的软件，只要内部需要大模型推理，都可以替换输入数据、提示词和输出结构。</p>
+        <ol class="step-list">
+          <li>人完成链上充值，并确认资金已入账。</li>
+          <li>人提供链类型、钱包地址、金额、<code>money_id</code> 和安全注入的私钥。</li>
+          <li>agent 创建钱包配置，使用 signer 生成 <code>X-Params</code>。</li>
+          <li>agent 调用推理 API，对 GitHub Trending 候选仓库执行 AI 相关性判断。</li>
+          <li>服务端返回结构化 JSON 与 usage，系统生成报告并记录 token 消费。</li>
+        </ol>
+        <h3>示例请求体</h3>
+        <pre><code>{
+  "model": "claude-4.6-opus",
+  "max_tokens": 4096,
+  "system": "你是 GitHub AI 项目筛选器。只判断输入候选，不得创造仓库。",
+  "messages": [
+    {
+      "role": "user",
+      "content": "筛选以下 GitHub Trending 候选：[{\"full_name\":\"owner/repo\"}]"
+    }
+  ]
+}</code></pre>
+        <h3>示例响应结构</h3>
+        <pre><code>{
+  "items": [
+    {
+      "full_name": "owner/repo",
+      "is_ai": true,
+      "category": "Agent",
+      "summary_zh": "中文简介",
+      "reason_zh": "入选原因"
+    }
+  ],
+  "usage": {
+    "input_tokens": 2137,
+    "output_tokens": 1389,
+    "consume_amount": 3500280,
+    "balance": 996499720
+  }
+}</code></pre>
+        <p class="callout">把示例中的 GitHub 仓库候选替换为代码片段、业务数据、文档内容、用户指令或软件运行状态，就可以把同一条 bitgo 链路用于代码生成、审查、分析、内容生成和软件内置推理。</p>
+      </section>
+
+      <section class="section" id="security">
+        <h2>9. 安全事项</h2>
+        <ul>
+          <li>不要将真实私钥、完整签名、完整 <code>X-Params</code> 或管理 token 写入仓库。</li>
+          <li>链类型、充值网络、金额和 <code>money_id</code> 必须由人确认后交给 agent 使用。</li>
+          <li>私钥应通过环境变量、Secret 管理器或部署平台安全注入，不应出现在配置模板中。</li>
+          <li>充值前必须核对官方接收地址和主网，转错地址或转错网络无法由 agent 或软件自动挽回。</li>
+          <li>软件内部调用推理 API 时，应记录 usage，但不要记录敏感 header 或私钥材料。</li>
+        </ul>
+      </section>
+
+      <p class="footer-note">bitgo product guide for agent software development and software-embedded reasoning workloads. Styled consistently with the existing EnigmHaven reference document.</p>
+    </main>
+  </div>
+</body>
+</html>
