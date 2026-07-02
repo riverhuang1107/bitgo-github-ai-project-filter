@@ -257,6 +257,36 @@
       color: #34445c;
     }
 
+    .coin-heading {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .coin-logo {
+      flex: 0 0 auto;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 1px rgba(6, 17, 31, 0.12);
+    }
+
+    .coin-logo.eth {
+      background: #eef2ff;
+      color: #627eea;
+    }
+
+    .coin-logo.ltc {
+      background: #eef4ff;
+      color: #345d9d;
+    }
+
+    .coin-logo.btc {
+      background: #fff4df;
+      color: #f7931a;
+    }
+
     .section.dark .tile {
       border-color: #c9d9ef;
       background: #f4f9ff;
@@ -534,12 +564,45 @@
           <div class="tile"><strong>Reasoning-token spend</strong><span>The API returns <code>usage</code>, allowing systems to track input tokens, output tokens, consumed amount, and remaining balance.</span></div>
           <div class="tile"><strong>Broad agent workflows</strong><span>Useful for code generation, review, data analysis, content generation, business automation, intelligent workflows, and embedded product reasoning.</span></div>
         </div>
-        <p class="callout">The GitHub AI-project filtering scenario is only a demonstration of the complete deposit, wallet, signing, reasoning, and structured-response flow. bitgo is not limited to repository filtering.</p>
       </section>
 
       <section class="section dark" id="deposit">
         <h2>2. Cryptocurrency Deposit Flow</h2>
         <p>Deposits are initiated by a human from an exchange or centralized wallet. The agent can generate instructions and verify parameters, but it must not guess the chain, amount, or receiving address.</p>
+        <div class="grid three">
+          <div class="tile">
+            <div class="coin-heading">
+              <svg class="coin-logo eth" viewBox="0 0 34 34" role="img" aria-label="ETH logo">
+                <circle cx="17" cy="17" r="17" fill="currentColor" opacity="0.14"></circle>
+                <path d="M17 5.5 10 17l7 4.1 7-4.1L17 5.5Z" fill="currentColor"></path>
+                <path d="m10 18.4 7 9.9 7-9.9-7 4.1-7-4.1Z" fill="currentColor" opacity="0.72"></path>
+                <path d="m17 13.9-7 3.1 7 4.1 7-4.1-7-3.1Z" fill="#ffffff" opacity="0.34"></path>
+              </svg>
+              <strong>Ethereum ETH</strong>
+            </div>
+            <span>Official receiving address: <code>0xa52d609f23f110d588606a9c82c7c53a0143b6b0</code><br>Network: ETH / ERC-20<br>Estimated arrival: 5 - 15 minutes</span>
+          </div>
+          <div class="tile">
+            <div class="coin-heading">
+              <svg class="coin-logo ltc" viewBox="0 0 34 34" role="img" aria-label="LTC logo">
+                <circle cx="17" cy="17" r="17" fill="currentColor"></circle>
+                <text x="17" y="23" text-anchor="middle" font-size="19" font-weight="800" font-family="Arial, sans-serif" fill="#ffffff">Ł</text>
+              </svg>
+              <strong>Litecoin LTC</strong>
+            </div>
+            <span>Official receiving address: <code>MUVwWW6MbBcn9oPnuRU1iEmVAf8JgLgox7</code><br>Network: LTC / Litecoin<br>Estimated arrival: 10 - 25 minutes</span>
+          </div>
+          <div class="tile">
+            <div class="coin-heading">
+              <svg class="coin-logo btc" viewBox="0 0 34 34" role="img" aria-label="BTC logo">
+                <circle cx="17" cy="17" r="17" fill="currentColor"></circle>
+                <text x="17" y="23" text-anchor="middle" font-size="19" font-weight="800" font-family="Arial, sans-serif" fill="#ffffff">₿</text>
+              </svg>
+              <strong>Bitcoin BTC</strong>
+            </div>
+            <span>Official receiving address: <code>bc1p8fhgdj7hz234rmhff8nrw8zrq6hpft3m4dp7c6749weteq0rkhksmyckre</code><br>Network: BTC-Taproot<br>Estimated arrival: 30 - 40 minutes</span>
+          </div>
+        </div>
         <ol class="step-list">
           <li>Choose the supported chain, such as BTC, LTC, or ETH, according to the service registration.</li>
           <li>Confirm the official receiving address and network with a human operator.</li>
@@ -701,21 +764,59 @@
 
       <section class="section dark" id="connectivity">
         <h2>6. Multi-chain Wallet Generation and Connectivity Tests</h2>
-        <p>Cryptocurrency signing is implemented by the Go signer. Agents or applications call the signer to assemble <code>X-Params</code>, then use a local ECDSA P-256 private key to sign <code>X-Params + X-Nonce</code> and send the complete reasoning API request.</p>
+        <p>Cryptocurrency signing is handled by the Go signer. Agents or applications call the signer to assemble <code>X-Params</code>, then use a local ECDSA P-256 private key to sign <code>X-Params + X-Nonce</code>, and finally send the complete reasoning API request. Wallet generation and signing behavior differ by chain:</p>
         <div class="grid">
-          <div class="tile"><strong>LTC wallet</strong><span>Generate a Litecoin mainnet wallet, export address and WIF private key, configure <code>wallet_chain = "ltc"</code>, and inject the WIF private key through a secret channel.</span></div>
-          <div class="tile"><strong>BTC wallet</strong><span>Generate a Bitcoin mainnet wallet, export address and WIF private key, and configure <code>wallet_chain = "btc"</code>. Legacy, SegWit, and Taproot address types use different signing paths.</span></div>
-          <div class="tile"><strong>ETH wallet</strong><span>Generate an Ethereum wallet, export the <code>0x...</code> address and hex private key, and configure <code>wallet_chain = "eth"</code>.</span></div>
-          <div class="tile"><strong>Connectivity command</strong><span>Run <code>github-ai-daily reasoning test</code> with chain, wallet address, amount, amount ID, model, and private key injected through the environment or CLI.</span></div>
+          <div class="tile">
+            <div class="coin-heading">
+              <svg class="coin-logo ltc" viewBox="0 0 34 34" role="img" aria-label="LTC logo">
+                <circle cx="17" cy="17" r="17" fill="currentColor"></circle>
+                <text x="17" y="23" text-anchor="middle" font-size="19" font-weight="800" font-family="Arial, sans-serif" fill="#ffffff">Ł</text>
+              </svg>
+              <strong>LTC</strong>
+            </div>
+            <span>Generate a Litecoin mainnet wallet, export the address and WIF private key, and configure <code>wallet_chain = "ltc"</code>. Normal addresses use compact ECDSA; Taproot addresses such as <code>ltc1p...</code> use Schnorr signing. LTC has been verified with real requests, but the chain type must still be explicitly provided by a human.</span>
+          </div>
+          <div class="tile">
+            <div class="coin-heading">
+              <svg class="coin-logo btc" viewBox="0 0 34 34" role="img" aria-label="BTC logo">
+                <circle cx="17" cy="17" r="17" fill="currentColor"></circle>
+                <text x="17" y="23" text-anchor="middle" font-size="19" font-weight="800" font-family="Arial, sans-serif" fill="#ffffff">₿</text>
+              </svg>
+              <strong>BTC</strong>
+            </div>
+            <span>Generate a Bitcoin mainnet wallet, export the address and WIF private key, and configure <code>wallet_chain = "btc"</code>. Normal addresses such as <code>1...</code>, <code>3...</code>, and <code>bc1q...</code> use compact ECDSA; Taproot addresses such as <code>bc1p...</code> use Schnorr signing with the tweaked private key.</span>
+          </div>
+          <div class="tile">
+            <div class="coin-heading">
+              <svg class="coin-logo eth" viewBox="0 0 34 34" role="img" aria-label="ETH logo">
+                <circle cx="17" cy="17" r="17" fill="currentColor" opacity="0.14"></circle>
+                <path d="M17 5.5 10 17l7 4.1 7-4.1L17 5.5Z" fill="currentColor"></path>
+                <path d="m10 18.4 7 9.9 7-9.9-7 4.1-7-4.1Z" fill="currentColor" opacity="0.72"></path>
+                <path d="m17 13.9-7 3.1 7 4.1 7-4.1-7-3.1Z" fill="#ffffff" opacity="0.34"></path>
+              </svg>
+              <strong>ETH</strong>
+            </div>
+            <span>Generate an Ethereum wallet, export the <code>0x...</code> address and hex private key, configure <code>wallet_chain = "eth"</code>, and let the signer generate authorization parameters using the Ethereum signing method.</span>
+          </div>
         </div>
-        <pre class="wrap"><code>REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY" \
-.venv/bin/github-ai-daily reasoning test \
-  --chain YOUR_WALLET_CHAIN \
-  --wallet-address YOUR_WALLET_ADDRESS \
-  --money YOUR_WALLET_MONEY \
-  --money-id YOUR_MONEY_ID \
-  --model claude-4.6-opus</code></pre>
-        <p class="callout">A successful connectivity test proves that wallet signing, <code>X-Params</code> assembly, interface-level ECDSA signing, model selection, and reasoning API access are wired correctly.</p>
+        <pre><code>curl -X POST "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages" \
+  -H "Content-Type: application/json" \
+  -H "X-Params: BASE64_ENCODED_WALLET_PARAMS" \
+  -H "X-Nonce: RANDOM_NONCE" \
+  -H "X-Signature: ECDSA_SIGNATURE_HEX" \
+  -H "X-Public-Key: ECDSA_PUBLIC_KEY_HEX" \
+  --data-raw '{
+    "model": "claude-4.6-opus",
+    "max_tokens": 1024,
+    "stream": false,
+    "messages": [
+      {
+        "role": "user",
+        "content": "hello world"
+      }
+    ]
+  }'</code></pre>
+        <p class="callout">After connectivity testing succeeds, wallet signing, <code>X-Params</code> assembly, interface-level ECDSA signing, model selection, and reasoning API access are wired correctly. Agents can reuse the same path for code generation, review, data analysis, business automation, or embedded application reasoning tasks.</p>
       </section>
 
       <section class="section" id="signing">
@@ -772,6 +873,7 @@ X-Public-Key: ECDSA_PUBLIC_KEY_HEX</code></pre>
       <section class="section dark" id="example">
         <h2>8. Complete Example: GitHub Hot AI Project Query</h2>
         <p>This example shows a complete bitgo call path. It does not mean bitgo is limited to project filtering; any agent-built application can replace the input data, prompt, and output expectations.</p>
+        <p class="callout">The GitHub AI-project filtering scenario is only a demonstration of the complete deposit, wallet creation, signed call, reasoning consumption, and structured-response flow. bitgo is not limited to repository filtering.</p>
         <ol class="step-list">
           <li>A human completes the on-chain deposit and confirms the balance.</li>
           <li>A human provides chain type, wallet address, amount, <code>money_id</code>, and a securely injected private key.</li>

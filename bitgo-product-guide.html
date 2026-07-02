@@ -257,6 +257,36 @@
       color: #34445c;
     }
 
+    .coin-heading {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .coin-logo {
+      flex: 0 0 auto;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 1px rgba(6, 17, 31, 0.12);
+    }
+
+    .coin-logo.eth {
+      background: #eef2ff;
+      color: #627eea;
+    }
+
+    .coin-logo.ltc {
+      background: #eef4ff;
+      color: #345d9d;
+    }
+
+    .coin-logo.btc {
+      background: #fff4df;
+      color: #f7931a;
+    }
+
     .section.dark .tile {
       border-color: #c9d9ef;
       background: #f4f9ff;
@@ -526,16 +556,44 @@
           <div class="tile"><strong>推理 token 消费</strong><span>API 返回 usage 后，可以把输入、输出、消耗金额和余额作为 agent 软件开发过程中的可追踪成本信息。</span></div>
           <div class="tile"><strong>广泛 agent 工作流</strong><span>适用于代码生成、代码审查、数据分析、内容生成、业务自动化、智能工作流和软件内置推理等场景。</span></div>
         </div>
-        <p class="callout">GitHub 热门 AI 项目筛选只是本文的演示样例，用来展示充值、钱包创建、签名调用、推理消费和结构化结果返回的完整链路；bitgo 的使用范围不局限于项目筛选。</p>
       </section>
 
       <section class="section" id="deposit">
         <h2>2. 加密货币充值流程</h2>
         <p>充值操作主要由人完成。请登录交易所或中心化钱包，选择对应币种与正确主网，将资产直接提币到 bitgo 官方接收地址。转账发起前必须逐字核对地址和网络，链上转账具有不可逆性。</p>
         <div class="grid three">
-          <div class="tile"><strong>以太坊 ETH</strong><span>官方接收地址：<code>0xa52d609f23f110d588606a9c82c7c53a0143b6b0</code><br>网络选择：ETH / ERC-20<br>预计到账：5 - 15 分钟</span></div>
-          <div class="tile"><strong>莱特币 LTC</strong><span>官方接收地址：<code>MUVwWW6MbBcn9oPnuRU1iEmVAf8JgLgox7</code><br>网络选择：LTC / Litecoin<br>预计到账：10 - 25 分钟</span></div>
-          <div class="tile"><strong>比特币 BTC</strong><span>官方接收地址：<code>bc1p8fhgdj7hz234rmhff8nrw8zrq6hpft3m4dp7c6749weteq0rkhksmyckre</code><br>网络选择：BTC-Taproot<br>预计到账：30 - 40 分钟</span></div>
+          <div class="tile">
+            <div class="coin-heading">
+              <svg class="coin-logo eth" viewBox="0 0 34 34" role="img" aria-label="ETH logo">
+                <circle cx="17" cy="17" r="17" fill="currentColor" opacity="0.14"></circle>
+                <path d="M17 5.5 10 17l7 4.1 7-4.1L17 5.5Z" fill="currentColor"></path>
+                <path d="m10 18.4 7 9.9 7-9.9-7 4.1-7-4.1Z" fill="currentColor" opacity="0.72"></path>
+                <path d="m17 13.9-7 3.1 7 4.1 7-4.1-7-3.1Z" fill="#ffffff" opacity="0.34"></path>
+              </svg>
+              <strong>以太坊 ETH</strong>
+            </div>
+            <span>官方接收地址：<code>0xa52d609f23f110d588606a9c82c7c53a0143b6b0</code><br>网络选择：ETH / ERC-20<br>预计到账：5 - 15 分钟</span>
+          </div>
+          <div class="tile">
+            <div class="coin-heading">
+              <svg class="coin-logo ltc" viewBox="0 0 34 34" role="img" aria-label="LTC logo">
+                <circle cx="17" cy="17" r="17" fill="currentColor"></circle>
+                <text x="17" y="23" text-anchor="middle" font-size="19" font-weight="800" font-family="Arial, sans-serif" fill="#ffffff">Ł</text>
+              </svg>
+              <strong>莱特币 LTC</strong>
+            </div>
+            <span>官方接收地址：<code>MUVwWW6MbBcn9oPnuRU1iEmVAf8JgLgox7</code><br>网络选择：LTC / Litecoin<br>预计到账：10 - 25 分钟</span>
+          </div>
+          <div class="tile">
+            <div class="coin-heading">
+              <svg class="coin-logo btc" viewBox="0 0 34 34" role="img" aria-label="BTC logo">
+                <circle cx="17" cy="17" r="17" fill="currentColor"></circle>
+                <text x="17" y="23" text-anchor="middle" font-size="19" font-weight="800" font-family="Arial, sans-serif" fill="#ffffff">₿</text>
+              </svg>
+              <strong>比特币 BTC</strong>
+            </div>
+            <span>官方接收地址：<code>bc1p8fhgdj7hz234rmhff8nrw8zrq6hpft3m4dp7c6749weteq0rkhksmyckre</code><br>网络选择：BTC-Taproot<br>预计到账：30 - 40 分钟</span>
+          </div>
         </div>
         <ol class="step-list">
           <li>在人持有资产的钱包或交易所中选择币种。</li>
@@ -693,9 +751,38 @@
         <h2>6. 多链钱包生成与连通性测试</h2>
         <p>加密货币相关签名由 Go signer 统一完成。agent 或软件运行时调用 signer 组装 <code>X-Params</code>，再使用本地 ECDSA P-256 私钥为 <code>X-Params + X-Nonce</code> 生成接口级签名，最后发送完整推理 API 请求。不同链的钱包生成和签名方式如下：</p>
         <div class="grid">
-          <div class="tile"><strong>LTC</strong><span>生成 Litecoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "ltc"</code>。普通地址使用 compact ECDSA；Taproot 地址 <code>ltc1p...</code> 使用 Schnorr 签名。LTC 已通过真实请求验证，但链类型仍必须由人明确提供。</span></div>
-          <div class="tile"><strong>BTC</strong><span>生成 Bitcoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "btc"</code>。普通地址如 <code>1...</code>、<code>3...</code>、<code>bc1q...</code> 使用 compact ECDSA；Taproot 地址 <code>bc1p...</code> 使用 tweak 后的 Schnorr 签名。</span></div>
-          <div class="tile"><strong>ETH</strong><span>生成 Ethereum 钱包，导出 <code>0x...</code> 地址和 hex 私钥，配置 <code>wallet_chain = "eth"</code>，由 signer 使用 Ethereum 签名方式生成授权参数。</span></div>
+          <div class="tile">
+            <div class="coin-heading">
+              <svg class="coin-logo ltc" viewBox="0 0 34 34" role="img" aria-label="LTC logo">
+                <circle cx="17" cy="17" r="17" fill="currentColor"></circle>
+                <text x="17" y="23" text-anchor="middle" font-size="19" font-weight="800" font-family="Arial, sans-serif" fill="#ffffff">Ł</text>
+              </svg>
+              <strong>LTC</strong>
+            </div>
+            <span>生成 Litecoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "ltc"</code>。普通地址使用 compact ECDSA；Taproot 地址 <code>ltc1p...</code> 使用 Schnorr 签名。LTC 已通过真实请求验证，但链类型仍必须由人明确提供。</span>
+          </div>
+          <div class="tile">
+            <div class="coin-heading">
+              <svg class="coin-logo btc" viewBox="0 0 34 34" role="img" aria-label="BTC logo">
+                <circle cx="17" cy="17" r="17" fill="currentColor"></circle>
+                <text x="17" y="23" text-anchor="middle" font-size="19" font-weight="800" font-family="Arial, sans-serif" fill="#ffffff">₿</text>
+              </svg>
+              <strong>BTC</strong>
+            </div>
+            <span>生成 Bitcoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "btc"</code>。普通地址如 <code>1...</code>、<code>3...</code>、<code>bc1q...</code> 使用 compact ECDSA；Taproot 地址 <code>bc1p...</code> 使用 tweak 后的 Schnorr 签名。</span>
+          </div>
+          <div class="tile">
+            <div class="coin-heading">
+              <svg class="coin-logo eth" viewBox="0 0 34 34" role="img" aria-label="ETH logo">
+                <circle cx="17" cy="17" r="17" fill="currentColor" opacity="0.14"></circle>
+                <path d="M17 5.5 10 17l7 4.1 7-4.1L17 5.5Z" fill="currentColor"></path>
+                <path d="m10 18.4 7 9.9 7-9.9-7 4.1-7-4.1Z" fill="currentColor" opacity="0.72"></path>
+                <path d="m17 13.9-7 3.1 7 4.1 7-4.1-7-3.1Z" fill="#ffffff" opacity="0.34"></path>
+              </svg>
+              <strong>ETH</strong>
+            </div>
+            <span>生成 Ethereum 钱包，导出 <code>0x...</code> 地址和 hex 私钥，配置 <code>wallet_chain = "eth"</code>，由 signer 使用 Ethereum 签名方式生成授权参数。</span>
+          </div>
         </div>
         <pre><code>curl -X POST "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages" \
   -H "Content-Type: application/json" \
@@ -773,6 +860,7 @@ X-Public-Key: ECDSA_PUBLIC_KEY_HEX</code></pre>
       <section class="section dark" id="example">
         <h2>8. 完整示例：GitHub 热门 AI 项目筛选</h2>
         <p>该示例展示的是一条完整 bitgo 调用链路，不代表 bitgo 只能用于项目筛选。任何 agent 开发的软件，只要内部需要大模型推理，都可以替换输入数据、提示词和输出结构。</p>
+        <p class="callout">GitHub 热门 AI 项目筛选只是本文的演示样例，用来展示充值、钱包创建、签名调用、推理消费和结构化结果返回的完整链路；bitgo 的使用范围不局限于项目筛选。</p>
         <ol class="step-list">
           <li>人完成链上充值，并确认资金已入账。</li>
           <li>人提供链类型、钱包地址、金额、<code>money_id</code> 和安全注入的私钥。</li>
