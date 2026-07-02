@@ -1,0 +1,756 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>外部推理 API 使用文档（含支持模型列表） | EnigmHaven Style</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #0b1324;
+      --muted: #53627a;
+      --paper: #f7fbff;
+      --soft: #eef6ff;
+      --line: #c9d9ef;
+      --blue: #0069ff;
+      --blue-dark: #003ea8;
+      --blue-soft: #dcecff;
+      --black: #06111f;
+      --white: #ffffff;
+      --code: #171717;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.68;
+    }
+
+    .shell {
+      min-height: 100vh;
+      background:
+        linear-gradient(180deg, rgba(0, 105, 255, 0.14), rgba(247, 251, 255, 0) 340px),
+        radial-gradient(circle at top right, rgba(0, 105, 255, 0.16), transparent 360px);
+    }
+
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      background: rgba(247, 251, 255, 0.92);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid rgba(201, 217, 239, 0.72);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--blue);
+      color: var(--white);
+      font-weight: 900;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 18px;
+      font-size: 14px;
+    }
+
+    .nav-links a {
+      color: var(--ink);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+    }
+
+    .nav-links a:hover {
+      border-color: var(--ink);
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 56px 24px 88px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.12fr) minmax(280px, 0.88fr);
+      gap: 34px;
+      align-items: stretch;
+      margin-bottom: 46px;
+    }
+
+    .hero-copy {
+      padding: 30px 0 20px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+      padding: 7px 12px;
+      border: 1px solid var(--blue);
+      border-radius: 999px;
+      background: var(--blue);
+      color: var(--white);
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 780px;
+      margin: 0;
+      font-size: clamp(40px, 7vw, 86px);
+      line-height: 0.96;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 760px;
+      margin: 24px 0 0;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .hero-card {
+      align-self: stretch;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 380px;
+      padding: 26px;
+      border: 2px solid var(--black);
+      border-radius: 8px;
+      background: var(--black);
+      color: var(--white);
+      box-shadow: 12px 12px 0 var(--blue);
+    }
+
+    .hero-card h2 {
+      margin: 0;
+      color: #8fc2ff;
+      font-size: 24px;
+      border: 0;
+      padding: 0;
+    }
+
+    .hero-card p {
+      color: #e9f3ff;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .metric {
+      padding: 14px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      border-radius: 8px;
+    }
+
+    .metric strong {
+      display: block;
+      color: #8fc2ff;
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 8px;
+      color: #c5d8f2;
+      font-size: 12px;
+    }
+
+    .section {
+      margin-top: 28px;
+      padding: 32px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .section.dark {
+      border-color: var(--black);
+      background: var(--black);
+      color: var(--white);
+    }
+
+    .section.dark p,
+    .section.dark li {
+      color: #e9f3ff;
+    }
+
+    .section.dark h2,
+    .section.dark h3 {
+      color: #8fc2ff;
+    }
+
+    .section h2 {
+      margin: 0 0 16px;
+      padding: 0;
+      border: 0;
+      font-size: 28px;
+      line-height: 1.2;
+    }
+
+    .section h3 {
+      margin: 24px 0 10px;
+      font-size: 18px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .tile {
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--soft);
+    }
+
+    .tile strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 17px;
+    }
+
+    .section.dark .tile {
+      border-color: #c9d9ef;
+      background: #f4f9ff;
+      color: var(--ink);
+    }
+
+    .section.dark .tile strong {
+      color: var(--ink);
+    }
+
+    .section.dark .tile span {
+      color: #34445c;
+    }
+
+    .section.dark .tile code {
+      background: var(--blue-soft);
+      color: var(--blue-dark);
+    }
+
+    .step-list {
+      counter-reset: steps;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .step-list li {
+      counter-increment: steps;
+      min-height: 154px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--white);
+    }
+
+    .step-list li::before {
+      content: counter(steps, decimal-leading-zero);
+      display: inline-flex;
+      margin-bottom: 12px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: var(--blue);
+      color: var(--white);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 18px 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .table-scroll {
+      overflow-x: auto;
+      margin: 18px 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .table-scroll table {
+      min-width: 980px;
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--black);
+      color: #8fc2ff;
+      font-weight: 800;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    code {
+      border-radius: 5px;
+      background: rgba(0, 105, 255, 0.14);
+      color: var(--blue-dark);
+      padding: 0.16em 0.36em;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    .dark code,
+    .hero-card code {
+      background: rgba(0, 105, 255, 0.18);
+      color: #8fc2ff;
+    }
+
+    pre {
+      overflow-x: auto;
+      margin: 16px 0;
+      padding: 18px;
+      border: 1px solid rgba(0, 105, 255, 0.34);
+      border-radius: 8px;
+      background: var(--code);
+      color: #f4f9ff;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+    }
+
+    ul, ol {
+      padding-left: 24px;
+    }
+
+    .callout {
+      margin-top: 18px;
+      padding: 18px 20px;
+      border-left: 6px solid var(--blue);
+      background: var(--blue-soft);
+      border-radius: 8px;
+      font-weight: 700;
+    }
+
+    .footer-note {
+      margin-top: 34px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      .hero {
+        grid-template-columns: 1fr;
+      }
+
+      .step-list,
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .nav {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .nav-links {
+        flex-wrap: wrap;
+      }
+    }
+
+    @media (max-width: 640px) {
+      main {
+        padding: 34px 14px 56px;
+      }
+
+      .section,
+      .hero-card {
+        padding: 22px;
+      }
+
+      .metrics {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <nav class="nav" aria-label="页面导航">
+      <div class="brand">
+        <span class="brand-mark">E</span>
+        <span>EnigmHaven API Docs</span>
+      </div>
+      <div class="nav-links">
+        <a href="#positioning">API 定位</a>
+        <a href="#models">支持模型</a>
+        <a href="#auth">请求签名</a>
+        <a href="#payload">请求响应</a>
+        <a href="#errors">排查</a>
+      </div>
+    </nav>
+
+    <main>
+      <header class="hero">
+        <div class="hero-copy">
+          <span class="eyebrow">External Reasoning API</span>
+          <h1>外部推理 API 使用文档</h1>
+          <p class="lead">本文档说明本项目如何接入、调用和排查外部推理 API。项目当前以“筛选 GitHub Trending 候选仓库、判断哪些属于 AI 项目，并生成中文分类、简介和入选原因”作为示例展示，目的是演示外部推理 API 的结构化推理调用流程。该示例场景不代表 API 只能用于 GitHub 项目筛选；同样的接入方式也可用于其他需要模型推理、分类、摘要或结构化输出的业务。</p>
+        </div>
+        <aside class="hero-card" aria-label="文档摘要">
+          <div>
+            <h2>通用推理能力，示例化接入</h2>
+            <p>把输入数据、提示词、签名认证和结构化输出放在一个完整产品流程里，方便复用到分类、摘要、评估和报告生成等场景。</p>
+          </div>
+          <div class="metrics">
+            <div class="metric"><strong>X-Params</strong><span>钱包签名</span></div>
+            <div class="metric"><strong>JSON</strong><span>结构化输出</span></div>
+            <div class="metric"><strong>CLI</strong><span>连通性测试</span></div>
+          </div>
+        </aside>
+      </header>
+
+      <section class="section" id="positioning">
+        <h2>1. API 定位</h2>
+        <p>外部推理 API 提供通用推理能力。本项目把它用于一个完整示例流程：</p>
+        <ol class="step-list">
+          <li>从 GitHub Trending 收集候选仓库数据。</li>
+          <li>将候选数据组织为 Anthropic Messages 风格请求体。</li>
+          <li>默认使用新版 <code>X-Params</code> 钱包业务签名，并叠加 <code>X-Nonce</code>、<code>X-Signature</code>、<code>X-Public-Key</code> 接口级 ECDSA 签名。</li>
+          <li>调用外部推理 API 获取结构化 JSON 结果。</li>
+          <li>校验结果后生成 Markdown 和 HTML 日报。</li>
+        </ol>
+        <p class="callout">在该示例中，模型需要判断每个候选仓库是否属于 AI 项目，并为结果生成中文字段。实际业务可以替换输入数据、系统提示词和输出 schema。</p>
+      </section>
+
+      <section class="section">
+        <h2>2. 默认配置</h2>
+        <p>项目默认配置位于 <code>src/github_ai_daily/config.py</code>：</p>
+        <table>
+          <thead>
+            <tr><th>配置项</th><th>默认值</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>endpoint</code></td><td><code>https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages</code></td><td>外部推理 API 请求地址</td></tr>
+            <tr><td><code>model</code></td><td><code>claude-4.6-opus</code></td><td>默认推理模型</td></tr>
+            <tr><td><code>wallet_chain</code></td><td><code>YOUR_WALLET_CHAIN</code></td><td>新版钱包签名链，可选 <code>ltc</code>、<code>btc</code>、<code>eth</code>，必须由人提供</td></tr>
+            <tr><td><code>wallet_address</code></td><td>空</td><td>钱包地址</td></tr>
+            <tr><td><code>money</code></td><td><code>YOUR_WALLET_MONEY</code></td><td>面额，必须由人提供</td></tr>
+            <tr><td><code>money_id</code></td><td>空</td><td>面额 ID</td></tr>
+            <tr><td><code>signer_command</code></td><td>空</td><td>可选 Go signer 命令路径；为空时使用项目内默认 signer</td></tr>
+            <tr><td><code>private_key_path</code></td><td>空</td><td>接口级 ECDSA P-256 私钥路径，用于生成 <code>X-Signature</code> 和 <code>X-Public-Key</code></td></tr>
+          </tbody>
+        </table>
+        <p>用户配置文件中的 <code>[reasoning]</code> 配置示例：</p>
+        <pre><code>[reasoning]
+endpoint = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
+model = "claude-4.6-opus"
+wallet_chain = "YOUR_WALLET_CHAIN"
+wallet_address = "YOUR_WALLET_ADDRESS"
+money = "YOUR_WALLET_MONEY"
+money_id = "YOUR_MONEY_ID"
+signer_command = ""
+
+# interface-level ECDSA signing key
+private_key_path = "/secure/ecdsa-private.pem"</code></pre>
+        <p>新版钱包签名认证可通过环境变量覆盖。不要将钱包私钥写入配置文件或提交记录。</p>
+        <pre><code>export REASONING_API_MODEL="claude-4.6-opus"
+export REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY"
+export REASONING_WALLET_CHAIN="YOUR_WALLET_CHAIN"
+export REASONING_WALLET_ADDRESS="YOUR_WALLET_ADDRESS"
+export REASONING_MONEY="YOUR_WALLET_MONEY"
+export REASONING_MONEY_ID="YOUR_MONEY_ID"
+export REASONING_SIGNER_COMMAND=""</code></pre>
+      </section>
+
+
+      <section class="section" id="models">
+        <h2>3. 支持模型列表</h2>
+        <p>外部推理 API 的 <code>model</code> 字段可从下表选择，共 <strong>34</strong> 个模型；单价按 USD / 1,000,000 token 展示。</p>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr><th>模型 ID</th><th>模型名称</th><th>发行商</th><th>输入单价</th><th>输出单价</th></tr>
+            </thead>
+            <tbody>
+            <tr><td><code>deepseek-v3</code></td><td>DeepSeek-V3</td><td>DeepSeek</td><td>0.28</td><td>1.11</td></tr>
+            <tr><td><code>deepseek-v3.1</code></td><td>DeepSeek-V3.1</td><td>DeepSeek</td><td>0.56</td><td>1.67</td></tr>
+            <tr><td><code>deepseek/deepseek-v4-flash</code></td><td>DeepSeek-V4-Flash</td><td>DeepSeek</td><td>0.14</td><td>0.28</td></tr>
+            <tr><td><code>deepseek/deepseek-v4-pro</code></td><td>DeepSeek-V4-Pro</td><td>DeepSeek</td><td>1.67</td><td>3.33</td></tr>
+            <tr><td><code>deepseek/deepseek-v3.2-exp</code></td><td>DeepSeek/DeepSeek-V3.2-Exp</td><td>DeepSeek</td><td>0.28</td><td>0.42</td></tr>
+            <tr><td><code>deepseek/deepseek-v3.2-exp-thinking</code></td><td>DeepSeek/DeepSeek-V3.2-Exp-Thinking</td><td>DeepSeek</td><td>0.28</td><td>0.42</td></tr>
+            <tr><td><code>deepseek/deepseek-v3.2-251201</code></td><td>Deepseek/DeepSeek-V3.2</td><td>DeepSeek</td><td>0.28</td><td>0.42</td></tr>
+            <tr><td><code>claude-4.1-opus</code></td><td>Claude 4.1 Opus</td><td>Anthropic</td><td>15</td><td>75.6</td></tr>
+            <tr><td><code>claude-4.5-haiku</code></td><td>Claude 4.5 Haiku</td><td>Anthropic</td><td>5</td><td>5.04</td></tr>
+            <tr><td><code>claude-4.5-opus</code></td><td>Claude 4.5 Opus</td><td>Anthropic</td><td>5</td><td>25.2</td></tr>
+            <tr><td><code>claude-4.5-sonnet</code></td><td>Claude 4.5 Sonnet</td><td>Anthropic</td><td>3</td><td>15.12</td></tr>
+            <tr><td><code>claude-4.6-opus</code></td><td>Claude 4.6 Opus</td><td>Anthropic</td><td>5</td><td>25.2</td></tr>
+            <tr><td><code>claude-4.6-sonnet</code></td><td>Claude 4.6 Sonnet</td><td>Anthropic</td><td>3</td><td>15.12</td></tr>
+            <tr><td><code>anthropic/claude-4.7-opus</code></td><td>Claude 4.7 Opus</td><td>Anthropic</td><td>5</td><td>25.2</td></tr>
+            <tr><td><code>anthropic/claude-4.8-opus</code></td><td>Claude 4.8 Opus</td><td>Anthropic</td><td>5</td><td>25.2</td></tr>
+            <tr><td><code>MiniMax-M1</code></td><td>MiniMax M1</td><td>Minimax</td><td>0.56</td><td>2.22</td></tr>
+            <tr><td><code>minimax/minimax-m2.5</code></td><td>Minimax/Minimax-M2.5</td><td>Minimax</td><td>0.29</td><td>1.17</td></tr>
+            <tr><td><code>minimax/minimax-m2.5-highspeed</code></td><td>Minimax/Minimax-M2.5 Highspeed</td><td>Minimax</td><td>0.58</td><td>2.33</td></tr>
+            <tr><td><code>minimax/minimax-m2.7</code></td><td>Minimax/Minimax-M2.7</td><td>Minimax</td><td>0.29</td><td>1.17</td></tr>
+            <tr><td><code>minimax/minimax-m3</code></td><td>Minimax/Minimax-M3</td><td>Minimax</td><td>0.29</td><td>11.67</td></tr>
+            <tr><td><code>openai/gpt-5</code></td><td>OpenAI/GPT-5</td><td>OpenAI</td><td>1.26</td><td>10.08</td></tr>
+            <tr><td><code>openai/gpt-5-nano</code></td><td>OpenAI/GPT-5 Nano</td><td>OpenAI</td><td>0.0504</td><td>0.4032</td></tr>
+            <tr><td><code>openai/gpt-5.2</code></td><td>OpenAI/GPT-5.2</td><td>OpenAI</td><td>1.764</td><td>14.112</td></tr>
+            <tr><td><code>openai/gpt-5-mini</code></td><td>Openai/GPT-5 Mini</td><td>OpenAI</td><td>0.252</td><td>2.016</td></tr>
+            <tr><td><code>openai/gpt-5-pro</code></td><td>Openai/GPT-5 Pro</td><td>OpenAI</td><td>15.12</td><td>120.96</td></tr>
+            <tr><td><code>openai/gpt-5.2-codex</code></td><td>Openai/GPT-5.2 Codex</td><td>OpenAI</td><td>1.764</td><td>14.112</td></tr>
+            <tr><td><code>openai/gpt-5.3-codex</code></td><td>Openai/GPT-5.3 Codex</td><td>OpenAI</td><td>1.764</td><td>14.112</td></tr>
+            <tr><td><code>openai/gpt-5.4</code></td><td>Openai/GPT-5.4</td><td>OpenAI</td><td>2.52</td><td>15.12</td></tr>
+            <tr><td><code>openai/gpt-5.4-mini</code></td><td>Openai/GPT-5.4 Mini</td><td>OpenAI</td><td>0.756</td><td>4.536</td></tr>
+            <tr><td><code>openai/gpt-5.4-nano</code></td><td>Openai/GPT-5.4 Nano</td><td>OpenAI</td><td>0.2016</td><td>1.26</td></tr>
+            <tr><td><code>openai/gpt-5.4-pro</code></td><td>Openai/GPT-5.4 Pro</td><td>OpenAI</td><td>30.24</td><td>181.44</td></tr>
+            <tr><td><code>openai/gpt-5.5</code></td><td>Openai/GPT-5.5</td><td>OpenAI</td><td>5.04</td><td>30.24</td></tr>
+            <tr><td><code>moonshotai/kimi-k2.5</code></td><td>Moonshotai/Kimi-K2.5</td><td>Moonshot-Kimi</td><td>0.56</td><td>2.92</td></tr>
+            <tr><td><code>moonshotai/kimi-k2.6</code></td><td>Moonshotai/Kimi-K2.6</td><td>Moonshot-Kimi</td><td>0.9</td><td>3.75</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="callout">配置时请将目标模型 ID 写入 <code>REASONING_API_MODEL</code> 或用户配置文件的 <code>[reasoning].model</code>。默认示例仍使用 <code>claude-4.6-opus</code>。</p>
+      </section>
+      <section class="section dark">
+        <h2>4. 多链钱包生成与连通性测试</h2>
+        <p>加密货币相关签名由 Go signer 统一实现，代码位于 <code>tools/reasoning-signer</code>。Python 运行时调用 signer 组装 <code>X-Params</code>，再使用本地 ECDSA P-256 私钥为 <code>X-Params + X-Nonce</code> 生成接口级签名，最后发送完整 HTTP 请求。</p>
+        <div class="grid">
+          <div class="tile"><strong>LTC</strong><span>生成 Litecoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "ltc"</code>。LTC 已通过真实请求验证，但链类型仍必须由人明确提供。</span></div>
+          <div class="tile"><strong>BTC</strong><span>生成 Bitcoin mainnet 钱包，导出地址和 WIF 私钥，配置 <code>wallet_chain = "btc"</code>。普通地址（如 <code>1...</code>、<code>3...</code>、<code>bc1q...</code>）使用 compact ECDSA；Taproot 地址（<code>bc1p...</code>）先用 <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code> 调整内部私钥，再用调整后的私钥执行 Schnorr 签名。</span></div>
+          <div class="tile"><strong>ETH</strong><span>生成 Ethereum 钱包，导出 <code>0x...</code> 地址和 hex 私钥，配置 <code>wallet_chain = "eth"</code>。</span></div>
+        </div>
+        <pre><code>REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY" \
+.venv/bin/github-ai-daily reasoning test \
+  --chain YOUR_WALLET_CHAIN \
+  --wallet-address YOUR_WALLET_ADDRESS \
+  --money YOUR_WALLET_MONEY \
+  --money-id YOUR_MONEY_ID \
+  --model claude-4.6-opus</code></pre>
+      </section>
+
+      <section class="section" id="auth">
+        <h2>5. 请求签名</h2>
+        <p>默认认证使用 <code>X-Params</code> 钱包业务签名，并叠加 <code>X-Nonce</code>、<code>X-Signature</code>、<code>X-Public-Key</code> 接口级 ECDSA 签名。钱包签名消息为 <code>wallet_address + money + money_id</code>。</p>
+        <pre><code>${wallet_address}${money}${money_id}</code></pre>
+        <h3>新版 X-Params 签名过程</h3>
+        <ol>
+          <li>使用 <code>sha256.Sum256</code> 得到 32-byte digest。</li>
+          <li><code>ltc</code> 解码 WIF 私钥，并调用 <code>btcec/v2/ecdsa.SignCompact</code>；<code>btc</code> 解码 WIF 私钥后按地址类型选择签名：普通地址调用 <code>btcec/v2/ecdsa.SignCompact</code>，Taproot <code>bc1p...</code> 地址先调用 <code>txscript.TweakTaprootPrivKey(*privateKey, []byte{})</code>，再用调整后的私钥调用 <code>btcec/v2/schnorr.Sign</code>。</li>
+          <li><code>eth</code>：Ethereum hex 私钥（可带或不带 <code>0x</code>），使用 <code>github.com/ethereum/go-ethereum/crypto.Sign</code>。</li>
+        </ol>
+        <p>签名结果 base64 编码后，组装 JSON：</p>
+        <pre><code>{
+  "wallet_address": "...",
+  "money": "YOUR_WALLET_MONEY",
+  "money_id": "...",
+  "signature": "..."
+}</code></pre>
+        <p>该 JSON 字符串再 base64 编码，写入 <code>X-Params</code>。随后生成随机 <code>X-Nonce</code>，将 <code>X-Params + X-Nonce</code> 直接拼接后执行 SHA-256，再使用本地 ECDSA P-256 私钥生成 ASN.1/DER 签名 hex，写入 <code>X-Signature</code>，并把本地公钥 DER hex 写入 <code>X-Public-Key</code>。</p>
+        <table>
+          <thead>
+            <tr><th>Header</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>Content-Type</code></td><td>固定为 <code>application/json</code></td></tr>
+            <tr><td><code>X-Params</code></td><td>base64 编码后的钱包签名参数 JSON</td></tr>
+            <tr><td><code>X-Nonce</code></td><td>随机字符串，参与接口级 ECDSA 签名</td></tr>
+            <tr><td><code>X-Signature</code></td><td>对 <code>X-Params + X-Nonce</code> 签名后的 ASN.1/DER hex</td></tr>
+            <tr><td><code>X-Public-Key</code></td><td>本地 ECDSA 公钥 DER hex</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="section" id="payload">
+        <h3>请求响应示例</h3>
+      <p>以下示例使用 ETH 钱包签名、<code>claude-4.6-opus</code> 模型，请求内容为“提供github上5个最热门的AI开源项目”。响应中的 <code>content</code>、<code>usage</code> 和计费字段为服务端真实返回值；余额、哈希和 token 数会随每次调用变化。</p>
+      <pre><code class="language-json">{
+  &quot;content&quot;: [
+    {
+      &quot;text&quot;: &quot;# GitHub 上 5 个最热门的 AI 开源项目\n\n以下是截至 2025 年在 GitHub 上广受关注的 AI 开源项目：\n\n---\n\n## 1. 🤖 **TensorFlow**\n- **开发者：** Google\n- **⭐ Stars：** 187k+\n- **链接：** [github.com/tensorflow/tensorflow](https://github.com/tensorflow/tensorflow)\n- **简介：** 端到端的开源机器学习框架，广泛用于深度学习模型的训练与部署，支持多平台（移动端、Web、服务器）。\n\n---\n\n## 2. 🔥 **PyTorch**\n- **开发者：** Meta (Facebook)\n- **⭐ Stars：** 86k+\n- **链接：** [github.com/pytorch/pytorch](https://github.com/pytorch/pytorch)\n- **简介：** 灵活且高效的深度学习框架，以动态计算图著称，深受学术研究者和工业界喜爱。\n\n---\n\n## 3. 🦙 **llama.cpp**\n- **开发者：** Georgi Gerganov\n- **⭐ Stars：** 75k+\n- **链接：** [github.com/ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp)\n- **简介：** 用纯 C/C++ 实现 LLaMA 模型推理，支持在消费级硬件（CPU）上本地运行大语言模型，推动了本地化 LLM 的普及。\n\n---\n\n## 4. 🧠 **LangChain**\n- **开发者：** LangChain AI\n- **⭐ Stars：** 100k+\n- **链接：** [github.com/langchain-ai/langchain](https://github.com/langchain-ai/langchain)\n- **简介：** 用于构建基于大语言模型（LLM）应用的开发框架，支持链式调用、RAG（检索增强生成）、Agent 等功能，是 LLM 应用开发的事实标准。\n\n---\n\n## 5. 🎨 **Stable Diffusion (Web UI)**\n- **开发者：** AUTOMATIC1111\n- **⭐ Stars：** 145k+\n- **链接：** [github.com/AUTOMATIC1111/stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui)\n- **简介：** 基于 Stable Diffusion 的图形化界面，支持文本生成图像、图像修复、LoRA 等功能，是 AI 绘画领域最流行的开源工具。\n\n---\n\n&gt; 📌 **补充提及：** 其他值得关注的项目还包括 **Hugging Face Transformers**（NLP 模型库）、**Open Interpreter**（本地代码解释器）、**Ollama**（本地运行 LLM 的工具）等。\n\n&gt; ⚠️ Star 数为近似值，实际数据可能随时间变化，建议前往 GitHub 查看最新信息。&quot;,
+      &quot;type&quot;: &quot;text&quot;
+    }
+  ],
+  &quot;id&quot;: &quot;msg_5f915d286439458aa18b6317052ea1ac&quot;,
+  &quot;model&quot;: &quot;claude-4.6-opus&quot;,
+  &quot;role&quot;: &quot;assistant&quot;,
+  &quot;stop_reason&quot;: &quot;end_turn&quot;,
+  &quot;type&quot;: &quot;message&quot;,
+  &quot;usage&quot;: {
+    &quot;balance&quot;: 487807775,
+    &quot;cache_creation&quot;: {
+      &quot;ephemeral_1h_input_tokens&quot;: 0,
+      &quot;ephemeral_5m_input_tokens&quot;: 0
+    },
+    &quot;cache_creation_input_tokens&quot;: 0,
+    &quot;cache_read_input_tokens&quot;: 0,
+    &quot;consume_amount&quot;: 2213980,
+    &quot;hash&quot;: &quot;MzA0NTAyMjA1NTI3NTA0M2RhNTcyODg0NTE2NjkxODM0MzJjMjI1NzQ0ODFmMzhkNWU1YjVlYmMzNzU4Nzk2ZmFhYzVkYzZjMDIyMTAwZThjOGJkYjZiOTIxZTZjOTE4NmE4ODY4Y2M2MjE5NjVjZDIyNGEyNzkwODU0MTMyZGI5Y2JiY2VlYjc0ODZjYQ==&quot;,
+    &quot;input_token_unit_price&quot;: 500,
+    &quot;input_tokens&quot;: 23,
+    &quot;output_token_unit_price&quot;: 2520,
+    &quot;output_tokens&quot;: 874
+  }
+}</code></pre>
+      <p>请求体采用 Anthropic Messages 风格。接口失败或返回非法 JSON 时，正式报告不会生成。若模型返回未知仓库名、重复仓库名或遗漏部分候选，CLI 会丢弃问题项，并用剩余有效 AI 候选继续补位生成报告。</p>
+      <h3>Usage 输出</h3>
+      <p>每次外部推理 API 请求完成后，CLI 都会立即输出服务端返回的完整 <code>usage</code> JSON。上面的完整请求响应示例中已包含 <code>usage</code> 字段，因此不再单独重复展示 JSON 代码块。</p>
+      <p><code>usage</code> 金额字段为服务端返回的整数缩放值，可按以下比例换算为实际金额：</p>
+      <ul>
+        <li><code>input_token_unit_price</code> 和 <code>output_token_unit_price</code> 的实际价格为字段值乘以 <code>10^-5</code>，且单位价格表示每 1000 tokens 的价格。</li>
+        <li><code>consume_amount</code> 的实际消费金额为字段值乘以 <code>10^-8</code>。</li>
+        <li><code>balance</code> 的实际余额为字段值乘以 <code>10^-8</code>。</li>
+      </ul>
+      <p>如果服务端响应没有 <code>usage</code> 字段，CLI 会输出 <code>"usage": null</code>，不会估算或编造。</p>
+      <h2>6. 请求体格式</h2>
+        <p>项目使用 Anthropic Messages 风格请求体。示例场景中的正式筛选请求结构如下：</p>
+        <pre><code>{
+  "model": "claude-4.6-opus",
+  "max_tokens": 4096,
+  "system": "你是 GitHub AI 项目筛选器。只判断输入候选，不得创造仓库...",
+  "messages": [
+    {
+      "role": "user",
+      "content": "筛选以下 GitHub Trending 候选：\n[{\"full_name\":\"owner/repo\"}]"
+    }
+  ]
+}</code></pre>
+        <p>示例场景传入的候选仓库字段包括：</p>
+        <table>
+          <thead>
+            <tr><th>字段</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>full_name</code></td><td>仓库完整名称，例如 <code>owner/repo</code></td></tr>
+            <tr><td><code>description</code></td><td>仓库描述</td></tr>
+            <tr><td><code>language</code></td><td>主要语言</td></tr>
+            <tr><td><code>topics</code></td><td>GitHub topics</td></tr>
+            <tr><td><code>stars</code></td><td>总 star 数</td></tr>
+            <tr><td><code>stars_today</code></td><td>当日新增 star 数</td></tr>
+          </tbody>
+        </table>
+        <p class="callout">这些字段服务于 GitHub Trending 示例。接入其他业务时，可以按业务需要替换输入字段和提示词。</p>
+      </section>
+
+      <section class="section dark">
+        <h2>7. 响应格式</h2>
+        <p>示例场景要求模型返回纯 JSON 对象：</p>
+        <pre><code>{
+  "items": [
+    {
+      "full_name": "owner/repo",
+      "is_ai": true,
+      "category": "Agent",
+      "summary_zh": "中文简介",
+      "reason_zh": "入选原因"
+    }
+  ]
+}</code></pre>
+        <p>校验规则：</p>
+        <ul>
+          <li>JSON 根节点必须是对象。</li>
+          <li>必须包含 <code>items</code> 数组。</li>
+          <li>每个输入候选都必须返回一次。</li>
+          <li>不允许返回输入之外的仓库。</li>
+          <li>不允许重复返回同一个仓库。</li>
+          <li><code>is_ai</code> 只有严格为 <code>true</code> 时才视为 AI 项目。</li>
+        </ul>
+        <p>API 响应可以通过 Anthropic 风格 <code>content</code> 字段承载文本：</p>
+        <pre><code>{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"items\":[]}"
+    }
+  ]
+}</code></pre>
+        <p>项目也兼容 <code>content</code> 为字符串，或通过 <code>text</code> 字段直接返回文本。</p>
+      </section>
+
+      <section class="section">
+        <h2>8. 常见失败场景</h2>
+        <p>项目会在以下情况下停止生成正式报告：</p>
+        <table>
+          <thead>
+            <tr><th>场景</th><th>处理方式</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>HTTP 非 2xx</td><td>抛出 <code>Reasoning API returned HTTP ...</code>，并尽量附带服务端错误信息</td></tr>
+            <tr><td>响应不是合法 JSON</td><td>抛出 <code>Reasoning API did not return valid JSON</code></td></tr>
+            <tr><td>JSON 根节点不是对象</td><td>抛出 <code>Reasoning API JSON root must be an object</code></td></tr>
+            <tr><td>缺少 <code>items</code> 数组</td><td>抛出 <code>Reasoning response must contain an items array</code></td></tr>
+            <tr><td>返回未知或重复仓库</td><td>丢弃问题项，使用剩余有效候选继续生成报告</td></tr>
+            <tr><td>遗漏输入候选</td><td>使用已返回的有效候选继续补位生成报告</td></tr>
+            <tr><td>示例场景中没有筛选出 AI 项目</td><td>抛出 <code>Reasoning API selected no AI projects</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="section">
+        <h2>9. 安全注意事项</h2>
+        <ul>
+          <li>不要将真实私钥、管理 token 或其他密钥写入仓库。</li>
+          <li>文档、示例和配置模板中只应保留占位符。</li>
+          <li>私钥文件建议放在用户配置目录或安全目录，并限制文件权限。</li>
+          <li>自动测试使用本地 mock，不会调用真实 GitHub、外部推理 API、Resend 或 SMTP。</li>
+        </ul>
+      </section>
+
+      <p class="footer-note">Styled as a product documentation page inspired by EnigmHaven. Content mirrors the external reasoning API usage document with supported model pricing appended from the selected pricing table.</p>
+    </main>
+  </div>
+</body>
+</html>
