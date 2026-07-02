@@ -171,47 +171,42 @@ curl --location --request POST "https://api-token-enigmhaven.expvent.com.cn:1111
 
 在项目运行时，`ReasoningClient` 默认同时发送 `Content-Type`、`X-Params`、`X-Nonce`、`X-Signature` 和 `X-Public-Key`。如需使用预编译 signer，可设置 `REASONING_SIGNER_COMMAND` 或配置 `signer_command`。
 
-## 5. 历史 key-pair 签名格式（legacy，保留说明）
+## 5. 请求响应示例
 
-历史方式使用 ECDSA P-256 私钥按 `METHOD/path/query/nonce` 对请求进行签名。当前默认认证路径已经改为“钱包 `X-Params` + 接口级 ECDSA 签名”，本节仅用于排查旧请求或理解历史部署。
+以下示例使用 ETH 钱包签名、`claude-4.6-opus` 模型，请求内容为“提供github上5个最热门的AI开源项目”。响应中的 `content`、`usage` 和计费字段为服务端真实返回值；余额、哈希和 token 数会随每次调用变化。
 
-生成 ECDSA P-256 私钥：
-
-```bash
-.venv/bin/github-ai-daily keygen --path /secure/ecdsa-private.pem
+```json
+{
+  "content": [
+    {
+      "text": "# GitHub 上 5 个最热门的 AI 开源项目\n\n以下是截至 2025 年在 GitHub 上广受关注的 AI 开源项目：\n\n---\n\n## 1. 🤖 **TensorFlow**\n- **开发者：** Google\n- **⭐ Stars：** 187k+\n- **链接：** [github.com/tensorflow/tensorflow](https://github.com/tensorflow/tensorflow)\n- **简介：** 端到端的开源机器学习框架，广泛用于深度学习模型的训练与部署，支持多平台（移动端、Web、服务器）。\n\n---\n\n## 2. 🔥 **PyTorch**\n- **开发者：** Meta (Facebook)\n- **⭐ Stars：** 86k+\n- **链接：** [github.com/pytorch/pytorch](https://github.com/pytorch/pytorch)\n- **简介：** 灵活且高效的深度学习框架，以动态计算图著称，深受学术研究者和工业界喜爱。\n\n---\n\n## 3. 🦙 **llama.cpp**\n- **开发者：** Georgi Gerganov\n- **⭐ Stars：** 75k+\n- **链接：** [github.com/ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp)\n- **简介：** 用纯 C/C++ 实现 LLaMA 模型推理，支持在消费级硬件（CPU）上本地运行大语言模型，推动了本地化 LLM 的普及。\n\n---\n\n## 4. 🧠 **LangChain**\n- **开发者：** LangChain AI\n- **⭐ Stars：** 100k+\n- **链接：** [github.com/langchain-ai/langchain](https://github.com/langchain-ai/langchain)\n- **简介：** 用于构建基于大语言模型（LLM）应用的开发框架，支持链式调用、RAG（检索增强生成）、Agent 等功能，是 LLM 应用开发的事实标准。\n\n---\n\n## 5. 🎨 **Stable Diffusion (Web UI)**\n- **开发者：** AUTOMATIC1111\n- **⭐ Stars：** 145k+\n- **链接：** [github.com/AUTOMATIC1111/stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui)\n- **简介：** 基于 Stable Diffusion 的图形化界面，支持文本生成图像、图像修复、LoRA 等功能，是 AI 绘画领域最流行的开源工具。\n\n---\n\n> 📌 **补充提及：** 其他值得关注的项目还包括 **Hugging Face Transformers**（NLP 模型库）、**Open Interpreter**（本地代码解释器）、**Ollama**（本地运行 LLM 的工具）等。\n\n> ⚠️ Star 数为近似值，实际数据可能随时间变化，建议前往 GitHub 查看最新信息。",
+      "type": "text"
+    }
+  ],
+  "id": "msg_5f915d286439458aa18b6317052ea1ac",
+  "model": "claude-4.6-opus",
+  "role": "assistant",
+  "stop_reason": "end_turn",
+  "type": "message",
+  "usage": {
+    "balance": 487807775,
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "consume_amount": 2213980,
+    "hash": "MzA0NTAyMjA1NTI3NTA0M2RhNTcyODg0NTE2NjkxODM0MzJjMjI1NzQ0ODFmMzhkNWU1YjVlYmMzNzU4Nzk2ZmFhYzVkYzZjMDIyMTAwZThjOGJkYjZiOTIxZTZjOTE4NmE4ODY4Y2M2MjE5NjVjZDIyNGEyNzkwODU0MTMyZGI5Y2JiY2VlYjc0ODZjYQ==",
+    "input_token_unit_price": 500,
+    "input_tokens": 23,
+    "output_token_unit_price": 2520,
+    "output_tokens": 874
+  }
+}
 ```
 
-旧版签名文本格式为：
-
-```text
-METHOD
-/path
-?raw=query
-nonce
-```
-
-说明：
-
-- `METHOD` 使用大写，例如 `POST`。
-- 第二行为 URL path；没有 path 时使用 `/`。
-- 只有存在 query string 时才包含第三行，且保留原始 query。
-- 最后一行为随机 nonce。
-
-旧版签名过程：
-
-1. 将签名文本按 UTF-8 编码。
-2. 对文本执行 SHA-256。
-3. 使用 ECDSA P-256 对摘要生成 ASN.1/DER 签名。
-4. 将签名、nonce 和公钥写入请求头。
-
-历史请求头包括：
-
-| Header | 说明 |
-| --- | --- |
-| `Content-Type` | 固定为 `application/json` |
-| `X-Nonce` | 每次请求生成的随机 nonce |
-| `X-Signature` | DER 签名的 hex 编码 |
-| `X-Public-Key` | SubjectPublicKeyInfo DER 公钥的 hex 编码 |
+请求体采用 Anthropic Messages 风格。接口失败或返回非法 JSON 时，正式报告不会生成。若模型返回未知仓库名、重复仓库名或遗漏部分候选，CLI 会丢弃问题项，并用剩余有效 AI 候选继续补位生成报告。
 
 ## 6. 请求体格式
 
@@ -288,28 +283,15 @@ API 响应可以通过 Anthropic 风格 `content` 字段承载文本：
 
 ## 8. Usage 输出
 
-每次外部推理 API 请求完成后，CLI 都会输出服务端返回的完整 `usage` JSON：
+每次外部推理 API 请求完成后，CLI 都会立即输出服务端返回的完整 `usage` JSON。完整请求响应示例中已包含 `usage` 字段，因此本节不再单独重复展示 JSON 代码块。
 
-```json
-{
-  "usage": {
-    "input_tokens": 2137,
-    "output_tokens": 1389,
-    "cache_read_input_tokens": 0,
-    "cache_creation_input_tokens": 0,
-    "cache_creation": {
-      "ephemeral_1h_input_tokens": 0,
-      "ephemeral_5m_input_tokens": 0
-    },
-    "output_token_unit_price": 2520,
-    "consume_amount": 3500280,
-    "balance": 996499720,
-    "hash": "..."
-  }
-}
-```
+`usage` 金额字段为服务端返回的整数缩放值，可按以下比例换算为实际金额：
 
-项目会保留服务端 `usage` 对象中的所有字段。若服务端没有返回 `usage` 字段，CLI 会输出 `"usage": null`，不会估算或编造。
+- `input_token_unit_price` 和 `output_token_unit_price` 的实际价格为字段值乘以 `10^-5`，且单位价格表示每 1000 tokens 的价格。
+- `consume_amount` 的实际消费金额为字段值乘以 `10^-8`。
+- `balance` 的实际余额为字段值乘以 `10^-8`。
+
+如果服务端响应没有 `usage` 字段，CLI 会输出 `"usage": null`，不会估算或编造。
 
 ## 9. 常见失败场景
 
@@ -328,9 +310,8 @@ API 响应可以通过 Anthropic 风格 `content` 字段承载文本：
 
 ## 10. 安全注意事项
 
-- 不要将真实钱包私钥、legacy ECDSA 私钥、管理 token 或其他密钥写入仓库。
+- 不要将真实钱包私钥、管理 token 或其他密钥写入仓库。
 - 文档、示例和配置模板中只应保留占位符。
 - `ltc`/`btc` 的 WIF 私钥和 `eth` 的 hex 私钥只应通过环境变量、CLI 参数或外部 secret manager 注入。
 - 钱包地址、链类型、面额和面额 ID 必须与服务端登记信息一致，否则可能返回 401。
-- legacy ECDSA 私钥文件建议放在用户配置目录或安全目录，并限制文件权限。
 - 自动测试使用本地 mock，不会调用真实 GitHub、外部推理 API、Resend 或 SMTP。

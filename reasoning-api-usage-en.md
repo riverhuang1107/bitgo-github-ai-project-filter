@@ -171,47 +171,42 @@ curl --location --request POST "https://api-token-enigmhaven.expvent.com.cn:1111
 
 At runtime, `ReasoningClient` sends `Content-Type`, `X-Params`, `X-Nonce`, `X-Signature`, and `X-Public-Key` by default. To use a prebuilt wallet signer, set `REASONING_SIGNER_COMMAND` or `signer_command`.
 
-## 5. Legacy Key-Pair Signature Format (Retained for Reference)
+## 5. Request and Response Example
 
-The historical method signed each request with an ECDSA P-256 private key over `METHOD/path/query/nonce`. The current default authentication path is now wallet `X-Params` plus interface-level ECDSA headers; this section is retained only for debugging old requests or understanding historical deployments.
+The following example uses ETH wallet signing and the `claude-4.6-opus` model. The user prompt is "provide 5 of the most popular AI open-source projects on GitHub". The `content`, `usage`, and billing fields are real server-returned values; balance, hash, and token counts can change on each call.
 
-Generate an ECDSA P-256 private key:
-
-```bash
-.venv/bin/github-ai-daily keygen --path /secure/ecdsa-private.pem
+```json
+{
+  "content": [
+    {
+      "text": "# GitHub 上 5 个最热门的 AI 开源项目\n\n以下是截至 2025 年在 GitHub 上广受关注的 AI 开源项目：\n\n---\n\n## 1. 🤖 **TensorFlow**\n- **开发者：** Google\n- **⭐ Stars：** 187k+\n- **链接：** [github.com/tensorflow/tensorflow](https://github.com/tensorflow/tensorflow)\n- **简介：** 端到端的开源机器学习框架，广泛用于深度学习模型的训练与部署，支持多平台（移动端、Web、服务器）。\n\n---\n\n## 2. 🔥 **PyTorch**\n- **开发者：** Meta (Facebook)\n- **⭐ Stars：** 86k+\n- **链接：** [github.com/pytorch/pytorch](https://github.com/pytorch/pytorch)\n- **简介：** 灵活且高效的深度学习框架，以动态计算图著称，深受学术研究者和工业界喜爱。\n\n---\n\n## 3. 🦙 **llama.cpp**\n- **开发者：** Georgi Gerganov\n- **⭐ Stars：** 75k+\n- **链接：** [github.com/ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp)\n- **简介：** 用纯 C/C++ 实现 LLaMA 模型推理，支持在消费级硬件（CPU）上本地运行大语言模型，推动了本地化 LLM 的普及。\n\n---\n\n## 4. 🧠 **LangChain**\n- **开发者：** LangChain AI\n- **⭐ Stars：** 100k+\n- **链接：** [github.com/langchain-ai/langchain](https://github.com/langchain-ai/langchain)\n- **简介：** 用于构建基于大语言模型（LLM）应用的开发框架，支持链式调用、RAG（检索增强生成）、Agent 等功能，是 LLM 应用开发的事实标准。\n\n---\n\n## 5. 🎨 **Stable Diffusion (Web UI)**\n- **开发者：** AUTOMATIC1111\n- **⭐ Stars：** 145k+\n- **链接：** [github.com/AUTOMATIC1111/stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui)\n- **简介：** 基于 Stable Diffusion 的图形化界面，支持文本生成图像、图像修复、LoRA 等功能，是 AI 绘画领域最流行的开源工具。\n\n---\n\n> 📌 **补充提及：** 其他值得关注的项目还包括 **Hugging Face Transformers**（NLP 模型库）、**Open Interpreter**（本地代码解释器）、**Ollama**（本地运行 LLM 的工具）等。\n\n> ⚠️ Star 数为近似值，实际数据可能随时间变化，建议前往 GitHub 查看最新信息。",
+      "type": "text"
+    }
+  ],
+  "id": "msg_5f915d286439458aa18b6317052ea1ac",
+  "model": "claude-4.6-opus",
+  "role": "assistant",
+  "stop_reason": "end_turn",
+  "type": "message",
+  "usage": {
+    "balance": 487807775,
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "consume_amount": 2213980,
+    "hash": "MzA0NTAyMjA1NTI3NTA0M2RhNTcyODg0NTE2NjkxODM0MzJjMjI1NzQ0ODFmMzhkNWU1YjVlYmMzNzU4Nzk2ZmFhYzVkYzZjMDIyMTAwZThjOGJkYjZiOTIxZTZjOTE4NmE4ODY4Y2M2MjE5NjVjZDIyNGEyNzkwODU0MTMyZGI5Y2JiY2VlYjc0ODZjYQ==",
+    "input_token_unit_price": 500,
+    "input_tokens": 23,
+    "output_token_unit_price": 2520,
+    "output_tokens": 874
+  }
+}
 ```
 
-Legacy signing message format:
-
-```text
-METHOD
-/path
-?raw=query
-nonce
-```
-
-Notes:
-
-- `METHOD` is uppercase, such as `POST`.
-- The second line is the URL path; use `/` when there is no path.
-- The query line is included only when the URL has a query string, and the raw query is preserved.
-- The final line is a random nonce.
-
-Legacy signing process:
-
-1. Encode the signing message as UTF-8.
-2. Compute SHA-256 over the message.
-3. Generate an ASN.1/DER signature over the digest using ECDSA P-256.
-4. Write the signature, nonce, and public key into request headers.
-
-Historical request headers:
-
-| Header | Description |
-| --- | --- |
-| `Content-Type` | Always `application/json` |
-| `X-Nonce` | Random nonce generated for each request |
-| `X-Signature` | Hex-encoded DER signature |
-| `X-Public-Key` | Hex-encoded SubjectPublicKeyInfo DER public key |
+The request body uses the Anthropic Messages style. If the API request fails or returns invalid JSON, the final report is not generated. If the model returns unknown repository names, duplicate repository names, or omits some candidates, the CLI discards invalid items and fills the report with the remaining valid AI candidates.
 
 ## 6. Request Body Format
 
@@ -288,28 +283,15 @@ The project also supports `content` as a string, or text returned directly throu
 
 ## 8. Usage Output
 
-After every external reasoning API request completes, the CLI prints the complete `usage` JSON returned by the server:
+After every external reasoning API request completes, the CLI immediately prints the complete `usage` JSON returned by the server. The complete request and response example already includes the `usage` field, so this section does not repeat a standalone JSON code block.
 
-```json
-{
-  "usage": {
-    "input_tokens": 2137,
-    "output_tokens": 1389,
-    "cache_read_input_tokens": 0,
-    "cache_creation_input_tokens": 0,
-    "cache_creation": {
-      "ephemeral_1h_input_tokens": 0,
-      "ephemeral_5m_input_tokens": 0
-    },
-    "output_token_unit_price": 2520,
-    "consume_amount": 3500280,
-    "balance": 996499720,
-    "hash": "..."
-  }
-}
-```
+The monetary fields in `usage` are integer scaled values returned by the server. Convert them to actual amounts as follows:
 
-The project preserves every field in the server's `usage` object. If the server does not return `usage`, the CLI prints `"usage": null` and does not estimate or fabricate usage data.
+- The actual `input_token_unit_price` and `output_token_unit_price` values are the field value multiplied by `10^-5`, and the unit price is the price per 1000 tokens.
+- The actual `consume_amount` value is the field value multiplied by `10^-8`.
+- The actual `balance` value is the field value multiplied by `10^-8`.
+
+If the server response has no `usage` field, the CLI prints `"usage": null`; it does not estimate or fabricate usage.
 
 ## 9. Common Failure Scenarios
 
@@ -328,9 +310,8 @@ The project stops formal report generation in the following cases:
 
 ## 10. Security Notes
 
-- Do not commit real wallet private keys, legacy ECDSA private keys, management tokens, or other secrets to the repository.
+- Do not commit real wallet private keys, management tokens, or other secrets to the repository.
 - Documentation, examples, and configuration templates should only contain placeholders.
 - `ltc`/`btc` WIF private keys and `eth` hex private keys should only be injected through environment variables, CLI arguments, or an external secret manager.
 - Wallet address, chain, amount, and amount ID must match the server registration; otherwise the API may return 401.
-- Store legacy ECDSA private key files in a user configuration directory or secure directory, and restrict file permissions.
 - Automated tests use local mocks and do not call real GitHub, the external reasoning API, Resend, or SMTP.

@@ -574,55 +574,70 @@
             <tr><td><code>X-Public-Key</code></td><td><code>ECDSA_PUBLIC_KEY_HEX</code></td><td>本地 ECDSA 公钥 DER hex，用于服务端验签</td></tr>
           </tbody>
         </table>
-        <h3>请求体参数</h3>
-        <table>
-          <thead>
-            <tr><th>参数</th><th>类型</th><th>说明</th></tr>
-          </thead>
-          <tbody>
-            <tr><td><code>model</code></td><td>string</td><td>模型 ID。可选择的模型列表见下一节“支持模型列表”。</td></tr>
-            <tr><td><code>max_tokens</code></td><td>number</td><td>本次推理允许生成的最大 token 数；简单连通性测试可设置较小值。</td></tr>
-            <tr><td><code>system</code></td><td>string</td><td>可选。用于定义模型角色、约束和输出格式。</td></tr>
-            <tr><td><code>messages</code></td><td>array</td><td>对话消息数组，常用格式为 <code>{"role":"user","content":"..."}</code>。</td></tr>
-            <tr><td><code>stream</code></td><td>boolean</td><td>可选。示例请求使用 <code>false</code>，表示一次性返回结果。</td></tr>
-          </tbody>
-        </table>
-        <h3>接口请求示例</h3>
-        <pre><code>POST https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages
-Content-Type: application/json
-X-Params: BASE64_ENCODED_WALLET_PARAMS
-X-Nonce: RANDOM_NONCE
-X-Signature: ECDSA_SIGNATURE_HEX
-X-Public-Key: ECDSA_PUBLIC_KEY_HEX
-
-{
-  "model": "deepseek-v3",
-  "stream": false,
-  "messages": [
-    {
-      "role": "user",
-      "content": "你好"
-    }
-  ]
-}</code></pre>
-        <h3>接口返回中的 usage</h3>
-        <pre><code>{
-  "usage": {
-    "input_tokens": 2137,
-    "output_tokens": 1389,
-    "cache_read_input_tokens": 0,
-    "cache_creation_input_tokens": 0,
-    "cache_creation": {
-      "ephemeral_1h_input_tokens": 0,
-      "ephemeral_5m_input_tokens": 0
-    },
-    "output_token_unit_price": 2520,
-    "consume_amount": 3500280,
-    "balance": 996499720,
-    "hash": "..."
+        <h3>BTC 钱包签名请求示例</h3>
+        <pre><code class="language-json">{
+  &quot;method&quot;: &quot;POST&quot;,
+  &quot;url&quot;: &quot;https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages&quot;,
+  &quot;headers&quot;: {
+    &quot;Content-Type&quot;: &quot;application/json&quot;,
+    &quot;X-Params&quot;: &quot;eyJ3YWxsZXRfYWRkcmVzcyI6ImJjMXBya3g0bXI2ejZsendwZmZucmZrNW5oOGUwNnVrOGFqZ2V1NThsdXdnOGxyYXA4ZDdyenVzYXMzNjR6IiwibW9uZXkiOiI2IiwibW9uZXlfaWQiOiIyMDI2MDcwMjAwMiIsInNpZ25hdHVyZSI6InVjZHI2WWQzRjREakpPNGNvaWVTL1QveUpJYXJXSklmUkhFeURVVTJwUmpYN3Aza2xmLzhwd296VUhLTkx1NXZEVWhVWnlHUjNKbGtldk5zRlZXTHJ3PT0ifQ==&quot;,
+    &quot;X-Nonce&quot;: &quot;0214abb07fa00c7d76b3e75a086024cd&quot;,
+    &quot;X-Signature&quot;: &quot;3045022100a5db9e854311ecc565191c526b0116332eda8a730414c7b99b13a0882304f17902204cd5285c4126d426a4bc3cf64880e9914ffb385f1bfa35d40b4b53899b4a3cd7&quot;,
+    &quot;X-Public-Key&quot;: &quot;3059301306072a8648ce3d020106082a8648ce3d030107034200043fffbc2b10dbbea8900bd38b48100c48e627bd12edb23b055e672278f04e09d6f3b00e7f8b21819f9157a9e69704bac5415dedd4d9e6d21a8f6d219f3db7633e&quot;
+  },
+  &quot;body&quot;: {
+    &quot;messages&quot;: [
+      {
+        &quot;role&quot;: &quot;user&quot;,
+        &quot;content&quot;: &quot;提供github上5个最热门的AI开源项目&quot;
+      }
+    ],
+    &quot;model&quot;: &quot;claude-4.6-opus&quot;,
+    &quot;stream&quot;: false
   }
 }</code></pre>
-        <p class="callout">真实请求必须先完成钱包创建、充值确认、<code>X-Params</code> 钱包签名和接口级 ECDSA 签名。示例中的签名 header 都是占位符，不应把真实 <code>X-Params</code>、<code>X-Signature</code> 或私钥写入文档或日志。</p>
+        <h3>接口响应示例</h3>
+        <pre><code class="language-json">{
+  &quot;status&quot;: 200,
+  &quot;body&quot;: {
+    &quot;content&quot;: [
+      {
+        &quot;text&quot;: &quot;# GitHub 上 5 个最热门的 AI 开源项目\n\n以下是截至 2025 年中，GitHub 上最受关注的 AI 开源项目：\n\n---\n\n## 1. 🤖 TensorFlow\n- **开发者：** Google\n- **⭐ Stars：** ~188k+\n- **链接：** [github.com/tensorflow/tensorflow](https://github.com/tensorflow/tensorflow)\n- **简介：** 端到端的开源机器学习平台，支持深度学习模型的构建、训练和部署，广泛应用于计算机视觉、NLP 等领域。\n\n---\n\n## 2. 🔥 PyTorch\n- **开发者：** Meta (Facebook)\n- **⭐ Stars：** ~87k+\n- **链接：** [github.com/pytorch/pytorch](https://github.com/pytorch/pytorch)\n- **简介：** 灵活的深度学习框架，以动态计算图著称，深受学术研究者和工业界喜爱，是当前 AI 研究的主流框架之一。\n\n---\n\n## 3. 🤗 Hugging Face Transformers\n- **开发者：** Hugging Face\n- **⭐ Stars：** ~145k+\n- **链接：** [github.com/huggingface/transformers](https://github.com/huggingface/transformers)\n- **简介：** 提供数千个预训练模型（BERT、GPT、LLaMA 等），支持 NLP、计算机视觉、语音等多种任务，是大模型应用的核心生态。\n\n---\n\n## 4. 🦙 LangChain\n- **开发者：** LangChain AI\n- **⭐ Stars：** ~105k+\n- **链接：** [github.com/langchain-ai/langchain](https://github.com/langchain-ai/langchain)\n- **简介：** 用于构建基于大语言模型（LLM）应用的框架，支持 RAG（检索增强生成）、Agent、链式调用等，是 LLM 应用开发的热门选择。\n\n---\n\n## 5. 🎨 Stable Diffusion (Stability AI)\n- **开发者：** Stability AI / CompVis\n- **⭐ Stars：** ~70k+（含 stable-diffusion-webui 等衍生项目）\n- **链接：** [github.com/Stability-AI/stablediffusion](https://github.com/Stability-AI/stablediffusion)\n- **相关项目：** [AUTOMATIC1111/stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) ⭐~148k+\n- **简介：** 开源的文本生成图像模型，引领了 AI 绘画的浪潮，社区生态极其丰富。\n\n---\n\n&gt; **📌 补充说明：** 其他值得关注的热门项目还包括：\n&gt; - **ollama**（本地运行 LLM）⭐~120k+\n&gt; - **llama.cpp**（CPU 上高效运行 LLM）\n&gt; - **OpenAI Whisper**（语音识别）\n&gt; - **ComfyUI**（AI 图像生成工作流）\n&gt;\n&gt; AI 开源生态发展迅速，Stars 数据持续变化，建议访问 [GitHub Trending](https://github.com/trending) 获取最新排名。&quot;,
+        &quot;type&quot;: &quot;text&quot;
+      }
+    ],
+    &quot;id&quot;: &quot;msg_c0cd43018acb49e99a3cfe19dfdfe7e4&quot;,
+    &quot;model&quot;: &quot;claude-4.6-opus&quot;,
+    &quot;role&quot;: &quot;assistant&quot;,
+    &quot;stop_reason&quot;: &quot;end_turn&quot;,
+    &quot;type&quot;: &quot;message&quot;,
+    &quot;usage&quot;: {
+      &quot;balance&quot;: 493482537,
+      &quot;cache_creation&quot;: {
+        &quot;ephemeral_1h_input_tokens&quot;: 0,
+        &quot;ephemeral_5m_input_tokens&quot;: 0
+      },
+      &quot;cache_creation_input_tokens&quot;: 0,
+      &quot;cache_read_input_tokens&quot;: 0,
+      &quot;consume_amount&quot;: 2420620,
+      &quot;hash&quot;: &quot;MzA0NTAyMjEwMGY5MjlkZDE0MzNhYTkxZTYzNzVmN2RlOGU0YjQ3MzkzN2QwMDU4NWViOGI2ZjUyNDUwYTdkMjVlNmY4OGQ2MWEwMjIwNTM5ZTdhMjAxNmEzNGRiMmQxZDc4OGI0YmRhZjQ2YjM3NmUyZjAxNmRkNmE3MTc0YjE3NTIyOGFlM2FiZDYzMg==&quot;,
+      &quot;input_token_unit_price&quot;: 500,
+      &quot;input_tokens&quot;: 23,
+      &quot;output_token_unit_price&quot;: 2520,
+      &quot;output_tokens&quot;: 956
+    }
+  }
+}</code></pre>
+        <h3>usage 字段说明</h3>
+        <p>每次外部推理 API 请求完成后，服务端会在响应中返回完整 <code>usage</code> JSON。上面的完整响应示例已经包含 <code>usage</code> 字段，因此不再单独重复展示一份 usage JSON。</p>
+        <p><code>usage</code> 金额字段为服务端返回的整数缩放值，可按以下比例换算为实际金额：</p>
+        <ul>
+          <li><code>input_token_unit_price</code> 和 <code>output_token_unit_price</code> 的实际价格为字段值乘以 <code>10^-5</code>，且单位价格表示每 1000 tokens 的价格。</li>
+          <li><code>consume_amount</code> 的实际消费金额为字段值乘以 <code>10^-8</code>。</li>
+          <li><code>balance</code> 的实际余额为字段值乘以 <code>10^-8</code>。</li>
+        </ul>
+        <p>如果服务端响应没有 <code>usage</code> 字段，CLI 会输出 <code>&quot;usage&quot;: null</code>，不会估算或编造。</p>
+        <p class="callout">该示例来自一次真实 BTC Taproot 钱包签名请求。<code>X-Nonce</code>、<code>X-Signature</code>、<code>X-Params</code> 中的钱包签名和响应中的余额、hash、token 数都会随每次调用变化；私钥不应写入文档、仓库或日志。</p>
       </section>
 
       <section class="section" id="models">
@@ -765,36 +780,69 @@ X-Public-Key: ECDSA_PUBLIC_KEY_HEX</code></pre>
           <li>agent 调用推理 API，对 GitHub Trending 候选仓库执行 AI 相关性判断。</li>
           <li>服务端返回结构化 JSON 与 usage，系统生成报告并记录 token 消费。</li>
         </ol>
-        <h3>示例请求体</h3>
-        <pre><code>{
-  "model": "claude-4.6-opus",
-  "max_tokens": 4096,
-  "system": "你是 GitHub AI 项目筛选器。只判断输入候选，不得创造仓库。",
-  "messages": [
-    {
-      "role": "user",
-      "content": "筛选以下 GitHub Trending 候选：[{\"full_name\":\"owner/repo\"}]"
-    }
-  ]
-}</code></pre>
-        <h3>示例响应结构</h3>
-        <pre><code>{
-  "items": [
-    {
-      "full_name": "owner/repo",
-      "is_ai": true,
-      "category": "Agent",
-      "summary_zh": "中文简介",
-      "reason_zh": "入选原因"
-    }
-  ],
-  "usage": {
-    "input_tokens": 2137,
-    "output_tokens": 1389,
-    "consume_amount": 3500280,
-    "balance": 996499720
+        <h3>BTC 钱包签名请求</h3>
+        <pre><code class="language-json">{
+  &quot;method&quot;: &quot;POST&quot;,
+  &quot;url&quot;: &quot;https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages&quot;,
+  &quot;headers&quot;: {
+    &quot;Content-Type&quot;: &quot;application/json&quot;,
+    &quot;X-Params&quot;: &quot;eyJ3YWxsZXRfYWRkcmVzcyI6ImJjMXBya3g0bXI2ejZsendwZmZucmZrNW5oOGUwNnVrOGFqZ2V1NThsdXdnOGxyYXA4ZDdyenVzYXMzNjR6IiwibW9uZXkiOiI2IiwibW9uZXlfaWQiOiIyMDI2MDcwMjAwMiIsInNpZ25hdHVyZSI6InVjZHI2WWQzRjREakpPNGNvaWVTL1QveUpJYXJXSklmUkhFeURVVTJwUmpYN3Aza2xmLzhwd296VUhLTkx1NXZEVWhVWnlHUjNKbGtldk5zRlZXTHJ3PT0ifQ==&quot;,
+    &quot;X-Nonce&quot;: &quot;0214abb07fa00c7d76b3e75a086024cd&quot;,
+    &quot;X-Signature&quot;: &quot;3045022100a5db9e854311ecc565191c526b0116332eda8a730414c7b99b13a0882304f17902204cd5285c4126d426a4bc3cf64880e9914ffb385f1bfa35d40b4b53899b4a3cd7&quot;,
+    &quot;X-Public-Key&quot;: &quot;3059301306072a8648ce3d020106082a8648ce3d030107034200043fffbc2b10dbbea8900bd38b48100c48e627bd12edb23b055e672278f04e09d6f3b00e7f8b21819f9157a9e69704bac5415dedd4d9e6d21a8f6d219f3db7633e&quot;
+  },
+  &quot;body&quot;: {
+    &quot;messages&quot;: [
+      {
+        &quot;role&quot;: &quot;user&quot;,
+        &quot;content&quot;: &quot;提供github上5个最热门的AI开源项目&quot;
+      }
+    ],
+    &quot;model&quot;: &quot;claude-4.6-opus&quot;,
+    &quot;stream&quot;: false
   }
 }</code></pre>
+        <h3>BTC 钱包签名响应</h3>
+        <pre><code class="language-json">{
+  &quot;status&quot;: 200,
+  &quot;body&quot;: {
+    &quot;content&quot;: [
+      {
+        &quot;text&quot;: &quot;# GitHub 上 5 个最热门的 AI 开源项目\n\n以下是截至 2025 年中，GitHub 上最受关注的 AI 开源项目：\n\n---\n\n## 1. 🤖 TensorFlow\n- **开发者：** Google\n- **⭐ Stars：** ~188k+\n- **链接：** [github.com/tensorflow/tensorflow](https://github.com/tensorflow/tensorflow)\n- **简介：** 端到端的开源机器学习平台，支持深度学习模型的构建、训练和部署，广泛应用于计算机视觉、NLP 等领域。\n\n---\n\n## 2. 🔥 PyTorch\n- **开发者：** Meta (Facebook)\n- **⭐ Stars：** ~87k+\n- **链接：** [github.com/pytorch/pytorch](https://github.com/pytorch/pytorch)\n- **简介：** 灵活的深度学习框架，以动态计算图著称，深受学术研究者和工业界喜爱，是当前 AI 研究的主流框架之一。\n\n---\n\n## 3. 🤗 Hugging Face Transformers\n- **开发者：** Hugging Face\n- **⭐ Stars：** ~145k+\n- **链接：** [github.com/huggingface/transformers](https://github.com/huggingface/transformers)\n- **简介：** 提供数千个预训练模型（BERT、GPT、LLaMA 等），支持 NLP、计算机视觉、语音等多种任务，是大模型应用的核心生态。\n\n---\n\n## 4. 🦙 LangChain\n- **开发者：** LangChain AI\n- **⭐ Stars：** ~105k+\n- **链接：** [github.com/langchain-ai/langchain](https://github.com/langchain-ai/langchain)\n- **简介：** 用于构建基于大语言模型（LLM）应用的框架，支持 RAG（检索增强生成）、Agent、链式调用等，是 LLM 应用开发的热门选择。\n\n---\n\n## 5. 🎨 Stable Diffusion (Stability AI)\n- **开发者：** Stability AI / CompVis\n- **⭐ Stars：** ~70k+（含 stable-diffusion-webui 等衍生项目）\n- **链接：** [github.com/Stability-AI/stablediffusion](https://github.com/Stability-AI/stablediffusion)\n- **相关项目：** [AUTOMATIC1111/stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) ⭐~148k+\n- **简介：** 开源的文本生成图像模型，引领了 AI 绘画的浪潮，社区生态极其丰富。\n\n---\n\n&gt; **📌 补充说明：** 其他值得关注的热门项目还包括：\n&gt; - **ollama**（本地运行 LLM）⭐~120k+\n&gt; - **llama.cpp**（CPU 上高效运行 LLM）\n&gt; - **OpenAI Whisper**（语音识别）\n&gt; - **ComfyUI**（AI 图像生成工作流）\n&gt;\n&gt; AI 开源生态发展迅速，Stars 数据持续变化，建议访问 [GitHub Trending](https://github.com/trending) 获取最新排名。&quot;,
+        &quot;type&quot;: &quot;text&quot;
+      }
+    ],
+    &quot;id&quot;: &quot;msg_c0cd43018acb49e99a3cfe19dfdfe7e4&quot;,
+    &quot;model&quot;: &quot;claude-4.6-opus&quot;,
+    &quot;role&quot;: &quot;assistant&quot;,
+    &quot;stop_reason&quot;: &quot;end_turn&quot;,
+    &quot;type&quot;: &quot;message&quot;,
+    &quot;usage&quot;: {
+      &quot;balance&quot;: 493482537,
+      &quot;cache_creation&quot;: {
+        &quot;ephemeral_1h_input_tokens&quot;: 0,
+        &quot;ephemeral_5m_input_tokens&quot;: 0
+      },
+      &quot;cache_creation_input_tokens&quot;: 0,
+      &quot;cache_read_input_tokens&quot;: 0,
+      &quot;consume_amount&quot;: 2420620,
+      &quot;hash&quot;: &quot;MzA0NTAyMjEwMGY5MjlkZDE0MzNhYTkxZTYzNzVmN2RlOGU0YjQ3MzkzN2QwMDU4NWViOGI2ZjUyNDUwYTdkMjVlNmY4OGQ2MWEwMjIwNTM5ZTdhMjAxNmEzNGRiMmQxZDc4OGI0YmRhZjQ2YjM3NmUyZjAxNmRkNmE3MTc0YjE3NTIyOGFlM2FiZDYzMg==&quot;,
+      &quot;input_token_unit_price&quot;: 500,
+      &quot;input_tokens&quot;: 23,
+      &quot;output_token_unit_price&quot;: 2520,
+      &quot;output_tokens&quot;: 956
+    }
+  }
+}</code></pre>
+        <h3>usage 字段说明</h3>
+        <p>每次外部推理 API 请求完成后，服务端会在响应中返回完整 <code>usage</code> JSON。上面的完整响应示例已经包含 <code>usage</code> 字段，因此不再单独重复展示一份 usage JSON。</p>
+        <p><code>usage</code> 金额字段为服务端返回的整数缩放值，可按以下比例换算为实际金额：</p>
+        <ul>
+          <li><code>input_token_unit_price</code> 和 <code>output_token_unit_price</code> 的实际价格为字段值乘以 <code>10^-5</code>，且单位价格表示每 1000 tokens 的价格。</li>
+          <li><code>consume_amount</code> 的实际消费金额为字段值乘以 <code>10^-8</code>。</li>
+          <li><code>balance</code> 的实际余额为字段值乘以 <code>10^-8</code>。</li>
+        </ul>
+        <p>如果服务端响应没有 <code>usage</code> 字段，CLI 会输出 <code>&quot;usage&quot;: null</code>，不会估算或编造。</p>
         <p class="callout">把示例中的 GitHub 仓库候选替换为代码片段、业务数据、文档内容、用户指令或软件运行状态，就可以把同一条 bitgo 链路用于代码生成、审查、分析、内容生成和软件内置推理。</p>
       </section>
 

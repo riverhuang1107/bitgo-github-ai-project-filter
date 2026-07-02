@@ -215,23 +215,37 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
           <tr><td><code>X-Public-Key</code></td><td>Local ECDSA DER public key hex</td></tr>
         </tbody>
       </table>
-      <h3>Legacy key-pair signature format</h3>
-      <p>The historical method signed each request with an ECDSA P-256 private key over <code>METHOD/path/query/nonce</code>. The current default authentication path is now wallet <code>X-Params</code> plus interface-level ECDSA headers; this section is retained only for debugging old requests or understanding historical deployments.</p>
-      <pre><code>METHOD
-/path
-?raw=query
-nonce</code></pre>
-      <table>
-        <thead>
-          <tr><th>Historical header</th><th>Description</th></tr>
-        </thead>
-        <tbody>
-          <tr><td><code>X-Nonce</code></td><td>Random nonce generated for each request</td></tr>
-          <tr><td><code>X-Signature</code></td><td>Hex-encoded DER signature</td></tr>
-          <tr><td><code>X-Public-Key</code></td><td>Hex-encoded SubjectPublicKeyInfo DER public key</td></tr>
-        </tbody>
-      </table>
-
+      <h3>Request and Response Example</h3>
+      <p>The following example uses ETH wallet signing and the <code>claude-4.6-opus</code> model. The user prompt is "provide 5 of the most popular AI open-source projects on GitHub". The <code>content</code>, <code>usage</code>, and billing fields are real server-returned values; balance, hash, and token counts can change on each call.</p>
+      <pre><code class="language-json">{
+  &quot;content&quot;: [
+    {
+      &quot;text&quot;: &quot;# GitHub 上 5 个最热门的 AI 开源项目\n\n以下是截至 2025 年在 GitHub 上广受关注的 AI 开源项目：\n\n---\n\n## 1. 🤖 **TensorFlow**\n- **开发者：** Google\n- **⭐ Stars：** 187k+\n- **链接：** [github.com/tensorflow/tensorflow](https://github.com/tensorflow/tensorflow)\n- **简介：** 端到端的开源机器学习框架，广泛用于深度学习模型的训练与部署，支持多平台（移动端、Web、服务器）。\n\n---\n\n## 2. 🔥 **PyTorch**\n- **开发者：** Meta (Facebook)\n- **⭐ Stars：** 86k+\n- **链接：** [github.com/pytorch/pytorch](https://github.com/pytorch/pytorch)\n- **简介：** 灵活且高效的深度学习框架，以动态计算图著称，深受学术研究者和工业界喜爱。\n\n---\n\n## 3. 🦙 **llama.cpp**\n- **开发者：** Georgi Gerganov\n- **⭐ Stars：** 75k+\n- **链接：** [github.com/ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp)\n- **简介：** 用纯 C/C++ 实现 LLaMA 模型推理，支持在消费级硬件（CPU）上本地运行大语言模型，推动了本地化 LLM 的普及。\n\n---\n\n## 4. 🧠 **LangChain**\n- **开发者：** LangChain AI\n- **⭐ Stars：** 100k+\n- **链接：** [github.com/langchain-ai/langchain](https://github.com/langchain-ai/langchain)\n- **简介：** 用于构建基于大语言模型（LLM）应用的开发框架，支持链式调用、RAG（检索增强生成）、Agent 等功能，是 LLM 应用开发的事实标准。\n\n---\n\n## 5. 🎨 **Stable Diffusion (Web UI)**\n- **开发者：** AUTOMATIC1111\n- **⭐ Stars：** 145k+\n- **链接：** [github.com/AUTOMATIC1111/stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui)\n- **简介：** 基于 Stable Diffusion 的图形化界面，支持文本生成图像、图像修复、LoRA 等功能，是 AI 绘画领域最流行的开源工具。\n\n---\n\n&gt; 📌 **补充提及：** 其他值得关注的项目还包括 **Hugging Face Transformers**（NLP 模型库）、**Open Interpreter**（本地代码解释器）、**Ollama**（本地运行 LLM 的工具）等。\n\n&gt; ⚠️ Star 数为近似值，实际数据可能随时间变化，建议前往 GitHub 查看最新信息。&quot;,
+      &quot;type&quot;: &quot;text&quot;
+    }
+  ],
+  &quot;id&quot;: &quot;msg_5f915d286439458aa18b6317052ea1ac&quot;,
+  &quot;model&quot;: &quot;claude-4.6-opus&quot;,
+  &quot;role&quot;: &quot;assistant&quot;,
+  &quot;stop_reason&quot;: &quot;end_turn&quot;,
+  &quot;type&quot;: &quot;message&quot;,
+  &quot;usage&quot;: {
+    &quot;balance&quot;: 487807775,
+    &quot;cache_creation&quot;: {
+      &quot;ephemeral_1h_input_tokens&quot;: 0,
+      &quot;ephemeral_5m_input_tokens&quot;: 0
+    },
+    &quot;cache_creation_input_tokens&quot;: 0,
+    &quot;cache_read_input_tokens&quot;: 0,
+    &quot;consume_amount&quot;: 2213980,
+    &quot;hash&quot;: &quot;MzA0NTAyMjA1NTI3NTA0M2RhNTcyODg0NTE2NjkxODM0MzJjMjI1NzQ0ODFmMzhkNWU1YjVlYmMzNzU4Nzk2ZmFhYzVkYzZjMDIyMTAwZThjOGJkYjZiOTIxZTZjOTE4NmE4ODY4Y2M2MjE5NjVjZDIyNGEyNzkwODU0MTMyZGI5Y2JiY2VlYjc0ODZjYQ==&quot;,
+    &quot;input_token_unit_price&quot;: 500,
+    &quot;input_tokens&quot;: 23,
+    &quot;output_token_unit_price&quot;: 2520,
+    &quot;output_tokens&quot;: 874
+  }
+}</code></pre>
+      <p>The request body uses the Anthropic Messages style. If the API request fails or returns invalid JSON, the final report is not generated. If the model returns unknown repository names, duplicate repository names, or omits some candidates, the CLI discards invalid items and fills the report with the remaining valid AI candidates.</p>
       <h2>5. Request Body Format</h2>
       <p>The project uses an Anthropic Messages-style request body. In the sample screening scenario, the production request has this structure:</p>
       <pre><code>{
@@ -295,25 +309,14 @@ nonce</code></pre>
       <p>The project also supports <code>content</code> as a string, or text returned directly through a <code>text</code> field.</p>
 
       <h2>7. Usage Output</h2>
-      <p>After every external reasoning API request completes, the CLI prints the complete <code>usage</code> JSON returned by the server:</p>
-      <pre><code>{
-  "usage": {
-    "input_tokens": 2137,
-    "output_tokens": 1389,
-    "cache_read_input_tokens": 0,
-    "cache_creation_input_tokens": 0,
-    "cache_creation": {
-      "ephemeral_1h_input_tokens": 0,
-      "ephemeral_5m_input_tokens": 0
-    },
-    "output_token_unit_price": 2520,
-    "consume_amount": 3500280,
-    "balance": 996499720,
-    "hash": "..."
-  }
-}</code></pre>
-      <p>The project preserves every field in the server's <code>usage</code> object. If the server does not return <code>usage</code>, the CLI prints <code>"usage": null</code> and does not estimate or fabricate usage data.</p>
-
+      <p>After every external reasoning API request completes, the CLI immediately prints the complete <code>usage</code> JSON returned by the server. The complete request and response example already includes the <code>usage</code> field, so this section does not repeat a standalone JSON code block.</p>
+      <p>The monetary fields in <code>usage</code> are integer scaled values returned by the server. Convert them to actual amounts as follows:</p>
+      <ul>
+        <li>The actual <code>input_token_unit_price</code> and <code>output_token_unit_price</code> values are the field value multiplied by <code>10^-5</code>, and the unit price is the price per 1000 tokens.</li>
+        <li>The actual <code>consume_amount</code> value is the field value multiplied by <code>10^-8</code>.</li>
+        <li>The actual <code>balance</code> value is the field value multiplied by <code>10^-8</code>.</li>
+      </ul>
+      <p>If the server response has no <code>usage</code> field, the CLI prints <code>"usage": null</code>; it does not estimate or fabricate usage.</p>
       <h2>8. Common Failure Scenarios</h2>
       <p>The project stops formal report generation in the following cases:</p>
       <table>
