@@ -547,14 +547,11 @@
 
       <section class="section" id="highlights">
         <h2>1. 产品亮点</h2>
-        <p>bitgo 把链上充值、钱包身份、请求签名和模型推理 token 消费组织成一个 agent 可执行的产品流程。它适用于 agent 开发软件时的推理调用，也适用于被开发出来的软件在运行过程中内置大模型推理能力。</p>
-        <div class="grid three">
-          <div class="tile"><strong>Agent 友好接入</strong><span>agent 可根据人提供的信息完成钱包配置、请求签名、连通性测试和推理 API 调用，减少人工拼接 header 与请求体的成本。</span></div>
-          <div class="tile"><strong>多钱包管理</strong><span>以链上地址作为唯一识别 ID，同一个地址可以关联多个钱包，用于区分不同软件、不同 agent 或不同业务线的推理消耗。</span></div>
-          <div class="tile"><strong>链上充值</strong><span>人从交易所或中心化钱包向官方地址提币，充值到账后即可用于推理 token 消费，链上确认过程可查询。</span></div>
-          <div class="tile"><strong>签名调用</strong><span>推理请求通过钱包私钥签名生成 <code>X-Params</code>，并叠加 <code>X-Nonce</code>、<code>X-Signature</code>、<code>X-Public-Key</code> 接口级 ECDSA 签名，服务端可识别调用方、钱包金额和授权参数。</span></div>
-          <div class="tile"><strong>推理 token 消费</strong><span>API 返回 usage 后，可以把输入、输出、消耗金额和余额作为 agent 软件开发过程中的可追踪成本信息。</span></div>
-          <div class="tile"><strong>广泛 agent 工作流</strong><span>适用于代码生成、代码审查、数据分析、内容生成、业务自动化、智能工作流和软件内置推理等场景。</span></div>
+        <div class="grid">
+          <div class="tile"><strong>Agent 时代的支付工具</strong><span>BitGo 面向 Agent 时代提供去中心化的虚拟资产支付能力，让 AI Agent、自动化程序和开发者应用可以安全、可验证地使用加密货币钱包完成资源消费。它不依赖传统账户余额体系，而是以钱包地址、链上身份和签名授权为核心，把支付能力交还给用户和程序本身。</span></div>
+          <div class="tile"><strong>钱包即支付身份</strong><span>在 BitGo 中，ETH、BTC、LTC 等加密货币钱包不仅用于持有资产，也可以作为调用推理 API、模型服务、数据服务和其他数字资源的授权凭证。每次请求都由私钥签名完成身份确认和消费授权，服务端无需托管用户私钥，也不依赖中心化账号密码体系。</span></div>
+          <div class="tile"><strong>安全透明的虚拟资产消费</strong><span>BitGo 让每一次资源消费都具备清晰的来源、额度和记录。用户可以明确看到请求来自哪个钱包、消费了多少额度、对应哪个资金 ID，并通过完整 usage 信息追踪 token 用量、单价、消费金额和余额变化，从而让 Agent 的自动化支付行为保持可审计、可验证。</span></div>
+          <div class="tile"><strong>从 Token 消费到 Agent 经济</strong><span>消费 token 只是 BitGo 的起点。同一套钱包签名和支付机制可以继续扩展到模型调用、工具调用、数据购买、API 订阅、算力租赁、自动化交易、任务赏金和跨平台数字服务结算，成为连接钱包、资产、服务与 Agent 自动化消费行为的基础支付层。</span></div>
         </div>
       </section>
 
