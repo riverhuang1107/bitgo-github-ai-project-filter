@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import tomllib
@@ -24,6 +24,14 @@ def user_config_dir() -> Path:
 
 
 @dataclass(slots=True)
+class WalletProfile:
+    wallet_address: str = ""
+    money: str = ""
+    money_id: str = ""
+    signer_command: str = ""
+
+
+@dataclass(slots=True)
 class Settings:
     endpoint: str = DEFAULT_ENDPOINT
     model: str = DEFAULT_MODEL
@@ -33,6 +41,7 @@ class Settings:
     money: str = ""
     money_id: str = ""
     signer_command: str = ""
+    wallets: dict[str, WalletProfile] = field(default_factory=dict)
     output_dir: str = "output"
     mail_from: str = DEFAULT_MAIL_FROM
     mail_test_to: str = ""
@@ -49,6 +58,19 @@ class Settings:
         app = data.get("app", {})
         reasoning = data.get("reasoning", {})
         mail = data.get("mail", {})
+        wallet_profiles = reasoning.get("wallets", {})
+        wallets = {
+            str(chain)
+            .strip()
+            .lower(): WalletProfile(
+                wallet_address=profile.get("wallet_address", ""),
+                money=str(profile.get("money", "")),
+                money_id=str(profile.get("money_id", "")),
+                signer_command=profile.get("signer_command", ""),
+            )
+            for chain, profile in wallet_profiles.items()
+            if isinstance(profile, dict)
+        }
         return cls(
             endpoint=reasoning.get("endpoint", DEFAULT_ENDPOINT),
             model=reasoning.get("model", DEFAULT_MODEL),
@@ -58,6 +80,7 @@ class Settings:
             money=str(reasoning.get("money", "")),
             money_id=str(reasoning.get("money_id", "")),
             signer_command=reasoning.get("signer_command", ""),
+            wallets=wallets,
             output_dir=app.get("output_dir", "output"),
             mail_from=mail.get("from") or DEFAULT_MAIL_FROM,
             mail_test_to=mail.get("test_to", ""),
@@ -80,8 +103,20 @@ class Settings:
             f'wallet_address = "{_escape(self.wallet_address)}"\n'
             f'money = "{_escape(self.money)}"\n'
             f'money_id = "{_escape(self.money_id)}"\n'
-            f'signer_command = "{_escape(self.signer_command)}"\n\n'
-            "[mail]\n"
+            f'signer_command = "{_escape(self.signer_command)}"\n'
+        )
+        if self.wallets:
+            for chain, wallet in sorted(self.wallets.items()):
+                text += (
+                    "\n"
+                    f"[reasoning.wallets.{_escape_key(chain)}]\n"
+                    f'wallet_address = "{_escape(wallet.wallet_address)}"\n'
+                    f'money = "{_escape(wallet.money)}"\n'
+                    f'money_id = "{_escape(wallet.money_id)}"\n'
+                    f'signer_command = "{_escape(wallet.signer_command)}"\n'
+                )
+        text += (
+            "\n[mail]\n"
             f'from = "{_escape(self.mail_from)}"\n'
             f'test_to = "{_escape(self.mail_test_to)}"\n'
             f'backend = "{_escape(self.mail_backend)}"\n'
@@ -94,6 +129,10 @@ class Settings:
 
 def _escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _escape_key(value: str) -> str:
+    return value.replace('"', '\\"')
 
 
 def default_config_path() -> Path:

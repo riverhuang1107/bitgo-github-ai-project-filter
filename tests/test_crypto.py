@@ -10,6 +10,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, utils
 from github_ai_daily.crypto import (
     WalletAuth,
     build_x_params,
+    generate_wallet,
     generate_private_key,
     interface_signature_message,
     load_private_key,
@@ -21,9 +22,10 @@ from github_ai_daily.crypto import (
 
 
 def test_signature_message_with_query():
-    assert signature_message(
-        "post", "https://example.test/v1/messages?a=1", "nonce"
-    ) == b"POST\n/v1/messages\n?a=1\nnonce"
+    assert (
+        signature_message("post", "https://example.test/v1/messages?a=1", "nonce")
+        == b"POST\n/v1/messages\n?a=1\nnonce"
+    )
 
 
 def test_generated_signature_verifies_prehashed(tmp_path: Path):
@@ -111,6 +113,32 @@ def test_wallet_auth_rejects_missing_private_key():
         assert "REASONING_PRIVATE_KEY" in str(exc)
     else:
         raise AssertionError("Expected missing private key to fail")
+
+
+def test_generate_wallet_from_signer(monkeypatch):
+    def fake_run(command, **kwargs):
+        assert "--generate-wallet" in command
+        assert "--chain" in command
+        assert "eth" in command
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "chain": "eth",
+                    "wallet_address": "0xwallet",
+                    "private_key": "private",
+                }
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr("github_ai_daily.crypto.subprocess.run", fake_run)
+
+    wallet = generate_wallet("eth")
+
+    assert wallet.chain == "eth"
+    assert wallet.wallet_address == "0xwallet"
+    assert wallet.private_key == "private"
 
 
 def test_wallet_signer_error_includes_detail(monkeypatch):

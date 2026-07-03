@@ -7,8 +7,14 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from .config import DEFAULT_MODEL, Settings, default_config_path, user_config_dir
-from .crypto import WalletAuth, generate_private_key, load_private_key
+from .config import (
+    DEFAULT_MODEL,
+    Settings,
+    WalletProfile,
+    default_config_path,
+    user_config_dir,
+)
+from .crypto import WalletAuth, generate_private_key, generate_wallet, load_private_key
 from .github import GitHubClient
 from .mail import (
     SMTP_KEY,
@@ -60,21 +66,37 @@ def parser() -> argparse.ArgumentParser:
     reasoning_sub = reasoning.add_subparsers(dest="reasoning_command", required=True)
     reasoning_test = reasoning_sub.add_parser("test")
     reasoning_test.add_argument("--model")
-    reasoning_test.add_argument("--chain", choices=["ltc", "btc", "eth"])
-    reasoning_test.add_argument("--wallet-address")
-    reasoning_test.add_argument("--money")
-    reasoning_test.add_argument("--money-id")
-    reasoning_test.add_argument("--private-key")
-    reasoning_test.add_argument("--signer-command")
-    reasoning_test.add_argument("--key", type=Path, help="ECDSA interface signing key path")
+    _wallet_args(reasoning_test)
+    reasoning_test.add_argument(
+        "--key", type=Path, help="ECDSA interface signing key path"
+    )
     return root
 
 
 def _report_args(command: argparse.ArgumentParser) -> None:
     command.add_argument("--limit", type=int, default=10)
-    command.add_argument("--format", choices=["markdown", "html", "both"], default="both")
-    command.add_argument("--date", help="Report date label in YYYY-MM-DD; collection is live")
+    command.add_argument(
+        "--format", choices=["markdown", "html", "both"], default="both"
+    )
+    command.add_argument(
+        "--date", help="Report date label in YYYY-MM-DD; collection is live"
+    )
     command.add_argument("--output-dir", type=Path)
+    _wallet_args(command)
+
+
+def _wallet_args(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--chain", choices=["ltc", "btc", "eth"])
+    command.add_argument("--wallet-address")
+    command.add_argument("--money")
+    command.add_argument("--money-id")
+    command.add_argument("--private-key")
+    command.add_argument("--signer-command")
+    command.add_argument(
+        "--new-wallet",
+        action="store_true",
+        help="Generate a fresh wallet for this request instead of reusing a configured wallet",
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -108,7 +130,9 @@ def dispatch(args) -> int:
         if args.to:
             html_path = paths.get("html")
             if not html_path:
-                raise RuntimeError("Email requires HTML output; use --format html or both")
+                raise RuntimeError(
+                    "Email requires HTML output; use --format html or both"
+                )
             send_existing(settings, html_path, args.to, list(paths.values()))
         return 0
     if args.command == "mail":
@@ -121,7 +145,11 @@ def dispatch(args) -> int:
 def cmd_init(args, settings: Settings) -> int:
     if not args.no_git and not Path(".git").exists():
         subprocess.run(["git", "init"], check=True)
-    key_path = Path(settings.private_key_path) if settings.private_key_path else user_config_dir() / "ecdsa-private.pem"
+    key_path = (
+        Path(settings.private_key_path)
+        if settings.private_key_path
+        else user_config_dir() / "ecdsa-private.pem"
+    )
     if not key_path.exists():
         generate_private_key(key_path)
     settings.private_key_path = str(key_path)
@@ -129,7 +157,9 @@ def cmd_init(args, settings: Settings) -> int:
         os.environ.get("REASONING_API_MODEL") or settings.model or DEFAULT_MODEL
     )
     settings.mail_from = os.environ.get("GITHUB_AI_MAIL_FROM") or settings.mail_from
-    settings.mail_test_to = settings.mail_test_to or os.environ.get("GITHUB_AI_MAIL_TEST_TO", "")
+    settings.mail_test_to = settings.mail_test_to or os.environ.get(
+        "GITHUB_AI_MAIL_TEST_TO", ""
+    )
     if not settings.mail_test_to:
         raise RuntimeError("GITHUB_AI_MAIL_TEST_TO is required")
     store = get_secret_store()
@@ -150,7 +180,7 @@ def generate(settings: Settings, args) -> dict[str, Path]:
     if not settings.model:
         raise RuntimeError("Tool is not initialized; run `github-ai-daily init`")
     github = GitHubClient(os.environ.get("GITHUB_TOKEN"))
-    auth = reasoning_auth(settings)
+    auth = reasoning_auth(settings, args)
     reasoning = ReasoningClient(
         settings.endpoint, settings.model, auth, reasoning_interface_key(settings)
     )
@@ -174,7 +204,9 @@ def generate(settings: Settings, args) -> dict[str, Path]:
     return write_reports(items, output_dir, args.format, generated_at)
 
 
-def send_existing(settings: Settings, html_path: Path, recipient: str, attachments: list[Path]) -> None:
+def send_existing(
+    settings: Settings, html_path: Path, recipient: str, attachments: list[Path]
+) -> None:
     html_body = html_path.read_text(encoding="utf-8")
     message = create_message(
         settings.mail_from,
@@ -197,7 +229,10 @@ def cmd_mail(args, settings: Settings) -> int:
         if not recipient:
             raise RuntimeError("A recipient is required via --to or mail.test_to")
         message = create_message(
-            settings.mail_from, recipient, "GitHub AI Daily SMTP 测试", "<p>SMTP 测试成功。</p>"
+            settings.mail_from,
+            recipient,
+            "GitHub AI Daily SMTP 测试",
+            "<p>SMTP 测试成功。</p>",
         )
         send_message(settings, store, message)
         print(f"Sent test email to {recipient}")
@@ -239,7 +274,9 @@ def cmd_reasoning(args, settings: Settings) -> int:
     try:
         response = reasoning.test_access()
         if not isinstance(response, dict) or not response.get("content"):
-            raise RuntimeError("API responded, but no Anthropic-style content was returned")
+            raise RuntimeError(
+                "API responded, but no Anthropic-style content was returned"
+            )
         print("External reasoning API access: OK")
     finally:
         print(reasoning.last_usage.format_json())
@@ -248,18 +285,42 @@ def cmd_reasoning(args, settings: Settings) -> int:
 
 
 def reasoning_auth(settings: Settings, args=None) -> WalletAuth:
-    private_key = _arg_or_env(args, "private_key", "REASONING_PRIVATE_KEY", "")
+    explicit_chain = _arg_or_env(args, "chain", "REASONING_WALLET_CHAIN", "")
+    chain = explicit_chain or settings.wallet_chain
+    profile = _wallet_profile(settings, chain)
+    signer_command = _wallet_value(
+        args,
+        settings,
+        profile,
+        chain,
+        "signer_command",
+        "REASONING_SIGNER_COMMAND",
+    )
+    use_new_wallet = _arg_bool_or_env(args, "new_wallet", "REASONING_NEW_WALLET")
+    generated = generate_wallet(chain, signer_command) if use_new_wallet else None
+    private_key = (
+        generated.private_key if generated else _private_key_for_chain(args, chain)
+    )
     auth = WalletAuth(
-        chain=_arg_or_env(args, "chain", "REASONING_WALLET_CHAIN", settings.wallet_chain),
-        wallet_address=_arg_or_env(
-            args, "wallet_address", "REASONING_WALLET_ADDRESS", settings.wallet_address
+        chain=chain,
+        wallet_address=(
+            generated.wallet_address
+            if generated
+            else _wallet_value(
+                args,
+                settings,
+                profile,
+                chain,
+                "wallet_address",
+                "REASONING_WALLET_ADDRESS",
+            )
         ),
-        money=_arg_or_env(args, "money", "REASONING_MONEY", settings.money),
-        money_id=_arg_or_env(args, "money_id", "REASONING_MONEY_ID", settings.money_id),
+        money=_wallet_value(args, settings, profile, chain, "money", "REASONING_MONEY"),
+        money_id=_wallet_value(
+            args, settings, profile, chain, "money_id", "REASONING_MONEY_ID"
+        ),
         private_key=private_key,
-        signer_command=_arg_or_env(
-            args, "signer_command", "REASONING_SIGNER_COMMAND", settings.signer_command
-        ),
+        signer_command=signer_command,
     )
     auth.validate()
     return auth
@@ -285,6 +346,69 @@ def _arg_or_env(args, attr: str, env_name: str, default: str) -> str:
     if value:
         return str(value)
     return os.environ.get(env_name) or default
+
+
+def _arg_bool_or_env(args, attr: str, env_name: str) -> bool:
+    value = getattr(args, attr, False) if args is not None else False
+    if value:
+        return True
+    env_value = os.environ.get(env_name, "")
+    return env_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _private_key_for_chain(args, chain: str) -> str:
+    value = getattr(args, "private_key", None) if args is not None else None
+    if value:
+        return str(value)
+    chain_env = _chain_env_name(chain, "PRIVATE_KEY")
+    if chain_env:
+        chain_value = os.environ.get(chain_env)
+        if chain_value:
+            return chain_value
+    return os.environ.get("REASONING_PRIVATE_KEY", "")
+
+
+def _wallet_profile(settings: Settings, chain: str) -> WalletProfile | None:
+    normalized = chain.strip().lower()
+    if not normalized:
+        return None
+    return settings.wallets.get(normalized)
+
+
+def _wallet_value(
+    args,
+    settings: Settings,
+    profile: WalletProfile | None,
+    chain: str,
+    attr: str,
+    env_name: str,
+) -> str:
+    value = getattr(args, attr, None) if args is not None else None
+    if value:
+        return str(value)
+    env_value = os.environ.get(env_name)
+    if env_value:
+        return env_value
+    if profile is not None:
+        profile_value = getattr(profile, attr)
+        if profile_value:
+            return str(profile_value)
+    if _matches_legacy_wallet(settings, chain):
+        return str(getattr(settings, attr))
+    return ""
+
+
+def _matches_legacy_wallet(settings: Settings, chain: str) -> bool:
+    return (
+        bool(chain) and settings.wallet_chain.strip().lower() == chain.strip().lower()
+    )
+
+
+def _chain_env_name(chain: str, suffix: str) -> str:
+    normalized = chain.strip().upper()
+    if normalized not in {"LTC", "BTC", "ETH"}:
+        return ""
+    return f"REASONING_{normalized}_{suffix}"
 
 
 def _print_paths(paths: dict[str, Path]) -> None:

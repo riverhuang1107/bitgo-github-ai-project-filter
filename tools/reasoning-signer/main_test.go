@@ -1,10 +1,9 @@
 package main
 
 import (
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"math/big"
+	"strings"
 	"testing"
 )
 
@@ -51,6 +50,60 @@ func TestSignBTCTaprootUsesSchnorr(t *testing.T) {
 
 func TestSignETH(t *testing.T) {
 	signature, digest, err := signMessage("eth", "0x0000000000000000000000000000000000000001", "10", "20260630001", testETHPrivateKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertDigestAndSignature(t, signature, digest)
+}
+
+func TestGenerateLTCWalletCanSign(t *testing.T) {
+	wallet, err := generateWallet("ltc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wallet.Chain != "ltc" {
+		t.Fatalf("chain = %q", wallet.Chain)
+	}
+	if wallet.WalletAddress == "" || wallet.WalletAddress[0] != 'L' {
+		t.Fatalf("unexpected LTC wallet address: %q", wallet.WalletAddress)
+	}
+	signature, digest, err := signMessage("ltc", wallet.WalletAddress, "10", "id", wallet.PrivateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertDigestAndSignature(t, signature, digest)
+}
+
+func TestGenerateBTCWalletCanSign(t *testing.T) {
+	wallet, err := generateWallet("btc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wallet.Chain != "btc" {
+		t.Fatalf("chain = %q", wallet.Chain)
+	}
+	if wallet.WalletAddress == "" || wallet.WalletAddress[0] != '1' {
+		t.Fatalf("unexpected BTC wallet address: %q", wallet.WalletAddress)
+	}
+	signature, digest, err := signMessage("btc", wallet.WalletAddress, "10", "id", wallet.PrivateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertDigestAndSignature(t, signature, digest)
+}
+
+func TestGenerateETHWalletCanSign(t *testing.T) {
+	wallet, err := generateWallet("eth")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wallet.Chain != "eth" {
+		t.Fatalf("chain = %q", wallet.Chain)
+	}
+	if !strings.HasPrefix(wallet.WalletAddress, "0x") {
+		t.Fatalf("unexpected ETH wallet address: %q", wallet.WalletAddress)
+	}
+	signature, digest, err := signMessage("eth", wallet.WalletAddress, "10", "id", wallet.PrivateKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,33 +168,4 @@ func testWIF(version byte) string {
 
 func testETHPrivateKey() string {
 	return "0000000000000000000000000000000000000000000000000000000000000001"
-}
-
-func base58CheckEncode(payload []byte) string {
-	first := sha256.Sum256(payload)
-	second := sha256.Sum256(first[:])
-	return encodeBase58(append(payload, second[:4]...))
-}
-
-func encodeBase58(input []byte) string {
-	value := new(big.Int).SetBytes(input)
-	zero := big.NewInt(0)
-	radix := big.NewInt(58)
-	mod := new(big.Int)
-	var encoded []byte
-
-	for value.Cmp(zero) > 0 {
-		value.DivMod(value, radix, mod)
-		encoded = append(encoded, base58Alphabet[mod.Int64()])
-	}
-	for _, b := range input {
-		if b != 0x00 {
-			break
-		}
-		encoded = append(encoded, base58Alphabet[0])
-	}
-	for i, j := 0, len(encoded)-1; i < j; i, j = i+1, j-1 {
-		encoded[i], encoded[j] = encoded[j], encoded[i]
-	}
-	return string(encoded)
 }

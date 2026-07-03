@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from github_ai_daily.config import DEFAULT_MAIL_FROM, DEFAULT_MODEL, Settings
+from github_ai_daily.config import (
+    DEFAULT_MAIL_FROM,
+    DEFAULT_MODEL,
+    Settings,
+    WalletProfile,
+)
 
 
 def test_config_round_trip(tmp_path: Path):
@@ -13,6 +18,14 @@ def test_config_round_trip(tmp_path: Path):
         money="20",
         money_id="money-id",
         signer_command="custom-signer",
+        wallets={
+            "eth": WalletProfile(
+                wallet_address="0xwallet",
+                money="30",
+                money_id="eth-id",
+                signer_command="eth-signer",
+            )
+        },
         mail_from="daily@example.com",
         mail_test_to="reader@example.com",
     )
@@ -24,12 +37,15 @@ def test_config_round_trip(tmp_path: Path):
     assert actual.money == expected.money
     assert actual.money_id == expected.money_id
     assert actual.signer_command == expected.signer_command
+    assert actual.wallets == expected.wallets
     assert actual.mail_from == expected.mail_from
     assert actual.mail_backend == expected.mail_backend
 
 
 def test_default_mail_from_is_agent_mail():
-    assert Settings().mail_from == DEFAULT_MAIL_FROM == "Agent Mail <hhq4326@agent.qq.com>"
+    assert (
+        Settings().mail_from == DEFAULT_MAIL_FROM == "Agent Mail <hhq4326@agent.qq.com>"
+    )
 
 
 def test_empty_mail_from_loads_default(tmp_path: Path):
@@ -50,6 +66,12 @@ def test_empty_mail_from_loads_default(tmp_path: Path):
                 'money_id = "20260630001"',
                 'signer_command = ""',
                 "",
+                "[reasoning.wallets.btc]",
+                'wallet_address = "1wallet"',
+                'money = "20"',
+                'money_id = "btc-id"',
+                'signer_command = "btc-signer"',
+                "",
                 "[mail]",
                 'from = ""',
                 'test_to = "reader@example.com"',
@@ -68,6 +90,8 @@ def test_empty_mail_from_loads_default(tmp_path: Path):
     assert actual.mail_backend == "agent"
     assert actual.wallet_chain == "eth"
     assert actual.wallet_address == "0xwallet"
+    assert actual.wallets["btc"].wallet_address == "1wallet"
+    assert actual.wallets["btc"].money_id == "btc-id"
 
 
 def test_default_model_is_verified_model():

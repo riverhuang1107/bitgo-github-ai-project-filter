@@ -224,6 +224,7 @@ export GITHUB_AI_SECRET_DELETE_CMD="/opt/secrets/delete"
 RESEND_MANAGEMENT_API_KEY=re_... .venv/bin/github-ai-daily mail rotate
 RESEND_MANAGEMENT_API_KEY=re_... .venv/bin/github-ai-daily mail remove
 REASONING_PRIVATE_KEY=... .venv/bin/github-ai-daily reasoning test --chain YOUR_WALLET_CHAIN --wallet-address YOUR_WALLET_ADDRESS --money YOUR_WALLET_MONEY --money-id YOUR_MONEY_ID
+REASONING_NEW_WALLET=true .venv/bin/github-ai-daily reasoning test --chain eth --money YOUR_WALLET_MONEY --money-id YOUR_MONEY_ID
 ```
 
 `generate` 只生成报告文件，不发送邮件。通过 agent 执行邮件命令时使用 Agent Mail；在非 agent 环境中，`run --to ...`、`send ... --to ...`、`mail test` 会通过 Resend SMTP 发送邮件。
@@ -233,6 +234,12 @@ REASONING_PRIVATE_KEY=... .venv/bin/github-ai-daily reasoning test --chain YOUR_
 ### 新版 X-Params 钱包签名（默认）
 
 默认认证方法使用 `X-Params` 钱包业务签名，并叠加 `X-Nonce`、`X-Signature`、`X-Public-Key` 接口级 ECDSA 签名。Python CLI 负责组装请求和调用推理 API；所有加密货币私钥签名都由 Go signer 完成。
+
+调用外部推理 API 前，agent 或人工操作方必须先确认本次使用的加密货币钱包类型和业务参数，不能默认复用某个已存在的钱包、示例 `X-Params` 或上一次请求的链类型。确认项至少包括 `wallet_chain`（`ltc`、`btc` 或 `eth`）、`wallet_address`、`money`、`money_id`，以及是使用已签名的 `X-Params` 还是用对应私钥重新生成钱包业务签名；缺少确认时应先询问用户，不应发起请求。
+
+如果用户已经明确指定某一种加密货币钱包，工具可以查找配置中是否存在同币种钱包 profile；存在时可直接使用该币种的 `wallet_address`、`money`、`money_id` 和 `signer_command`。不存在同币种 profile 时，工具不能把其他币种的旧配置混用到本次请求，必须由用户补充对应币种的钱包参数。
+
+如果用户明确要求“使用一个新的钱包”发起请求，工具应使用 `--new-wallet` 或 `REASONING_NEW_WALLET=true` 为本次请求临时生成指定币种钱包，并用新钱包地址和新私钥生成 `X-Params`。新钱包私钥只用于本次进程内签名，不写入配置、README、日志或响应正文；`money` 和 `money_id` 仍必须由用户提供，或来自同币种 profile，不能从其他币种配置中继承。
 
 签名消息为：
 
@@ -278,11 +285,25 @@ wallet_address = "YOUR_WALLET_ADDRESS"
 money = "YOUR_WALLET_MONEY"
 money_id = "YOUR_MONEY_ID"
 signer_command = ""
+
+[reasoning.wallets.ltc]
+wallet_address = "YOUR_LTC_WALLET_ADDRESS"
+money = "YOUR_LTC_WALLET_MONEY"
+money_id = "YOUR_LTC_MONEY_ID"
+signer_command = ""
+
+[reasoning.wallets.btc]
+wallet_address = "YOUR_BTC_WALLET_ADDRESS"
+money = "YOUR_BTC_WALLET_MONEY"
+money_id = "YOUR_BTC_MONEY_ID"
+signer_command = ""
 ```
 
 环境变量可覆盖配置：
 
-- `REASONING_PRIVATE_KEY`：必需；`ltc/btc` 为 WIF，`eth` 为 hex 私钥。
+- `REASONING_PRIVATE_KEY`：通用钱包私钥；未提供币种专用私钥时需要。`ltc/btc` 为 WIF，`eth` 为 hex 私钥。
+- `REASONING_LTC_PRIVATE_KEY`、`REASONING_BTC_PRIVATE_KEY`、`REASONING_ETH_PRIVATE_KEY`：可选；当显式指定对应币种时优先于通用 `REASONING_PRIVATE_KEY` 使用，便于多钱包环境按币种隔离私钥。
+- `REASONING_NEW_WALLET`：可选；设置为 `true`、`1`、`yes` 或 `on` 时，为本次请求生成新的 `ltc/btc/eth` 钱包，不复用配置中的钱包地址或私钥。
 - `REASONING_WALLET_CHAIN`：必需；`ltc`、`btc` 或 `eth`，必须由人提供，不能默认假设为固定链。
 - `REASONING_WALLET_ADDRESS`
 - `REASONING_MONEY`：必需；钱包面额金额，必须由人提供，不能默认假设为固定值。

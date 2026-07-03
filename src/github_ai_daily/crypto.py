@@ -42,6 +42,13 @@ class WalletAuth:
             raise ValueError("REASONING_PRIVATE_KEY is required")
 
 
+@dataclass(slots=True)
+class GeneratedWallet:
+    chain: str
+    wallet_address: str
+    private_key: str
+
+
 def generate_private_key(path: Path, overwrite: bool = False) -> None:
     if path.exists() and not overwrite:
         raise FileExistsError(f"Private key already exists: {path}")
@@ -140,6 +147,44 @@ def build_x_params(auth: WalletAuth) -> str:
     return base64.b64encode(payload).decode("ascii")
 
 
+def generate_wallet(chain: str, signer_command: str = "") -> GeneratedWallet:
+    normalized = chain.strip().lower()
+    if normalized not in SUPPORTED_WALLET_CHAINS:
+        raise ValueError("reasoning wallet chain must be one of: btc, eth, ltc")
+    command, cwd = _signer_command(signer_command)
+    completed = subprocess.run(
+        [*command, "--generate-wallet", "--chain", normalized],
+        cwd=cwd,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout).strip()
+        raise RuntimeError(f"reasoning wallet generation failed: {detail}")
+    try:
+        data = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            "reasoning wallet generator did not return valid JSON"
+        ) from exc
+    if not isinstance(data, dict):
+        raise RuntimeError("reasoning wallet generator JSON root must be an object")
+    required = {"chain", "wallet_address", "private_key"}
+    missing = required - set(data)
+    if missing:
+        raise RuntimeError(
+            "reasoning wallet generator JSON missing fields: "
+            + ", ".join(sorted(missing))
+        )
+    return GeneratedWallet(
+        chain=str(data["chain"]),
+        wallet_address=str(data["wallet_address"]),
+        private_key=str(data["private_key"]),
+    )
+
+
 def run_wallet_signer(auth: WalletAuth) -> dict[str, str]:
     auth.validate()
     command, cwd = _signer_command(auth.signer_command)
@@ -177,8 +222,7 @@ def run_wallet_signer(auth: WalletAuth) -> dict[str, str]:
     missing = required - set(data)
     if missing:
         raise RuntimeError(
-            "reasoning wallet signer JSON missing fields: "
-            + ", ".join(sorted(missing))
+            "reasoning wallet signer JSON missing fields: " + ", ".join(sorted(missing))
         )
     signature = data.get("signature")
     if not isinstance(signature, str) or not signature:

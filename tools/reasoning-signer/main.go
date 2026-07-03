@@ -18,12 +18,15 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/txscript"
 	ethCrypto "github.com/ethereum/go-ethereum/crypto"
+	"golang.org/x/crypto/ripemd160"
 )
 
 const (
-	btcMainnetWIFVersion = byte(0x80)
-	ltcMainnetWIFVersion = byte(0xb0)
-	base58Alphabet       = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+	btcMainnetWIFVersion   = byte(0x80)
+	ltcMainnetWIFVersion   = byte(0xb0)
+	btcMainnetP2PKHVersion = byte(0x00)
+	ltcMainnetP2PKHVersion = byte(0x30)
+	base58Alphabet         = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 )
 
 type signedParams struct {
@@ -35,6 +38,12 @@ type signedParams struct {
 	MessageSHA256Size int    `json:"message_sha256_size,omitempty"`
 }
 
+type generatedWallet struct {
+	Chain         string `json:"chain"`
+	WalletAddress string `json:"wallet_address"`
+	PrivateKey    string `json:"private_key"`
+}
+
 func main() {
 	chain := flag.String("chain", "ltc", "wallet chain: ltc, btc, or eth")
 	walletAddress := flag.String("wallet-address", "", "wallet address")
@@ -42,7 +51,17 @@ func main() {
 	moneyID := flag.String("money-id", "", "money id")
 	privateKey := flag.String("private-key", "", "WIF private key for ltc/btc or hex private key for eth")
 	includeDebug := flag.Bool("debug", false, "include digest metadata in the JSON output")
+	shouldGenerateWallet := flag.Bool("generate-wallet", false, "generate a fresh wallet for the selected chain")
 	flag.Parse()
+
+	if *shouldGenerateWallet {
+		wallet, err := generateWallet(*chain)
+		if err != nil {
+			fail(err.Error())
+		}
+		writeJSON(wallet)
+		return
+	}
 
 	if strings.TrimSpace(*walletAddress) == "" || strings.TrimSpace(*money) == "" || strings.TrimSpace(*moneyID) == "" {
 		fail("wallet-address, money, and money-id are required")
@@ -67,11 +86,53 @@ func main() {
 		output.MessageSHA256Size = len(digest)
 	}
 
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(output); err != nil {
-		fail(err.Error())
+	writeJSON(output)
+}
+
+func generateWallet(chain string) (generatedWallet, error) {
+	normalized := strings.ToLower(strings.TrimSpace(chain))
+	switch normalized {
+	case "ltc":
+		return generateWIFWallet(normalized, ltcMainnetWIFVersion, ltcMainnetP2PKHVersion)
+	case "btc":
+		return generateWIFWallet(normalized, btcMainnetWIFVersion, btcMainnetP2PKHVersion)
+	case "eth":
+		privateKey, err := ethCrypto.GenerateKey()
+		if err != nil {
+			return generatedWallet{}, err
+		}
+		return generatedWallet{
+			Chain:         normalized,
+			WalletAddress: ethCrypto.PubkeyToAddress(privateKey.PublicKey).Hex(),
+			PrivateKey:    hex.EncodeToString(ethCrypto.FromECDSA(privateKey)),
+		}, nil
+	default:
+		return generatedWallet{}, fmt.Errorf("unsupported chain %q; expected ltc, btc, or eth", chain)
 	}
+}
+
+func generateWIFWallet(chain string, wifVersion byte, addressVersion byte) (generatedWallet, error) {
+	privateKey, err := btcec.NewPrivateKey()
+	if err != nil {
+		return generatedWallet{}, err
+	}
+	keyBytes := privateKey.Serialize()
+	wifPayload := append([]byte{wifVersion}, keyBytes...)
+	wifPayload = append(wifPayload, 0x01)
+	publicKey := privateKey.PubKey().SerializeCompressed()
+	return generatedWallet{
+		Chain:         chain,
+		WalletAddress: p2pkhAddress(publicKey, addressVersion),
+		PrivateKey:    base58CheckEncode(wifPayload),
+	}, nil
+}
+
+func p2pkhAddress(compressedPublicKey []byte, version byte) string {
+	sha := sha256.Sum256(compressedPublicKey)
+	hasher := ripemd160.New()
+	_, _ = hasher.Write(sha[:])
+	payload := append([]byte{version}, hasher.Sum(nil)...)
+	return base58CheckEncode(payload)
 }
 
 func signMessage(chain, walletAddress, money, moneyID, privateKey string) (string, [32]byte, error) {
@@ -192,6 +253,12 @@ func base58CheckDecode(input string) ([]byte, error) {
 	return payload, nil
 }
 
+func base58CheckEncode(payload []byte) string {
+	first := sha256.Sum256(payload)
+	second := sha256.Sum256(first[:])
+	return encodeBase58(append(payload, second[:4]...))
+}
+
 func decodeBase58(input string) ([]byte, error) {
 	if input == "" {
 		return nil, errors.New("base58 string is empty")
@@ -220,6 +287,37 @@ func decodeBase58(input string) ([]byte, error) {
 		decoded = append(bytes.Repeat([]byte{0x00}, leadingZeros), decoded...)
 	}
 	return decoded, nil
+}
+
+func encodeBase58(input []byte) string {
+	value := new(big.Int).SetBytes(input)
+	zero := big.NewInt(0)
+	radix := big.NewInt(58)
+	mod := new(big.Int)
+	var encoded []byte
+
+	for value.Cmp(zero) > 0 {
+		value.DivMod(value, radix, mod)
+		encoded = append(encoded, base58Alphabet[mod.Int64()])
+	}
+	for _, b := range input {
+		if b != 0x00 {
+			break
+		}
+		encoded = append(encoded, base58Alphabet[0])
+	}
+	for i, j := 0, len(encoded)-1; i < j; i, j = i+1, j-1 {
+		encoded[i], encoded[j] = encoded[j], encoded[i]
+	}
+	return string(encoded)
+}
+
+func writeJSON(value any) {
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		fail(err.Error())
+	}
 }
 
 func fail(message string) {

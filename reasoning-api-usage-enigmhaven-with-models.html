@@ -509,11 +509,27 @@ private_key_path = "/secure/ecdsa-private.pem"</code></pre>
         <p>新版钱包签名认证可通过环境变量覆盖。不要将钱包私钥写入配置文件或提交记录。</p>
         <pre><code>export REASONING_API_MODEL="claude-4.6-opus"
 export REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY"
+export REASONING_LTC_PRIVATE_KEY="YOUR_LTC_WALLET_PRIVATE_KEY"
+export REASONING_BTC_PRIVATE_KEY="YOUR_BTC_WALLET_PRIVATE_KEY"
+export REASONING_ETH_PRIVATE_KEY="YOUR_ETH_WALLET_PRIVATE_KEY"
+export REASONING_NEW_WALLET="false"
 export REASONING_WALLET_CHAIN="YOUR_WALLET_CHAIN"
 export REASONING_WALLET_ADDRESS="YOUR_WALLET_ADDRESS"
 export REASONING_MONEY="YOUR_WALLET_MONEY"
 export REASONING_MONEY_ID="YOUR_MONEY_ID"
 export REASONING_SIGNER_COMMAND=""</code></pre>
+        <p>配置可保存多个同币种隔离的钱包 profile：</p>
+        <pre><code>[reasoning.wallets.ltc]
+wallet_address = "YOUR_LTC_WALLET_ADDRESS"
+money = "YOUR_LTC_WALLET_MONEY"
+money_id = "YOUR_LTC_MONEY_ID"
+signer_command = ""
+
+[reasoning.wallets.btc]
+wallet_address = "YOUR_BTC_WALLET_ADDRESS"
+money = "YOUR_BTC_WALLET_MONEY"
+money_id = "YOUR_BTC_MONEY_ID"
+signer_command = ""</code></pre>
       </section>
 
 
@@ -580,11 +596,19 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
   --money YOUR_WALLET_MONEY \
   --money-id YOUR_MONEY_ID \
   --model claude-4.6-opus</code></pre>
+      <pre><code>REASONING_NEW_WALLET=true \
+.venv/bin/github-ai-daily reasoning test \
+  --chain eth \
+  --money YOUR_WALLET_MONEY \
+  --money-id YOUR_MONEY_ID</code></pre>
       </section>
 
       <section class="section" id="auth">
         <h2>5. 请求签名</h2>
         <p>默认认证使用 <code>X-Params</code> 钱包业务签名，并叠加 <code>X-Nonce</code>、<code>X-Signature</code>、<code>X-Public-Key</code> 接口级 ECDSA 签名。钱包签名消息为 <code>wallet_address + money + money_id</code>。</p>
+        <p>Agent 或人工操作方在调用外部推理 API 前，必须先确认本次使用的加密货币钱包类型和业务参数，不能默认复用某个已存在的钱包、示例 <code>X-Params</code> 或上一次请求的链类型。确认项至少包括 <code>wallet_chain</code>（<code>ltc</code>、<code>btc</code> 或 <code>eth</code>）、<code>wallet_address</code>、<code>money</code>、<code>money_id</code>，以及是使用已签名的 <code>X-Params</code> 还是用对应私钥重新生成钱包业务签名；缺少确认时应先询问用户，不应发起请求。</p>
+        <p>如果用户已经明确指定某一种加密货币钱包，工具可以查找配置中是否存在同币种钱包 profile；存在时可直接使用该币种的 <code>wallet_address</code>、<code>money</code>、<code>money_id</code> 和 <code>signer_command</code>。不存在同币种 profile 时，工具不能把其他币种的旧配置混用到本次请求，必须由用户补充对应币种的钱包参数。</p>
+        <p>如果用户明确要求“使用一个新的钱包”发起请求，工具应使用 <code>--new-wallet</code> 或 <code>REASONING_NEW_WALLET=true</code> 为本次请求临时生成指定币种钱包，并用新钱包地址和新私钥生成 <code>X-Params</code>。新钱包私钥只用于本次进程内签名，不写入配置、README、日志或响应正文；<code>money</code> 和 <code>money_id</code> 仍必须由用户提供，或来自同币种 profile，不能从其他币种配置中继承。</p>
         <pre><code>${wallet_address}${money}${money_id}</code></pre>
         <h3>新版 X-Params 签名过程</h3>
         <ol>
@@ -664,7 +688,7 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
   "messages": [
     {
       "role": "user",
-      "content": "筛选以下 GitHub Trending 候选：\n[{\"full_name\":\"owner/repo\"}]"
+      "content": "筛选以下 GitHub Trending 候选：\n[{"full_name":"owner/repo"}]"
     }
   ]
 }</code></pre>
@@ -713,7 +737,7 @@ export REASONING_SIGNER_COMMAND=""</code></pre>
   "content": [
     {
       "type": "text",
-      "text": "{\"items\":[]}"
+      "text": "{"items":[]}"
     }
   ]
 }</code></pre>

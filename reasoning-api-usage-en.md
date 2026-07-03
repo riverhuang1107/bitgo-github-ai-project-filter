@@ -50,6 +50,10 @@ The new wallet signature authentication can be overridden with environment varia
 ```bash
 export REASONING_API_MODEL="claude-4.6-opus"
 export REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY"
+export REASONING_LTC_PRIVATE_KEY="YOUR_LTC_WALLET_PRIVATE_KEY"
+export REASONING_BTC_PRIVATE_KEY="YOUR_BTC_WALLET_PRIVATE_KEY"
+export REASONING_ETH_PRIVATE_KEY="YOUR_ETH_WALLET_PRIVATE_KEY"
+export REASONING_NEW_WALLET="false"
 export REASONING_WALLET_CHAIN="YOUR_WALLET_CHAIN"
 export REASONING_WALLET_ADDRESS="YOUR_WALLET_ADDRESS"
 export REASONING_MONEY="YOUR_WALLET_MONEY"
@@ -99,6 +103,12 @@ REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY" \
   --money YOUR_WALLET_MONEY \
   --money-id YOUR_MONEY_ID \
   --model claude-4.6-opus
+
+REASONING_NEW_WALLET=true \
+.venv/bin/github-ai-daily reasoning test \
+  --chain eth \
+  --money YOUR_WALLET_MONEY \
+  --money-id YOUR_MONEY_ID
 ```
 
 You can also put the wallet parameters in configuration or environment variables, then run:
@@ -112,6 +122,12 @@ The connectivity test sends a lightweight request and expects the server to retu
 ## 4. New `X-Params` Wallet Signature Authentication (Default)
 
 The new authentication method builds a JSON object containing the wallet address, amount, amount ID, and signature, then base64-encodes it into the HTTP `X-Params` header. Each request also carries interface-level ECDSA headers signed over `X-Params + X-Nonce`.
+
+Before calling the external reasoning API, the agent or human operator must confirm the cryptocurrency wallet type and business parameters for the current request. Do not default to an existing wallet, an example `X-Params`, or the chain type from a previous request. The confirmation must include at least `wallet_chain` (`ltc`, `btc`, or `eth`), `wallet_address`, `money`, `money_id`, and whether the request should use a pre-signed `X-Params` or regenerate the wallet business signature from the matching private key. If any confirmation is missing, ask the user before sending the request.
+
+If the user explicitly names a cryptocurrency wallet type, the tool may look for an existing same-chain wallet profile. When found, it can directly use that profile's `wallet_address`, `money`, `money_id`, and `signer_command`. When no same-chain profile exists, the tool must not mix in wallet settings from another chain; the user must provide the wallet parameters for the requested chain.
+
+If the user explicitly asks to use a new wallet, the tool should use `--new-wallet` or `REASONING_NEW_WALLET=true` to generate a fresh wallet for the requested chain and use the new wallet address and private key to build `X-Params`. The new wallet private key is only used for signing inside the current process and must not be written to configuration, README, logs, or response bodies. `money` and `money_id` must still be provided by the user or by a same-chain profile, and must not be inherited from another chain.
 
 Signing message:
 
@@ -170,6 +186,28 @@ curl --location --request POST "https://api-token-enigmhaven.expvent.com.cn:1111
 ```
 
 At runtime, `ReasoningClient` sends `Content-Type`, `X-Params`, `X-Nonce`, `X-Signature`, and `X-Public-Key` by default. To use a prebuilt wallet signer, set `REASONING_SIGNER_COMMAND` or `signer_command`.
+
+Configuration can store multiple same-chain isolated wallet profiles:
+
+```toml
+[reasoning.wallets.ltc]
+wallet_address = "YOUR_LTC_WALLET_ADDRESS"
+money = "YOUR_LTC_WALLET_MONEY"
+money_id = "YOUR_LTC_MONEY_ID"
+signer_command = ""
+
+[reasoning.wallets.btc]
+wallet_address = "YOUR_BTC_WALLET_ADDRESS"
+money = "YOUR_BTC_WALLET_MONEY"
+money_id = "YOUR_BTC_MONEY_ID"
+signer_command = ""
+```
+
+Common wallet-related environment variables:
+
+- `REASONING_PRIVATE_KEY`: generic wallet private key; required when no chain-specific private key is provided. `ltc/btc` use WIF, and `eth` uses a hex private key.
+- `REASONING_LTC_PRIVATE_KEY`, `REASONING_BTC_PRIVATE_KEY`, `REASONING_ETH_PRIVATE_KEY`: optional; when the matching chain is explicitly selected, these take precedence over the generic `REASONING_PRIVATE_KEY` so multi-wallet environments can isolate private keys by chain.
+- `REASONING_NEW_WALLET`: optional; when set to `true`, `1`, `yes`, or `on`, generate a new `ltc/btc/eth` wallet for the current request instead of reusing a configured wallet address or private key.
 
 ## 5. Request and Response Example
 

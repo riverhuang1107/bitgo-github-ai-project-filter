@@ -50,6 +50,10 @@ private_key_path = "/secure/ecdsa-private.pem"
 ```bash
 export REASONING_API_MODEL="claude-4.6-opus"
 export REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY"
+export REASONING_LTC_PRIVATE_KEY="YOUR_LTC_WALLET_PRIVATE_KEY"
+export REASONING_BTC_PRIVATE_KEY="YOUR_BTC_WALLET_PRIVATE_KEY"
+export REASONING_ETH_PRIVATE_KEY="YOUR_ETH_WALLET_PRIVATE_KEY"
+export REASONING_NEW_WALLET="false"
 export REASONING_WALLET_CHAIN="YOUR_WALLET_CHAIN"
 export REASONING_WALLET_ADDRESS="YOUR_WALLET_ADDRESS"
 export REASONING_MONEY="YOUR_WALLET_MONEY"
@@ -99,6 +103,12 @@ REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY" \
   --money YOUR_WALLET_MONEY \
   --money-id YOUR_MONEY_ID \
   --model claude-4.6-opus
+
+REASONING_NEW_WALLET=true \
+.venv/bin/github-ai-daily reasoning test \
+  --chain eth \
+  --money YOUR_WALLET_MONEY \
+  --money-id YOUR_MONEY_ID
 ```
 
 也可以先把钱包参数写入配置或环境变量，然后直接运行：
@@ -112,6 +122,12 @@ REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY" \
 ## 4. 新版 `X-Params` 钱包签名认证（默认）
 
 新版认证把钱包地址、面额、面额 ID 和签名组装为 JSON，然后 base64 编码到 HTTP header `X-Params` 中；请求还会携带基于 `X-Params + X-Nonce` 的接口级 ECDSA 签名 header。
+
+Agent 或人工操作方在调用外部推理 API 前，必须先确认本次使用的加密货币钱包类型和业务参数，不能默认复用某个已存在的钱包、示例 `X-Params` 或上一次请求的链类型。确认项至少包括 `wallet_chain`（`ltc`、`btc` 或 `eth`）、`wallet_address`、`money`、`money_id`，以及是使用已签名的 `X-Params` 还是用对应私钥重新生成钱包业务签名；缺少确认时应先询问用户，不应发起请求。
+
+如果用户已经明确指定某一种加密货币钱包，工具可以查找配置中是否存在同币种钱包 profile；存在时可直接使用该币种的 `wallet_address`、`money`、`money_id` 和 `signer_command`。不存在同币种 profile 时，工具不能把其他币种的旧配置混用到本次请求，必须由用户补充对应币种的钱包参数。
+
+如果用户明确要求“使用一个新的钱包”发起请求，工具应使用 `--new-wallet` 或 `REASONING_NEW_WALLET=true` 为本次请求临时生成指定币种钱包，并用新钱包地址和新私钥生成 `X-Params`。新钱包私钥只用于本次进程内签名，不写入配置、README、日志或响应正文；`money` 和 `money_id` 仍必须由用户提供，或来自同币种 profile，不能从其他币种配置中继承。
 
 签名消息为：
 
@@ -170,6 +186,28 @@ curl --location --request POST "https://api-token-enigmhaven.expvent.com.cn:1111
 ```
 
 在项目运行时，`ReasoningClient` 默认同时发送 `Content-Type`、`X-Params`、`X-Nonce`、`X-Signature` 和 `X-Public-Key`。如需使用预编译 signer，可设置 `REASONING_SIGNER_COMMAND` 或配置 `signer_command`。
+
+配置可保存多个同币种隔离的钱包 profile：
+
+```toml
+[reasoning.wallets.ltc]
+wallet_address = "YOUR_LTC_WALLET_ADDRESS"
+money = "YOUR_LTC_WALLET_MONEY"
+money_id = "YOUR_LTC_MONEY_ID"
+signer_command = ""
+
+[reasoning.wallets.btc]
+wallet_address = "YOUR_BTC_WALLET_ADDRESS"
+money = "YOUR_BTC_WALLET_MONEY"
+money_id = "YOUR_BTC_MONEY_ID"
+signer_command = ""
+```
+
+常用钱包相关环境变量：
+
+- `REASONING_PRIVATE_KEY`：通用钱包私钥；未提供币种专用私钥时需要。`ltc/btc` 为 WIF，`eth` 为 hex 私钥。
+- `REASONING_LTC_PRIVATE_KEY`、`REASONING_BTC_PRIVATE_KEY`、`REASONING_ETH_PRIVATE_KEY`：可选；当显式指定对应币种时优先于通用 `REASONING_PRIVATE_KEY` 使用，便于多钱包环境按币种隔离私钥。
+- `REASONING_NEW_WALLET`：可选；设置为 `true`、`1`、`yes` 或 `on` 时，为本次请求生成新的 `ltc/btc/eth` 钱包，不复用配置中的钱包地址或私钥。
 
 ## 5. 请求响应示例
 
