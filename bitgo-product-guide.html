@@ -257,6 +257,15 @@
       color: #34445c;
     }
 
+    .text-highlight {
+      display: inline;
+      padding: 2px 5px;
+      border-radius: 6px;
+      background: var(--blue-soft);
+      color: var(--blue-dark);
+      font-weight: 800;
+    }
+
     .coin-heading {
       display: flex;
       align-items: center;
@@ -337,6 +346,10 @@
 
     .step-list li {
       counter-increment: steps;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
       min-width: 0;
       min-height: 154px;
       padding: 18px;
@@ -344,13 +357,13 @@
       border-radius: 8px;
       background: var(--white);
       color: var(--ink);
+      line-height: 1.55;
       overflow-wrap: anywhere;
     }
 
     .step-list li::before {
       content: counter(steps, decimal-leading-zero);
       display: inline-flex;
-      margin-bottom: 12px;
       padding: 4px 8px;
       border-radius: 999px;
       background: var(--blue);
@@ -548,10 +561,10 @@
       <section class="section" id="highlights">
         <h2>1. 产品亮点</h2>
         <div class="grid">
-          <div class="tile"><strong>Agent 时代的支付工具</strong><span>BitGo 面向 Agent 时代提供去中心化的虚拟资产支付能力，让 AI Agent、自动化程序和开发者应用可以安全、可验证地使用加密货币钱包完成资源消费。它不依赖传统账户余额体系，而是以钱包地址、链上身份和签名授权为核心，把支付能力交还给用户和程序本身。</span></div>
-          <div class="tile"><strong>钱包即支付身份</strong><span>在 BitGo 中，ETH、BTC、LTC 等加密货币钱包不仅用于持有资产，也可以作为调用推理 API、模型服务、数据服务和其他数字资源的授权凭证。每次请求都由私钥签名完成身份确认和消费授权，服务端无需托管用户私钥，也不依赖中心化账号密码体系。</span></div>
-          <div class="tile"><strong>安全透明的虚拟资产消费</strong><span>BitGo 让每一次资源消费都具备清晰的来源、额度和记录。用户可以明确看到请求来自哪个钱包、消费了多少额度、对应哪个资金 ID，并通过完整 usage 信息追踪 token 用量、单价、消费金额和余额变化，从而让 Agent 的自动化支付行为保持可审计、可验证。</span></div>
-          <div class="tile"><strong>从 Token 消费到 Agent 经济</strong><span>消费 token 只是 BitGo 的起点。同一套钱包签名和支付机制可以继续扩展到模型调用、工具调用、数据购买、API 订阅、算力租赁、自动化交易、任务赏金和跨平台数字服务结算，成为连接钱包、资产、服务与 Agent 自动化消费行为的基础支付层。</span></div>
+          <div class="tile"><strong>Agent 时代的支付工具</strong><span>BitGo 面向 Agent 时代提供 <span class="text-highlight">去中心化的虚拟资产支付能力</span>，让 AI Agent、自动化程序和开发者应用可以安全、可验证地使用加密货币钱包完成资源消费。它不依赖传统账户余额体系，而是以 <span class="text-highlight">钱包地址、链上身份和签名授权</span> 为核心，把支付能力交还给用户和程序本身。</span></div>
+          <div class="tile"><strong>钱包即支付身份</strong><span>在 BitGo 中，ETH、BTC、LTC 等加密货币钱包不仅用于持有资产，也可以作为调用推理 API、模型服务、数据服务和其他数字资源的 <span class="text-highlight">授权凭证</span>。每次请求都由 <span class="text-highlight">私钥签名</span> 完成身份确认和消费授权，服务端无需托管用户私钥，也不依赖中心化账号密码体系。</span></div>
+          <div class="tile"><strong>安全透明的虚拟资产消费</strong><span>BitGo 让每一次资源消费都具备 <span class="text-highlight">清晰的来源、额度和记录</span>。用户可以明确看到请求来自哪个钱包、消费了多少额度、对应哪个资金 ID，并通过完整 usage 信息追踪 token 用量、单价、消费金额和余额变化，从而让 Agent 的自动化支付行为保持 <span class="text-highlight">可审计、可验证</span>。</span></div>
+          <div class="tile"><strong>从 Token 消费到 Agent 经济</strong><span>消费 token 只是 BitGo 的起点。同一套 <span class="text-highlight">钱包签名和支付机制</span> 可以继续扩展到模型调用、工具调用、数据购买、API 订阅、算力租赁、自动化交易、任务赏金和跨平台数字服务结算，成为连接钱包、资产、服务与 Agent 自动化消费行为的 <span class="text-highlight">基础支付层</span>。</span></div>
         </div>
       </section>
 
