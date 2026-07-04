@@ -268,9 +268,22 @@
 
     .coin-heading {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 10px;
       margin-bottom: 10px;
+    }
+
+    .coin-title {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+      min-width: 0;
+      padding-top: 2px;
+    }
+
+    .coin-title strong {
+      margin: 0;
     }
 
     .coin-logo {
@@ -294,6 +307,38 @@
     .coin-logo.btc {
       background: #fff4df;
       color: #f7931a;
+    }
+
+    .coin-tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--white);
+      color: var(--blue-dark);
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.2;
+      box-shadow: inset 0 0 0 1px rgba(0, 105, 255, 0.24);
+    }
+
+    .coin-tag.fast {
+      background: #e7f7ef;
+      color: #17633a;
+      box-shadow: inset 0 0 0 1px rgba(23, 99, 58, 0.2);
+    }
+
+    .coin-tag.medium {
+      background: #eef4ff;
+      color: #345d9d;
+      box-shadow: inset 0 0 0 1px rgba(52, 93, 157, 0.22);
+    }
+
+    .coin-tag.slow {
+      background: #fff4df;
+      color: #8c4f00;
+      box-shadow: inset 0 0 0 1px rgba(140, 79, 0, 0.22);
     }
 
     .section.dark .tile {
@@ -500,6 +545,7 @@
       .nav-links {
         flex-wrap: wrap;
       }
+
     }
 
     @media (max-width: 640px) {
@@ -580,7 +626,10 @@
                 <path d="m10 18.4 7 9.9 7-9.9-7 4.1-7-4.1Z" fill="currentColor" opacity="0.72"></path>
                 <path d="m17 13.9-7 3.1 7 4.1 7-4.1-7-3.1Z" fill="#ffffff" opacity="0.34"></path>
               </svg>
-              <strong>以太坊 ETH</strong>
+              <div class="coin-title">
+                <strong>以太坊 ETH</strong>
+                <span class="coin-tag fast">推荐：到账最快</span>
+              </div>
             </div>
             <span>官方接收地址：<code>0xa52d609f23f110d588606a9c82c7c53a0143b6b0</code><br>网络选择：ETH / ERC-20<br>预计到账：5 - 15 分钟</span>
           </div>
@@ -590,7 +639,10 @@
                 <circle cx="17" cy="17" r="17" fill="currentColor"></circle>
                 <text x="17" y="23" text-anchor="middle" font-size="19" font-weight="800" font-family="Arial, sans-serif" fill="#ffffff">Ł</text>
               </svg>
-              <strong>莱特币 LTC</strong>
+              <div class="coin-title">
+                <strong>莱特币 LTC</strong>
+                <span class="coin-tag medium">速度适中</span>
+              </div>
             </div>
             <span>官方接收地址：<code>MUVwWW6MbBcn9oPnuRU1iEmVAf8JgLgox7</code><br>网络选择：LTC / Litecoin<br>预计到账：10 - 25 分钟</span>
           </div>
@@ -600,9 +652,12 @@
                 <circle cx="17" cy="17" r="17" fill="currentColor"></circle>
                 <text x="17" y="23" text-anchor="middle" font-size="19" font-weight="800" font-family="Arial, sans-serif" fill="#ffffff">₿</text>
               </svg>
-              <strong>比特币 BTC</strong>
+              <div class="coin-title">
+                <strong>比特币 BTC</strong>
+                <span class="coin-tag slow">速度较慢</span>
+              </div>
             </div>
-            <span>官方接收地址：<code>bc1p8fhgdj7hz234rmhff8nrw8zrq6hpft3m4dp7c6749weteq0rkhksmyckre</code><br>网络选择：BTC-Taproot<br>预计到账：30 - 40 分钟</span>
+            <span>官方接收地址：<code>bc1p8fhgdj7hz234rmhff8nrw8zrq6hpft3m4dp7c6749weteg0rkhksmyckre</code><br>网络选择：BTC-Taproot<br>预计到账：30 - 40 分钟</span>
           </div>
         </div>
         <ol class="step-list">
