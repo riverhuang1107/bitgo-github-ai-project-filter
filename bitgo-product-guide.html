@@ -929,8 +929,8 @@ X-Public-Key: ECDSA_PUBLIC_KEY_HEX</code></pre>
         <ol class="step-list">
           <li>人完成链上充值，并确认资金已入账。</li>
           <li>人提供链类型、钱包地址、金额、<code>money_id</code> 和安全注入的私钥。</li>
-          <li>agent 创建钱包配置，使用 signer 生成 <code>X-Params</code>，并生成 <code>X-Nonce</code>、<code>X-Signature</code>、<code>X-Public-Key</code> 接口级签名 header。</li>
-          <li>agent 调用推理 API，对 GitHub Trending 候选仓库执行 AI 相关性判断。</li>
+          <li>agent 创建钱包配置，生成钱包参数与接口级签名 header。</li>
+          <li>agent 开发的软件调用推理 API，对 GitHub Trending 候选仓库执行 AI 相关性判断。</li>
           <li>服务端返回结构化 JSON 与 usage，系统生成报告并记录 token 消费。</li>
         </ol>
         <h3>BTC 钱包签名请求</h3>

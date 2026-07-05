@@ -942,8 +942,8 @@ X-Public-Key: ECDSA_PUBLIC_KEY_HEX</code></pre>
         <ol class="step-list">
           <li>A human completes the on-chain deposit and confirms the balance.</li>
           <li>A human provides chain type, wallet address, amount, <code>money_id</code>, and a securely injected private key.</li>
-          <li>The agent creates wallet configuration, generates <code>X-Params</code>, and creates <code>X-Nonce</code>, <code>X-Signature</code>, and <code>X-Public-Key</code>.</li>
-          <li>The agent calls the reasoning API to answer the requested AI open-source project query.</li>
+          <li>The agent creates wallet configuration and generates wallet parameters plus interface-level signature headers.</li>
+          <li>The agent-built software calls the reasoning API to answer the requested AI open-source project query.</li>
           <li>The server returns content and <code>usage</code>; the system records token consumption.</li>
         </ol>
         <h3>BTC Wallet-signed Request</h3>
