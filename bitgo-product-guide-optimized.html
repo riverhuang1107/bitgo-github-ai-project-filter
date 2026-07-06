@@ -192,6 +192,7 @@
 
     .section {
       margin-top: 28px;
+      scroll-margin-top: 92px;
       padding: 32px;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -630,6 +631,7 @@
       <section class="section" id="overview">
         <h2>1. 产品概览</h2>
         <p>bitgo 把链上充值、钱包签名和推理 API 消费连接成一条可验证的调用链。开发者可以把它用于 agent 开发过程中的模型调用，也可以嵌入到软件自身的业务逻辑中，为代码生成、审查、数据分析、内容生成和自动化任务提供推理能力。</p>
+        <p>充值地址经过加密处理后，会作为平台账户的唯一标识。后续资产处理需要使用该充值地址对应的私钥完成签名验证，因此请始终使用 MetaMask、Trust Wallet、imToken、OKX Web3 等自持私钥的钱包进行充值，并持续使用同一地址。</p>
         <div class="grid">
           <div class="tile"><strong>钱包即身份</strong><span>ETH、BTC、LTC 等钱包地址既是资产入口，也是 bitgo 识别用户和钱包记录的关键 ID。</span></div>
           <div class="tile"><strong>签名即授权</strong><span>每次调用通过钱包业务签名和接口级 ECDSA 签名共同确认身份、额度和请求来源。</span></div>
@@ -642,17 +644,20 @@
         <h2>2. 使用流程</h2>
         <p>bitgo 的主流程可以拆成五步。人负责确认资金、链和敏感授权信息，agent 或软件负责把确认后的信息转化为可验证的推理 API 请求。</p>
         <ol class="step-list">
-          <li>人向 bitgo 官方接收地址完成链上充值。</li>
-          <li>人确认 <code>wallet_chain</code>、钱包地址、金额、<code>money_id</code> 和私钥注入方式。</li>
-          <li>agent 使用 signer 生成钱包业务签名，并组装 <code>X-Params</code>。</li>
-          <li>agent 或软件携带签名 header 调用推理 API。</li>
-          <li>服务端返回模型结果与 <code>usage</code>，系统记录 token 消费和余额变化。</li>
+          <li>自持私钥 Web3 钱包向 bitgo 官方地址充值</li>
+          <li>确认同一地址、金额、私钥注入、wallet_chain/money_id</li>
+          <li>signer 生成业务签名并组装 X-Params</li>
+          <li>携带签名 header 调用推理 API</li>
+          <li>返回结果与 usage，记录 token 消费和余额</li>
         </ol>
+        <p class="callout">请勿使用交易所账户（如 Binance、OKX、Coinbase 等）地址充值。交易所地址的私钥通常不由您掌握，后续需要地址私钥签名验证时会导致资产操作无法完成。</p>
       </section>
 
       <section class="section" id="wallet-prep">
         <h2>3. 充值与钱包</h2>
-        <p>充值由人完成。请在交易所或中心化钱包中选择正确币种和主网，将资产转入对应官方接收地址。</p>
+        <p>充值由人完成。请使用自持私钥的钱包进行充值，例如 MetaMask、Trust Wallet、imToken、OKX Web3 等去中心化钱包（Web3 钱包）。请勿使用交易所账户（如 Binance、OKX、Coinbase 等）地址充值，因为交易所地址的私钥您无法获取，会导致后续资产操作异常。</p>
+        <div class="callout">为什么必须自持私钥？后续 bitgo 资产处理过程中，需要使用充值地址对应的私钥进行签名验证。如果您无法掌握该地址的私钥，相关操作将无法完成。</div>
+        <div class="warning">充值地址即账户标识：您的钱包地址经过加密处理后，将作为平台账户的唯一标识。请始终使用同一地址进行充值，更换地址将被视为不同账户。</div>
         <div class="grid three">
           <div class="tile">
             <div class="coin-heading">
@@ -688,10 +693,10 @@
           <thead><tr><th>字段</th><th>来源</th><th>说明</th></tr></thead>
           <tbody>
             <tr><td><code>wallet_chain</code></td><td>人确认</td><td>链类型，当前使用 <code>eth</code>、<code>ltc</code> 或 <code>btc</code>。</td></tr>
-            <tr><td><code>wallet_address</code></td><td>人确认</td><td>链上钱包地址，也是 bitgo 识别用户和钱包记录的关键 ID。</td></tr>
+            <tr><td><code>wallet_address</code></td><td>人确认</td><td>链上钱包地址，也是 bitgo 加密处理后的账户唯一标识；请持续使用同一自持私钥地址。</td></tr>
             <tr><td><code>money</code></td><td>人确认</td><td>充值金额或面额，agent 不应根据地址外观或余额自行推断。</td></tr>
             <tr><td><code>money_id</code></td><td>人确认</td><td>金额记录或钱包记录 ID，用于服务端识别本次授权资金。</td></tr>
-            <tr><td>private key</td><td>安全注入</td><td>通过环境变量、Secret 管理器或部署平台注入，不写入仓库、文档或日志。</td></tr>
+            <tr><td>private key</td><td>用户自持</td><td>必须由充值地址所有者掌握，用于后续 bitgo 资产处理中的签名验证。请使用可导出或可签名的 Web3 钱包私钥/账户授权能力，切勿使用无法取得私钥的交易所地址；工程接入时再通过环境变量、Secret 管理器或部署平台安全注入，不写入仓库、文档或日志。</td></tr>
           </tbody>
         </table>
         <div class="warning">安全提示：地址填错、主网选错或 Taproot/ERC-20 等网络类型不匹配，可能导致资产永久丢失。</div>

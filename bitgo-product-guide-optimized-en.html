@@ -192,6 +192,7 @@
 
     .section {
       margin-top: 28px;
+      scroll-margin-top: 92px;
       padding: 32px;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -630,6 +631,7 @@
       <section class="section" id="overview">
         <h2>1. Product Overview</h2>
         <p>bitgo connects on-chain deposits, wallet signatures, and reasoning API consumption into a verifiable request path. Developers can use it for model calls during agent development, or embed it inside application logic for code generation, review, data analysis, content generation, and automated tasks.</p>
+        <p>After encryption, the deposit address is used as the platform account's unique identifier. Later asset processing requires signature verification with the private key corresponding to that deposit address, so always deposit from a self-custody wallet such as MetaMask, Trust Wallet, imToken, or OKX Web3, and keep using the same address.</p>
         <div class="grid">
           <div class="tile"><strong>Wallet as identity</strong><span>ETH, BTC, and LTC wallet addresses serve as both funding endpoints and the key IDs used by bitgo to identify users and wallet records.</span></div>
           <div class="tile"><strong>Signature as authorization</strong><span>Each request combines a wallet business signature with an interface-level ECDSA signature to verify identity, amount, and request origin.</span></div>
@@ -642,17 +644,20 @@
         <h2>2. Workflow</h2>
         <p>The bitgo flow has five steps. Humans confirm funds, chain, and sensitive authorization details; agents or software turn the confirmed information into a verifiable reasoning API request.</p>
         <ol class="step-list">
-          <li>A human deposits assets to the official bitgo receiving address.</li>
-          <li>A human confirms <code>wallet_chain</code>, wallet address, amount, <code>money_id</code>, and the private-key injection method.</li>
-          <li>The agent uses the signer to create the wallet business signature and assemble <code>X-Params</code>.</li>
-          <li>The agent or software calls the reasoning API with signed headers.</li>
-          <li>The server returns the model result and <code>usage</code>, and the system records token consumption and balance changes.</li>
+          <li>Deposit from a self-custody Web3 wallet to the official bitgo address</li>
+          <li>Confirm same address, amount, private-key injection, wallet_chain/money_id</li>
+          <li>Signer creates the business signature and assembles X-Params</li>
+          <li>Call the reasoning API with signed headers</li>
+          <li>Return results and usage, then record token spend and balance</li>
         </ol>
+        <p class="callout">Do not deposit from exchange accounts such as Binance, OKX, or Coinbase. Exchange address private keys are usually not controlled by you, so later address-private-key signature verification may make asset operations impossible.</p>
       </section>
 
       <section class="section" id="wallet-prep">
         <h2>3. Deposit and Wallet Preparation</h2>
-        <p>Deposits are completed by a human. In an exchange or custodial wallet, choose the correct asset and mainnet, then transfer funds to the matching official receiving address.</p>
+        <p>Deposits are completed by a human. Use a self-custody wallet for deposits, such as MetaMask, Trust Wallet, imToken, or OKX Web3, which are decentralized wallets (Web3 wallets). Do not deposit from exchange accounts such as Binance, OKX, or Coinbase, because you cannot obtain the private key for an exchange address and later asset operations may fail.</p>
+        <div class="callout">Why must the wallet be self-custody? During later bitgo asset processing, the private key corresponding to the deposit address is required for signature verification. If you do not control that private key, the related operation cannot be completed.</div>
+        <div class="warning">The deposit address is the account identifier: after encryption, your wallet address is used as the platform account's unique identifier. Always deposit from the same address; changing addresses will be treated as a different account.</div>
         <div class="grid three">
           <div class="tile">
             <div class="coin-heading">
@@ -688,10 +693,10 @@
           <thead><tr><th>Field</th><th>Source</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td><code>wallet_chain</code></td><td>Human-confirmed</td><td>Chain type. Current values are <code>eth</code>, <code>ltc</code>, or <code>btc</code>.</td></tr>
-            <tr><td><code>wallet_address</code></td><td>Human-confirmed</td><td>On-chain wallet address and the key ID used by bitgo to identify the user and wallet record.</td></tr>
+            <tr><td><code>wallet_address</code></td><td>Human-confirmed</td><td>On-chain wallet address and the encrypted account-unique identifier used by bitgo; keep using the same self-custody private-key address.</td></tr>
             <tr><td><code>money</code></td><td>Human-confirmed</td><td>Deposit amount or denomination. Agents should not infer it from address format or balance.</td></tr>
             <tr><td><code>money_id</code></td><td>Human-confirmed</td><td>Amount record or wallet record ID used by the server to identify the authorized funds.</td></tr>
-            <tr><td>private key</td><td>Secure injection</td><td>Inject through environment variables, a secret manager, or the deployment platform. Do not write it to repositories, documents, or logs.</td></tr>
+            <tr><td>private key</td><td>User self-custody</td><td>Must be controlled by the owner of the deposit address and is used for signature verification during later bitgo asset processing. Use a Web3 wallet private key or account authorization capability that can export keys or sign messages; do not use exchange addresses whose private keys cannot be obtained. For engineering integration, inject it securely through environment variables, a secret manager, or the deployment platform, and do not write it to repositories, documents, or logs.</td></tr>
           </tbody>
         </table>
         <div class="warning">Security note: a wrong address, wrong mainnet, or mismatched network type such as Taproot/ERC-20 may cause permanent asset loss.</div>
