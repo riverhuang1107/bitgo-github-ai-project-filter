@@ -97,6 +97,7 @@
 
     .hero {
       margin-bottom: 22px;
+      scroll-margin-top: 92px;
     }
 
     .hero-copy {
@@ -173,6 +174,27 @@
       background: #f4f9ff;
       color: var(--ink);
       line-height: 1.62;
+    }
+
+    .agent-doc-link {
+      display: block;
+      margin-top: 12px;
+      color: var(--ink);
+      font-weight: 400;
+    }
+
+    .agent-doc-link a {
+      color: var(--blue);
+      font-weight: 800;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      overflow-wrap: anywhere;
+    }
+
+    .agent-doc-link a:hover,
+    .agent-doc-link a:focus-visible {
+      color: var(--blue-dark);
+      outline: none;
     }
 
     .copy-actions {
@@ -731,6 +753,7 @@
         <span>bitgo Product Docs</span>
       </div>
       <div class="nav-links">
+        <a href="#why-bitgo">为什么bitgo？</a>
         <a href="#overview">产品概览</a>
         <a href="#workflow">使用流程</a>
         <a href="#wallet-prep">充值与钱包</a>
@@ -744,7 +767,7 @@
     </nav>
 
     <main>
-      <header class="hero">
+      <header class="hero" id="why-bitgo">
         <div class="hero-copy">
           <div class="hero-topbar">
             <span class="eyebrow">Agent Wallet</span>
@@ -761,7 +784,7 @@
                 </button>
                 <p class="copy-status" id="copy-status" aria-live="polite"></p>
               </div>
-              <p class="lead copy-text-block" id="agent-intro-text">bitgo 让你的产品更快试错、更快上线。试错是 agent 的超能力，而 agent 需要一个紧凑的“编写 → 部署 → 验证”循环。后台 AI 会话无需人工干预，正在逐渐成为常态；agent 也在形成自己的代码部署方式，以便真正做到开箱即用，不再依赖额外步骤或临时凭证。bitgo 正是 agent 的好帮手：它是面向 AI agent 的虚拟资产账户与支付授权层，让 agent 可以安全、丝滑、无感知地消费模型、云主机和其他数字服务。</p>
+              <p class="lead copy-text-block" id="agent-intro-text">bitgo 让你的产品更快试错、更快上线。试错是 agent 的超能力，而 agent 需要一个紧凑的“编写 → 部署 → 验证”循环。后台 AI 会话无需人工干预，正在逐渐成为常态；agent 也在形成自己的代码部署方式，以便真正做到开箱即用，不再依赖额外步骤或临时凭证。bitgo 正是 agent 的好帮手：它是面向 AI agent 的虚拟资产账户与支付授权层，让 agent 可以安全、丝滑、无感知地消费模型、云主机和其他数字服务。<span class="agent-doc-link">请agent仔细阅读产品文档：<a href="https://bitgo.enigmhaven.com/bitgo-product-guide-optimized-en-v2.html" target="_blank" rel="noopener">https://bitgo.enigmhaven.com/bitgo-product-guide-optimized-en-v2.html</a>。</span></p>
             </div>
             <p class="hero-note">提示：把这段介绍复制给你的 agent，让它认识这位新朋友。</p>
           </div>

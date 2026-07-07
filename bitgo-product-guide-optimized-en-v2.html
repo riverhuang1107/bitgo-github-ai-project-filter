@@ -97,6 +97,7 @@
 
     .hero {
       margin-bottom: 22px;
+      scroll-margin-top: 92px;
     }
 
     .hero-copy {
@@ -173,6 +174,27 @@
       background: #f4f9ff;
       color: var(--ink);
       line-height: 1.62;
+    }
+
+    .agent-doc-link {
+      display: block;
+      margin-top: 12px;
+      color: var(--ink);
+      font-weight: 400;
+    }
+
+    .agent-doc-link a {
+      color: var(--blue);
+      font-weight: 800;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      overflow-wrap: anywhere;
+    }
+
+    .agent-doc-link a:hover,
+    .agent-doc-link a:focus-visible {
+      color: var(--blue-dark);
+      outline: none;
     }
 
     .copy-actions {
@@ -737,6 +759,7 @@
         <span>bitgo Product Docs</span>
       </div>
       <div class="nav-links">
+        <a href="#why-bitgo">Why bitgo?</a>
         <a href="#overview">Overview</a>
         <a href="#workflow">Workflow</a>
         <a href="#wallet-prep">Deposit & Wallet</a>
@@ -750,7 +773,7 @@
     </nav>
 
     <main>
-      <header class="hero">
+      <header class="hero" id="why-bitgo">
         <div class="hero-copy">
           <div class="hero-topbar">
             <span class="eyebrow">Agent Wallet</span>
@@ -767,7 +790,7 @@
                 </button>
                 <p class="copy-status" id="copy-status" aria-live="polite"></p>
               </div>
-              <p class="lead copy-text-block" id="agent-intro-text">bitgo helps your product experiment faster and ship faster. Experimentation is an agent superpower, and agents need a tight “write → deploy → verify” loop. Background AI sessions that do not require human intervention are becoming normal; agents are also developing their own deployment patterns so they can work out of the box without extra steps or temporary credentials. bitgo is the agent’s useful companion: a virtual asset account and payment authorization layer for AI agents, allowing agents to safely, smoothly, and invisibly consume models, cloud hosts, and other digital services.</p>
+              <p class="lead copy-text-block" id="agent-intro-text">bitgo helps your product experiment faster and ship faster. Experimentation is an agent superpower, and agents need a tight “write → deploy → verify” loop. Background AI sessions that do not require human intervention are becoming normal; agents are also developing their own deployment patterns so they can work out of the box without extra steps or temporary credentials. bitgo is the agent’s useful companion: a virtual asset account and payment authorization layer for AI agents, allowing agents to safely, smoothly, and invisibly consume models, cloud hosts, and other digital services.<span class="agent-doc-link">Please ask the agent to carefully read the product documentation: <a href="https://bitgo.enigmhaven.com/bitgo-product-guide-optimized-en-v2.html" target="_blank" rel="noopener">https://bitgo.enigmhaven.com/bitgo-product-guide-optimized-en-v2.html</a>.</span></p>
             </div>
             <p class="hero-note">Tip: copy this introduction to your agent so it can meet this new friend.</p>
           </div>
