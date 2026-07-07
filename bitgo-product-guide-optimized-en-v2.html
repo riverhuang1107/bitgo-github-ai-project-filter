@@ -813,7 +813,7 @@
         <h2>Workflow</h2>
         <p>The bitgo flow has five steps. Humans confirm funds, chain, and sensitive authorization details; agents or software turn the confirmed information into a verifiable reasoning API request.</p>
         <figure class="workflow-figure">
-          <img src="assets/bitgo-workflow-diagram-en-v2.png?v=arrow-labels" alt="bitgo workflow diagram: wallet deposit, confirm params, sign authorization, call API, record usage">
+          <img src="assets/bitgo-workflow-diagram-en-v2.png?v=arrow-labels-v2" alt="bitgo workflow diagram: wallet deposit, confirm params, sign authorization, call API, record usage">
         </figure>
         <ol class="step-list">
           <li>Deposit from a self-custody Web3 wallet to the official bitgo address</li>
@@ -904,7 +904,7 @@
         <table>
           <thead><tr><th>Item</th><th>Value</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td><code>endpoint</code></td><td><code>https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages</code></td><td>Reasoning API request URL</td></tr>
+            <tr><td><code>endpoint</code></td><td><code>https://api-bitgo.enigmhaven.com/v1/messages</code></td><td>Reasoning API request URL</td></tr>
             <tr><td><code>method</code></td><td><code>POST</code></td><td>Send a JSON request body</td></tr>
             <tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>Always use JSON</td></tr>
             <tr><td><code>X-Params</code></td><td><code>BASE64_ENCODED_WALLET_PARAMS</code></td><td>Wallet business-signature authentication parameter</td></tr>
@@ -1040,7 +1040,7 @@
         <h3>Full BTC request example</h3>
         <pre><code class="language-json">{
   &quot;method&quot;: &quot;POST&quot;,
-  &quot;url&quot;: &quot;https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages&quot;,
+  &quot;url&quot;: &quot;https://api-bitgo.enigmhaven.com/v1/messages&quot;,
   &quot;headers&quot;: {
     &quot;Content-Type&quot;: &quot;application/json&quot;,
     &quot;X-Params&quot;: &quot;BASE64_ENCODED_WALLET_PARAMS&quot;,
@@ -1092,7 +1092,7 @@
   }
 }</code></pre>
         <h3>curl connectivity test</h3>
-        <pre><code>curl -X POST &quot;https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages&quot;   -H &quot;Content-Type: application/json&quot;   -H &quot;X-Params: BASE64_ENCODED_WALLET_PARAMS&quot;   -H &quot;X-Nonce: RANDOM_NONCE&quot;   -H &quot;X-Signature: ECDSA_SIGNATURE_HEX&quot;   -H &quot;X-Public-Key: ECDSA_PUBLIC_KEY_HEX&quot;   --data-raw '{
+        <pre><code>curl -X POST &quot;https://api-bitgo.enigmhaven.com/v1/messages&quot;   -H &quot;Content-Type: application/json&quot;   -H &quot;X-Params: BASE64_ENCODED_WALLET_PARAMS&quot;   -H &quot;X-Nonce: RANDOM_NONCE&quot;   -H &quot;X-Signature: ECDSA_SIGNATURE_HEX&quot;   -H &quot;X-Public-Key: ECDSA_PUBLIC_KEY_HEX&quot;   --data-raw '{
     &quot;model&quot;: &quot;claude-4.6-opus&quot;,
     &quot;max_tokens&quot;: 1024,
     &quot;stream&quot;: false,

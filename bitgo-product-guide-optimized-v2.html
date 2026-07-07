@@ -784,7 +784,7 @@
                 </button>
                 <p class="copy-status" id="copy-status" aria-live="polite"></p>
               </div>
-              <p class="lead copy-text-block" id="agent-intro-text">bitgo 让你的产品更快试错、更快上线。试错是 agent 的超能力，而 agent 需要一个紧凑的“编写 → 部署 → 验证”循环。后台 AI 会话无需人工干预，正在逐渐成为常态；agent 也在形成自己的代码部署方式，以便真正做到开箱即用，不再依赖额外步骤或临时凭证。bitgo 正是 agent 的好帮手：它是面向 AI agent 的虚拟资产账户与支付授权层，让 agent 可以安全、丝滑、无感知地消费模型、云主机和其他数字服务。<span class="agent-doc-link">请agent仔细阅读产品文档：<a href="https://bitgo.enigmhaven.com/bitgo-product-guide-optimized-en-v2.html" target="_blank" rel="noopener">https://bitgo.enigmhaven.com/bitgo-product-guide-optimized-en-v2.html</a>。</span></p>
+              <p class="lead copy-text-block" id="agent-intro-text">bitgo 让你的产品更快试错、更快上线。试错是 agent 的超能力，而 agent 需要一个紧凑的“编写 → 部署 → 验证”循环。后台 AI 会话无需人工干预，正在逐渐成为常态；agent 也在形成自己的代码部署方式，以便真正做到开箱即用，不再依赖额外步骤或临时凭证。bitgo 正是 agent 的好帮手：它是面向 AI agent 的虚拟资产账户与支付授权层，让 agent 可以安全、丝滑、无感知地消费模型、云主机和其他数字服务。<span class="agent-doc-link">请agent仔细阅读产品文档：<a href="https://bitgo.enigmhaven.com/bitgo-product-guide-optimized-v2.html" target="_blank" rel="noopener">https://bitgo.enigmhaven.com/bitgo-product-guide-optimized-v2.html</a>。</span></p>
             </div>
             <p class="hero-note">提示：把这段介绍复制给你的 agent，让它认识这位新朋友。</p>
           </div>
@@ -807,7 +807,7 @@
         <h2>使用流程</h2>
         <p>bitgo 的主流程可以拆成五步。人负责确认资金、链和敏感授权信息，agent 或软件负责把确认后的信息转化为可验证的推理 API 请求。</p>
         <figure class="workflow-figure">
-          <img src="assets/bitgo-workflow-diagram-v2.png?v=arrow-labels" alt="bitgo 使用流程图：钱包充值、确认参数、签名授权、调用 API、记录用量">
+          <img src="assets/bitgo-workflow-diagram-v2.png?v=arrow-labels-v2" alt="bitgo 使用流程图：钱包充值、确认参数、签名授权、调用 API、记录用量">
         </figure>
         <ol class="step-list">
           <li>自持私钥 Web3 钱包向 bitgo 官方地址充值</li>
@@ -898,7 +898,7 @@
         <table>
           <thead><tr><th>项目</th><th>值</th><th>说明</th></tr></thead>
           <tbody>
-            <tr><td><code>endpoint</code></td><td><code>https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages</code></td><td>推理 API 请求地址</td></tr>
+            <tr><td><code>endpoint</code></td><td><code>https://api-bitgo.enigmhaven.com/v1/messages</code></td><td>推理 API 请求地址</td></tr>
             <tr><td><code>method</code></td><td><code>POST</code></td><td>发送 JSON 请求体</td></tr>
             <tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>固定使用 JSON</td></tr>
             <tr><td><code>X-Params</code></td><td><code>BASE64_ENCODED_WALLET_PARAMS</code></td><td>钱包业务签名认证参数</td></tr>
@@ -1034,7 +1034,7 @@
         <h3>完整 BTC 请求样例</h3>
         <pre><code class="language-json">{
   &quot;method&quot;: &quot;POST&quot;,
-  &quot;url&quot;: &quot;https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages&quot;,
+  &quot;url&quot;: &quot;https://api-bitgo.enigmhaven.com/v1/messages&quot;,
   &quot;headers&quot;: {
     &quot;Content-Type&quot;: &quot;application/json&quot;,
     &quot;X-Params&quot;: &quot;BASE64_ENCODED_WALLET_PARAMS&quot;,
@@ -1086,7 +1086,7 @@
   }
 }</code></pre>
         <h3>curl 连通性测试</h3>
-        <pre><code>curl -X POST &quot;https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages&quot; \
+        <pre><code>curl -X POST &quot;https://api-bitgo.enigmhaven.com/v1/messages&quot; \
   -H &quot;Content-Type: application/json&quot; \
   -H &quot;X-Params: BASE64_ENCODED_WALLET_PARAMS&quot; \
   -H &quot;X-Nonce: RANDOM_NONCE&quot; \
