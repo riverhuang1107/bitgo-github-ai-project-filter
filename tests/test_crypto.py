@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import base64
 import json
+from datetime import datetime, timezone
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, utils
@@ -10,6 +11,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, utils
 from github_ai_daily.crypto import (
     WalletAuth,
     build_x_params,
+    generate_money_id,
     generate_wallet,
     generate_private_key,
     interface_signature_message,
@@ -41,6 +43,18 @@ def test_generated_signature_verifies_prehashed(tmp_path: Path):
         ec.ECDSA(utils.Prehashed(hashes.SHA256())),
     )
     assert bytes.fromhex(headers["X-Public-Key"]).startswith(b"0")
+
+
+def test_generate_money_id_is_prefixed_timestamped_and_unique():
+    now = datetime(2026, 7, 7, 1, 2, 3, 456789, tzinfo=timezone.utc)
+
+    first = generate_money_id(now)
+    second = generate_money_id(now)
+
+    assert first.startswith("money_20260707010203456789_")
+    assert second.startswith("money_20260707010203456789_")
+    assert first != second
+    assert len(first.rsplit("_", 1)[1]) == 12
 
 
 def test_build_x_params_from_wallet_signer(monkeypatch, tmp_path: Path):

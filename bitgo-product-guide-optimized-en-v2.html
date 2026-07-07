@@ -817,7 +817,7 @@
         </figure>
         <ol class="step-list">
           <li>Deposit from a self-custody Web3 wallet to the official bitgo address</li>
-          <li>Confirm same address, amount, private-key injection, wallet_chain/money_id</li>
+          <li>Confirm same address, amount, private-key injection, and wallet_chain; the agent generates money_id automatically</li>
           <li>Signer creates the business signature and assembles X-Params</li>
           <li>Call the reasoning API with signed headers</li>
           <li>Return results and usage, then record token spend and balance</li>
@@ -842,7 +842,7 @@
               <div class="coin-title"><strong>Ethereum ETH</strong><span class="coin-tag fast">Recommended: fastest arrival</span></div>
             </div>
             <div class="deposit-qr"><img src="assets/bitgo-deposit-eth-qr.png" alt="Official Ethereum ETH receiving address QR code"><span class="qr-caption">Scan to deposit</span></div>
-            <span>Official receiving address: <code>0xa52d609f23f110d588606a9c82c7c53a0143b6b0</code><br>Network: ETH / ERC-20<br>Estimated arrival: 5 - 15 minutes</span>
+            <span>Official receiving address: <code>0xc69a023f3de9dc30b908d372646a4ca0664036b3</code><br>Network: ETH / ERC-20<br>Estimated arrival: 5 - 15 minutes</span>
           </div>
           <div class="tile">
             <div class="coin-heading">
@@ -850,7 +850,7 @@
               <div class="coin-title"><strong>Litecoin LTC</strong><span class="coin-tag medium">Moderate speed</span></div>
             </div>
             <div class="deposit-qr"><img src="assets/bitgo-deposit-ltc-qr.png" alt="Official Litecoin LTC receiving address QR code"><span class="qr-caption">Scan to deposit</span></div>
-            <span>Official receiving address: <code>MUVwWW6MbBcn9oPnuRU1iEmVAf8JgLgox7</code><br>Network: LTC / Litecoin<br>Estimated arrival: 10 - 25 minutes</span>
+            <span>Official receiving address: <code>MByRNAUwr2tpPQd9wpiovRMS84F9f48imX</code><br>Network: LTC / Litecoin<br>Estimated arrival: 10 - 25 minutes</span>
           </div>
           <div class="tile">
             <div class="coin-heading">
@@ -858,7 +858,7 @@
               <div class="coin-title"><strong>Bitcoin BTC</strong><span class="coin-tag slow">Slower arrival</span></div>
             </div>
             <div class="deposit-qr"><img src="assets/bitgo-deposit-btc-qr.png" alt="Official Bitcoin BTC receiving address QR code"><span class="qr-caption">Scan to deposit</span></div>
-            <span>Official receiving address: <code>bc1p8fhgdj7hz234rmhff8nrw8zrq6hpft3m4dp7c6749weteg0rkhksmyckre</code><br>Network: BTC-Taproot<br>Estimated arrival: 30 - 40 minutes</span>
+            <span>Official receiving address: <code>bc1pz25cvy8vh62m5f2h3tksdqhhlpflumq26dvfny6r9v3fmpq4fa2s488cfx</code><br>Network: BTC-Taproot<br>Estimated arrival: 30 - 40 minutes</span>
           </div>
         </div>
         <table>
@@ -867,7 +867,7 @@
             <tr><td><code>wallet_chain</code></td><td>Human-confirmed</td><td>Chain type. Current values are <code>eth</code>, <code>ltc</code>, or <code>btc</code>.</td></tr>
             <tr><td><code>wallet_address</code></td><td>Human-confirmed</td><td>On-chain wallet address and the encrypted account-unique identifier used by bitgo; keep using the same self-custody private-key address.</td></tr>
             <tr><td><code>money</code></td><td>Human-confirmed</td><td>Deposit amount or denomination. Agents should not infer it from address format or balance.</td></tr>
-            <tr><td><code>money_id</code></td><td>Human-confirmed</td><td>Amount record or wallet record ID used by the server to identify the authorized funds.</td></tr>
+            <tr><td><code>money_id</code></td><td>Agent-generated</td><td>Amount record or wallet record ID. It must be unique, unpredictable, and suitable for the server to identify this authorization; format example: <code>money_20260707_a8f3c91b2e4d</code>.</td></tr>
             <tr><td>private key</td><td>User self-custody</td><td>Must be controlled by the owner of the deposit address and is used for signature verification during later bitgo asset processing. Use a Web3 wallet private key or account authorization capability that can export keys or sign messages; do not use exchange addresses whose private keys cannot be obtained. For engineering integration, inject it securely through environment variables, a secret manager, or the deployment platform, and do not write it to repositories, documents, or logs.</td></tr>
           </tbody>
         </table>
@@ -880,7 +880,7 @@
         <h3>Wallet business signature</h3>
         <pre><code>${wallet_address}${money}${money_id}</code></pre>
         <ol>
-          <li>A human provides the chain type, wallet address, amount, <code>money_id</code>, and securely injected private key.</li>
+          <li>A human provides the chain type, wallet address, amount, and securely injected private key; the agent generates a unique, unpredictable <code>money_id</code> for this authorization.</li>
           <li>The agent concatenates <code>wallet_address + money + money_id</code> as the signing message and runs <code>sha256.Sum256</code>.</li>
           <li>The signer selects ECDSA, Schnorr, or Ethereum signing based on chain and address type.</li>
           <li>The signature is base64-encoded, then assembled into JSON with the wallet address, amount, and <code>money_id</code>.</li>
@@ -984,7 +984,7 @@
         <h2>Security Notes</h2>
         <ul>
           <li>Do not write real private keys, complete <code>X-Params</code>, complete <code>X-Signature</code>, <code>X-Public-Key</code>, or management tokens into repositories.</li>
-          <li>Chain type, deposit network, amount, and <code>money_id</code> must be confirmed by a human before being used by an agent.</li>
+          <li>Chain type, deposit network, and amount must be confirmed by a human; <code>money_id</code> is generated automatically by the agent and should not be manually requested from the user.</li>
           <li>Private keys should be injected through environment variables, a secret manager, or the deployment platform, and should not appear in config templates.</li>
           <li>Before depositing, verify the official receiving address and mainnet. Transfers to a wrong address or wrong network cannot be automatically recovered by the agent or software.</li>
           <li>When software calls the reasoning API, record <code>usage</code>, but do not log sensitive headers or private-key material.</li>
@@ -1105,7 +1105,7 @@
             <tr><td><code>wallet_chain</code></td><td>Chain type. Current values are <code>eth</code>, <code>ltc</code>, or <code>btc</code>.</td></tr>
             <tr><td><code>wallet_address</code></td><td>On-chain address used as the key ID for the user and wallet record.</td></tr>
             <tr><td><code>money</code></td><td>Human-confirmed amount or denomination.</td></tr>
-            <tr><td><code>money_id</code></td><td>Amount record or wallet record ID.</td></tr>
+            <tr><td><code>money_id</code></td><td>Agent-generated amount record or wallet record ID, with a format such as <code>money_20260707_a8f3c91b2e4d</code>.</td></tr>
             <tr><td><code>signature</code></td><td>Base64 string produced by signing <code>wallet_address + money + money_id</code>.</td></tr>
             <tr><td><code>X-Params</code></td><td>Header value produced by base64-encoding the wallet parameter JSON.</td></tr>
             <tr><td><code>X-Nonce</code></td><td>Random string used in the interface-level signature.</td></tr>

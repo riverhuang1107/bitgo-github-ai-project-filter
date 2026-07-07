@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from datetime import datetime, timezone
 import hashlib
 import json
 import secrets
@@ -14,6 +15,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, utils
 
 SUPPORTED_WALLET_CHAINS = {"ltc", "btc", "eth"}
+MONEY_ID_RANDOM_BYTES = 6
 
 
 @dataclass(slots=True)
@@ -47,6 +49,11 @@ class GeneratedWallet:
     chain: str
     wallet_address: str
     private_key: str
+
+
+def generate_money_id(now: datetime | None = None) -> str:
+    timestamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%d%H%M%S%f")
+    return f"money_{timestamp}_{secrets.token_hex(MONEY_ID_RANDOM_BYTES)}"
 
 
 def generate_private_key(path: Path, overwrite: bool = False) -> None:

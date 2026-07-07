@@ -33,7 +33,7 @@ Defaults and required inputs:
 
 - wallet address: `MTymcTbieD5u3K8Vfsa7eHN3NZuKQzwTpk`
 - money: required; use the amount provided by a person, for example `--money YOUR_WALLET_MONEY`
-- money id: `20260630001`
+- money id: generated automatically as `money_<timestamp>_<random>` unless `--money-id` is provided for an existing record
 - endpoint: `https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages`
 - model: `deepseek-v3`
 - request message: `你好`

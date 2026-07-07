@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import base64
+from datetime import datetime, timezone
 import json
 import os
+import secrets
 import subprocess
 import sys
 import urllib.error
@@ -14,7 +16,6 @@ from typing import Any
 
 DEFAULT_ENDPOINT = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
 DEFAULT_WALLET_ADDRESS = "MTymcTbieD5u3K8Vfsa7eHN3NZuKQzwTpk"
-DEFAULT_MONEY_ID = "20260630001"
 DEFAULT_MODEL = "deepseek-v3"
 
 
@@ -31,7 +32,7 @@ def main() -> int:
     params = run_signer(
         wallet_address=args.wallet_address,
         money=args.money,
-        money_id=args.money_id,
+        money_id=args.money_id or generate_money_id(),
         private_key_wif=private_key_wif,
         debug=args.debug,
     )
@@ -71,7 +72,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--wallet-address", default=DEFAULT_WALLET_ADDRESS)
     parser.add_argument("--money", required=True)
-    parser.add_argument("--money-id", default=DEFAULT_MONEY_ID)
+    parser.add_argument("--money-id", help="optional existing money_id; generated when omitted")
     parser.add_argument("--private-key-wif")
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     parser.add_argument("--model", default=DEFAULT_MODEL)
@@ -79,6 +80,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--debug", action="store_true", help="print digest validation metadata")
     parser.add_argument("--max-response-chars", type=int, default=2000)
     return parser.parse_args()
+
+
+def generate_money_id() -> str:
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+    return f"money_{timestamp}_{secrets.token_hex(6)}"
 
 
 def run_signer(

@@ -14,7 +14,13 @@ from .config import (
     default_config_path,
     user_config_dir,
 )
-from .crypto import WalletAuth, generate_private_key, generate_wallet, load_private_key
+from .crypto import (
+    WalletAuth,
+    generate_money_id,
+    generate_private_key,
+    generate_wallet,
+    load_private_key,
+)
 from .github import GitHubClient
 from .mail import (
     SMTP_KEY,
@@ -89,7 +95,10 @@ def _wallet_args(command: argparse.ArgumentParser) -> None:
     command.add_argument("--chain", choices=["ltc", "btc", "eth"])
     command.add_argument("--wallet-address")
     command.add_argument("--money")
-    command.add_argument("--money-id")
+    command.add_argument(
+        "--money-id",
+        help="Optional existing authorization money_id; generated automatically when omitted",
+    )
     command.add_argument("--private-key")
     command.add_argument("--signer-command")
     command.add_argument(
@@ -301,6 +310,14 @@ def reasoning_auth(settings: Settings, args=None) -> WalletAuth:
     private_key = (
         generated.private_key if generated else _private_key_for_chain(args, chain)
     )
+    money_id = (
+        generate_money_id()
+        if use_new_wallet
+        else _wallet_value(
+            args, settings, profile, chain, "money_id", "REASONING_MONEY_ID"
+        )
+        or generate_money_id()
+    )
     auth = WalletAuth(
         chain=chain,
         wallet_address=(
@@ -316,9 +333,7 @@ def reasoning_auth(settings: Settings, args=None) -> WalletAuth:
             )
         ),
         money=_wallet_value(args, settings, profile, chain, "money", "REASONING_MONEY"),
-        money_id=_wallet_value(
-            args, settings, profile, chain, "money_id", "REASONING_MONEY_ID"
-        ),
+        money_id=money_id,
         private_key=private_key,
         signer_command=signer_command,
     )

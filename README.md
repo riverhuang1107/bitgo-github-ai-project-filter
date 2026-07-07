@@ -55,7 +55,8 @@ model = "claude-4.6-opus"
 wallet_chain = "YOUR_WALLET_CHAIN"
 wallet_address = "YOUR_WALLET_ADDRESS"
 money = "YOUR_WALLET_MONEY"
-money_id = "YOUR_MONEY_ID"
+# Optional existing record override; omit to auto-generate money_<timestamp>_<random>.
+money_id = ""
 signer_command = ""
 
 [mail]
@@ -223,8 +224,8 @@ export GITHUB_AI_SECRET_DELETE_CMD="/opt/secrets/delete"
 .venv/bin/github-ai-daily mail test --to ops@example.com
 RESEND_MANAGEMENT_API_KEY=re_... .venv/bin/github-ai-daily mail rotate
 RESEND_MANAGEMENT_API_KEY=re_... .venv/bin/github-ai-daily mail remove
-REASONING_PRIVATE_KEY=... .venv/bin/github-ai-daily reasoning test --chain YOUR_WALLET_CHAIN --wallet-address YOUR_WALLET_ADDRESS --money YOUR_WALLET_MONEY --money-id YOUR_MONEY_ID
-REASONING_NEW_WALLET=true .venv/bin/github-ai-daily reasoning test --chain eth --money YOUR_WALLET_MONEY --money-id YOUR_MONEY_ID
+REASONING_PRIVATE_KEY=... .venv/bin/github-ai-daily reasoning test --chain YOUR_WALLET_CHAIN --wallet-address YOUR_WALLET_ADDRESS --money YOUR_WALLET_MONEY
+REASONING_NEW_WALLET=true .venv/bin/github-ai-daily reasoning test --chain eth --money YOUR_WALLET_MONEY
 ```
 
 `generate` 只生成报告文件，不发送邮件。通过 agent 执行邮件命令时使用 Agent Mail；在非 agent 环境中，`run --to ...`、`send ... --to ...`、`mail test` 会通过 Resend SMTP 发送邮件。
@@ -235,11 +236,11 @@ REASONING_NEW_WALLET=true .venv/bin/github-ai-daily reasoning test --chain eth -
 
 默认认证方法使用 `X-Params` 钱包业务签名，并叠加 `X-Nonce`、`X-Signature`、`X-Public-Key` 接口级 ECDSA 签名。Python CLI 负责组装请求和调用推理 API；所有加密货币私钥签名都由 Go signer 完成。
 
-调用外部推理 API 前，agent 或人工操作方必须先确认本次使用的加密货币钱包类型和业务参数，不能默认复用某个已存在的钱包、示例 `X-Params` 或上一次请求的链类型。确认项至少包括 `wallet_chain`（`ltc`、`btc` 或 `eth`）、`wallet_address`、`money`、`money_id`，以及是使用已签名的 `X-Params` 还是用对应私钥重新生成钱包业务签名；缺少确认时应先询问用户，不应发起请求。
+调用外部推理 API 前，agent 或人工操作方必须先确认本次使用的加密货币钱包类型和业务参数，不能默认复用某个已存在的钱包、示例 `X-Params` 或上一次请求的链类型。确认项至少包括 `wallet_chain`（`ltc`、`btc` 或 `eth`）、`wallet_address`、`money`，以及是使用已签名的 `X-Params` 还是用对应私钥重新生成钱包业务签名；缺少确认时应先询问用户，不应发起请求。`money_id` 由工具自动生成，必须唯一、不可预测，并适合服务端识别本次授权资金。
 
-如果用户已经明确指定某一种加密货币钱包，工具可以查找配置中是否存在同币种钱包 profile；存在时可直接使用该币种的 `wallet_address`、`money`、`money_id` 和 `signer_command`。不存在同币种 profile 时，工具不能把其他币种的旧配置混用到本次请求，必须由用户补充对应币种的钱包参数。
+如果用户已经明确指定某一种加密货币钱包，工具可以查找配置中是否存在同币种钱包 profile；存在时可直接使用该币种的 `wallet_address`、`money`、已有 `money_id` 和 `signer_command`。不存在同币种 profile 时，工具不能把其他币种的旧配置混用到本次请求，必须由用户补充对应币种的钱包参数；如果没有已有 `money_id`，工具会自动生成新的授权资金 ID。
 
-如果用户明确要求“使用一个新的钱包”发起请求，工具应使用 `--new-wallet` 或 `REASONING_NEW_WALLET=true` 为本次请求临时生成指定币种钱包，并用新钱包地址和新私钥生成 `X-Params`。新钱包私钥只用于本次进程内签名，不写入配置、README、日志或响应正文；`money` 和 `money_id` 仍必须由用户提供，或来自同币种 profile，不能从其他币种配置中继承。
+如果用户明确要求“使用一个新的钱包”发起请求，工具应使用 `--new-wallet` 或 `REASONING_NEW_WALLET=true` 为本次请求临时生成指定币种钱包，并用新钱包地址和新私钥生成 `X-Params`。新钱包私钥只用于本次进程内签名，不写入配置、README、日志或响应正文；`money` 必须由用户提供，或来自同币种 profile，不能从其他币种配置中继承；`money_id` 必须由工具为本次授权自动生成，格式类似 `money_<timestamp>_<random>`。
 
 签名消息为：
 
@@ -283,19 +284,22 @@ model = "claude-4.6-opus"
 wallet_chain = "YOUR_WALLET_CHAIN"
 wallet_address = "YOUR_WALLET_ADDRESS"
 money = "YOUR_WALLET_MONEY"
-money_id = "YOUR_MONEY_ID"
+# Optional existing record override; omit to auto-generate money_<timestamp>_<random>.
+money_id = ""
 signer_command = ""
 
 [reasoning.wallets.ltc]
 wallet_address = "YOUR_LTC_WALLET_ADDRESS"
 money = "YOUR_LTC_WALLET_MONEY"
-money_id = "YOUR_LTC_MONEY_ID"
+# Optional existing record override.
+money_id = ""
 signer_command = ""
 
 [reasoning.wallets.btc]
 wallet_address = "YOUR_BTC_WALLET_ADDRESS"
 money = "YOUR_BTC_WALLET_MONEY"
-money_id = "YOUR_BTC_MONEY_ID"
+# Optional existing record override.
+money_id = ""
 signer_command = ""
 ```
 
@@ -307,7 +311,7 @@ signer_command = ""
 - `REASONING_WALLET_CHAIN`：必需；`ltc`、`btc` 或 `eth`，必须由人提供，不能默认假设为固定链。
 - `REASONING_WALLET_ADDRESS`
 - `REASONING_MONEY`：必需；钱包面额金额，必须由人提供，不能默认假设为固定值。
-- `REASONING_MONEY_ID`
+- `REASONING_MONEY_ID`：可选；用于复用已有授权资金记录。创建钱包或创建 bitgo 钱包记录时不要要求用户手动提供，工具会自动生成类似 `money_20260707_a8f3c91b2e4d` 的唯一不可预测 ID。
 - `REASONING_SIGNER_COMMAND`：可选；用于指定预编译 signer 或自定义 signer 命令。
 
 `ltc` 已完成真实请求验证。`btc` 和 `eth` 已按同一协议在代码中实现，部署时需使用由人提供的对应链类型、钱包地址和私钥验证。地址类型会影响签名算法：非 Taproot 地址走 compact ECDSA，LTC `ltc1p...` Taproot 地址走 Schnorr，BTC `bc1p...` Taproot 地址走私钥 tweak 后的 Schnorr；如果服务端登记的钱包类型、地址派生方式、Taproot tweak 规则或签名算法不一致，可能返回 401。

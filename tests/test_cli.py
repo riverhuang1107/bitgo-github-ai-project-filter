@@ -121,6 +121,30 @@ def test_reasoning_auth_uses_matching_wallet_profile(monkeypatch):
     assert auth.signer_command == "eth-signer"
 
 
+def test_reasoning_auth_generates_money_id_when_missing(monkeypatch):
+    monkeypatch.setenv("REASONING_PRIVATE_KEY", "private")
+    monkeypatch.setattr(
+        "github_ai_daily.cli.generate_money_id", lambda: "money_generated"
+    )
+    settings = Settings(
+        wallet_chain="ltc",
+        wallet_address="wallet",
+        money="10",
+    )
+    args = Namespace(
+        private_key=None,
+        chain=None,
+        wallet_address=None,
+        money=None,
+        money_id=None,
+        signer_command=None,
+    )
+
+    auth = reasoning_auth(settings, args)
+
+    assert auth.money_id == "money_generated"
+
+
 def test_reasoning_auth_does_not_reuse_mismatched_legacy_wallet(monkeypatch):
     monkeypatch.setenv("REASONING_ETH_PRIVATE_KEY", "eth-private")
     settings = Settings(
@@ -148,6 +172,9 @@ def test_reasoning_auth_does_not_reuse_mismatched_legacy_wallet(monkeypatch):
 
 def test_reasoning_auth_generates_new_wallet_when_requested(monkeypatch):
     monkeypatch.delenv("REASONING_PRIVATE_KEY", raising=False)
+    monkeypatch.setattr(
+        "github_ai_daily.cli.generate_money_id", lambda: "money_generated"
+    )
     captured = {}
 
     def fake_generate_wallet(chain, signer_command):
@@ -172,7 +199,7 @@ def test_reasoning_auth_generates_new_wallet_when_requested(monkeypatch):
         chain="eth",
         wallet_address=None,
         money="20",
-        money_id="new-id",
+        money_id=None,
         signer_command=None,
         new_wallet=True,
     )
@@ -184,7 +211,7 @@ def test_reasoning_auth_generates_new_wallet_when_requested(monkeypatch):
     assert auth.wallet_address == "0xnew"
     assert auth.private_key == "new-private"
     assert auth.money == "20"
-    assert auth.money_id == "new-id"
+    assert auth.money_id == "money_generated"
 
 
 def test_reasoning_auth_requires_private_key(monkeypatch):
