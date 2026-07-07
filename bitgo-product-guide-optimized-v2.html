@@ -473,6 +473,21 @@
       font-weight: 800;
     }
 
+    .workflow-figure {
+      margin: 16px 0 16px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--white);
+    }
+
+    .workflow-figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 6px;
+    }
+
     .step-list {
       counter-reset: steps;
       display: grid;
@@ -754,7 +769,7 @@
       </header>
 
       <section class="section" id="overview">
-        <h2>1. 产品概览</h2>
+        <h2>产品概览</h2>
         <p>bitgo 把链上充值、钱包签名和推理 API 消费连接成一条可验证的调用链。开发者可以把它用于 agent 开发过程中的模型调用，也可以嵌入到软件自身的业务逻辑中，为代码生成、审查、数据分析、内容生成和自动化任务提供推理能力。</p>
         <p>充值地址经过加密处理后，会作为平台账户的唯一标识。后续资产处理需要使用该充值地址对应的私钥完成签名验证，因此请始终使用 MetaMask、Trust Wallet、imToken、OKX Web3 等自持私钥的钱包进行充值，并持续使用同一地址。</p>
         <div class="grid">
@@ -766,8 +781,11 @@
       </section>
 
       <section class="section dark" id="workflow">
-        <h2>2. 使用流程</h2>
+        <h2>使用流程</h2>
         <p>bitgo 的主流程可以拆成五步。人负责确认资金、链和敏感授权信息，agent 或软件负责把确认后的信息转化为可验证的推理 API 请求。</p>
+        <figure class="workflow-figure">
+          <img src="assets/bitgo-workflow-diagram-v2.png?v=arrow-labels" alt="bitgo 使用流程图：钱包充值、确认参数、签名授权、调用 API、记录用量">
+        </figure>
         <ol class="step-list">
           <li>自持私钥 Web3 钱包向 bitgo 官方地址充值</li>
           <li>确认同一地址、金额、私钥注入、wallet_chain/money_id</li>
@@ -779,7 +797,7 @@
       </section>
 
       <section class="section" id="wallet-prep">
-        <h2>3. 充值与钱包</h2>
+        <h2>充值与钱包</h2>
         <p>充值由人完成。请使用自持私钥的钱包进行充值，例如 MetaMask、Trust Wallet、imToken、OKX Web3 等去中心化钱包（Web3 钱包）。请勿使用交易所账户（如 Binance、OKX、Coinbase 等）地址充值，因为交易所地址的私钥您无法获取，会导致后续资产操作异常。</p>
         <div class="callout">为什么必须自持私钥？后续 bitgo 资产处理过程中，需要使用充值地址对应的私钥进行签名验证。如果您无法掌握该地址的私钥，相关操作将无法完成。</div>
         <div class="warning">充值地址即账户标识：您的钱包地址经过加密处理后，将作为平台账户的唯一标识。请始终使用同一地址进行充值，更换地址将被视为不同账户。</div>
@@ -828,7 +846,7 @@
       </section>
 
       <section class="section dark" id="signing-auth">
-        <h2>4. 签名认证</h2>
+        <h2>签名认证</h2>
         <p>推理 API 使用两层认证：钱包业务签名证明资金授权，接口级 ECDSA 签名证明本次 HTTP 请求没有被替换。</p>
         <h3>钱包业务签名</h3>
         <pre><code>${wallet_address}${money}${money_id}</code></pre>
@@ -852,7 +870,7 @@
       </section>
 
       <section class="section" id="api-call">
-        <h2>5. API 调用</h2>
+        <h2>API 调用</h2>
         <p>agent 或软件将任务上下文写入 <code>messages</code>，选择模型后发送到推理 API。请求体采用 Anthropic Messages 风格。</p>
         <table>
           <thead><tr><th>项目</th><th>值</th><th>说明</th></tr></thead>
@@ -907,7 +925,7 @@
       </section>
 
       <section class="section dark" id="model-pricing">
-        <h2>6. 模型价格</h2>
+        <h2>模型价格</h2>
         <p>通过请求体中的 <code>model</code> 字段选择模型。主流程建议按质量、速度和成本选择常用模型；完整模型价格表见附录。</p>
         <div class="grid">
           <div class="tile"><strong>低成本</strong><span><code>openai/gpt-5-nano</code>、<code>deepseek/deepseek-v4-flash</code>，适合批量分类、摘要和轻量判断。</span></div>
@@ -918,7 +936,7 @@
       </section>
 
       <section class="section" id="example">
-        <h2>7. 完整示例</h2>
+        <h2>完整示例</h2>
         <p>以下示例展示“GitHub 热门 AI 项目筛选”的端到端调用链路。该场景只是演示样例，实际使用时可以替换为代码片段、业务数据、文档内容、用户指令或软件运行状态。</p>
         <table>
           <thead><tr><th>阶段</th><th>内容</th></tr></thead>
@@ -934,7 +952,7 @@
       </section>
 
       <section class="section dark" id="security">
-        <h2>8. 安全事项</h2>
+        <h2>安全事项</h2>
         <ul>
           <li>不要将真实私钥、完整 <code>X-Params</code>、完整 <code>X-Signature</code>、<code>X-Public-Key</code> 或管理 token 写入仓库。</li>
           <li>链类型、充值网络、金额和 <code>money_id</code> 必须由人确认后交给 agent 使用。</li>
@@ -946,7 +964,7 @@
       </section>
 
       <section class="section" id="appendix">
-        <h2>9. 附录</h2>
+        <h2>附录</h2>
         <h3>完整模型表</h3>
         <p>单价按 USD / 1,000,000 token 展示。</p>
         <div class="table-scroll">

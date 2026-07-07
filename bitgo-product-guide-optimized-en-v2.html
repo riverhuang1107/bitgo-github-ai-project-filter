@@ -473,6 +473,21 @@
       font-weight: 800;
     }
 
+    .workflow-figure {
+      margin: 16px 0 16px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--white);
+    }
+
+    .workflow-figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 6px;
+    }
+
     .step-list {
       counter-reset: steps;
       display: grid;
@@ -760,7 +775,7 @@
       </header>
 
       <section class="section" id="overview">
-        <h2>1. Product Overview</h2>
+        <h2>Product Overview</h2>
         <p>bitgo connects on-chain deposits, wallet signatures, and reasoning API consumption into a verifiable request path. Developers can use it for model calls during agent development, or embed it inside application logic for code generation, review, data analysis, content generation, and automated tasks.</p>
         <p>After encryption, the deposit address is used as the platform account's unique identifier. Later asset processing requires signature verification with the private key corresponding to that deposit address, so always deposit from a self-custody wallet such as MetaMask, Trust Wallet, imToken, or OKX Web3, and keep using the same address.</p>
         <div class="grid">
@@ -772,8 +787,11 @@
       </section>
 
       <section class="section dark" id="workflow">
-        <h2>2. Workflow</h2>
+        <h2>Workflow</h2>
         <p>The bitgo flow has five steps. Humans confirm funds, chain, and sensitive authorization details; agents or software turn the confirmed information into a verifiable reasoning API request.</p>
+        <figure class="workflow-figure">
+          <img src="assets/bitgo-workflow-diagram-en-v2.png?v=arrow-labels" alt="bitgo workflow diagram: wallet deposit, confirm params, sign authorization, call API, record usage">
+        </figure>
         <ol class="step-list">
           <li>Deposit from a self-custody Web3 wallet to the official bitgo address</li>
           <li>Confirm same address, amount, private-key injection, wallet_chain/money_id</li>
@@ -785,7 +803,7 @@
       </section>
 
       <section class="section" id="wallet-prep">
-        <h2>3. Deposit and Wallet Preparation</h2>
+        <h2>Deposit and Wallet Preparation</h2>
         <p>Deposits are completed by a human. Use a self-custody wallet for deposits, such as MetaMask, Trust Wallet, imToken, or OKX Web3, which are decentralized wallets (Web3 wallets). Do not deposit from exchange accounts such as Binance, OKX, or Coinbase, because you cannot obtain the private key for an exchange address and later asset operations may fail.</p>
         <div class="callout">Why must the wallet be self-custody? During later bitgo asset processing, the private key corresponding to the deposit address is required for signature verification. If you do not control that private key, the related operation cannot be completed.</div>
         <div class="warning">The deposit address is the account identifier: after encryption, your wallet address is used as the platform account's unique identifier. Always deposit from the same address; changing addresses will be treated as a different account.</div>
@@ -834,7 +852,7 @@
       </section>
 
       <section class="section dark" id="signing-auth">
-        <h2>4. Signing and Authentication</h2>
+        <h2>Signing and Authentication</h2>
         <p>The reasoning API uses two authentication layers: a wallet business signature proves funding authorization, and an interface-level ECDSA signature proves that the HTTP request has not been replaced.</p>
         <h3>Wallet business signature</h3>
         <pre><code>${wallet_address}${money}${money_id}</code></pre>
@@ -858,7 +876,7 @@
       </section>
 
       <section class="section" id="api-call">
-        <h2>5. API Call</h2>
+        <h2>API Call</h2>
         <p>The agent or software writes task context into <code>messages</code>, selects a model, and sends the request to the reasoning API. The request body follows the Anthropic Messages style.</p>
         <table>
           <thead><tr><th>Item</th><th>Value</th><th>Description</th></tr></thead>
@@ -913,7 +931,7 @@
       </section>
 
       <section class="section dark" id="model-pricing">
-        <h2>6. Models and Pricing</h2>
+        <h2>Models and Pricing</h2>
         <p>Select a model through the <code>model</code> field in the request body. For the main flow, choose common models by quality, latency, and cost; the full pricing table is in the appendix.</p>
         <div class="grid">
           <div class="tile"><strong>Low cost</strong><span><code>openai/gpt-5-nano</code> and <code>deepseek/deepseek-v4-flash</code> are suitable for batch classification, summaries, and lightweight decisions.</span></div>
@@ -924,7 +942,7 @@
       </section>
 
       <section class="section" id="example">
-        <h2>7. End-to-End Example</h2>
+        <h2>End-to-End Example</h2>
         <p>The following example shows an end-to-end call flow for filtering popular AI projects on GitHub. This is only a demonstration scenario; in real usage, the input can be replaced with code snippets, business data, document content, user instructions, or software runtime state.</p>
         <table>
           <thead><tr><th>Stage</th><th>Content</th></tr></thead>
@@ -940,7 +958,7 @@
       </section>
 
       <section class="section dark" id="security">
-        <h2>8. Security Notes</h2>
+        <h2>Security Notes</h2>
         <ul>
           <li>Do not write real private keys, complete <code>X-Params</code>, complete <code>X-Signature</code>, <code>X-Public-Key</code>, or management tokens into repositories.</li>
           <li>Chain type, deposit network, amount, and <code>money_id</code> must be confirmed by a human before being used by an agent.</li>
@@ -952,7 +970,7 @@
       </section>
 
       <section class="section" id="appendix">
-        <h2>9. Appendix</h2>
+        <h2>Appendix</h2>
         <h3>Full model table</h3>
         <p>Prices are shown in USD / 1,000,000 tokens.</p>
         <div class="table-scroll">
