@@ -871,6 +871,57 @@
             <tr><td>private key</td><td>User self-custody</td><td>Must be controlled by the owner of the deposit address and is used for signature verification during later bitgo asset processing. Use a Web3 wallet private key or account authorization capability that can export keys or sign messages; do not use exchange addresses whose private keys cannot be obtained. For engineering integration, inject it securely through environment variables, a secret manager, or the deployment platform, and do not write it to repositories, documents, or logs.</td></tr>
           </tbody>
         </table>
+        <h3>Query the self-custody wallet account</h3>
+        <p>After a deposit is complete, software can use the same self-custody wallet address to query the bitgo account. The most important fields are <code>balance</code>, <code>frozen</code>, <code>totalRechargeAmount</code>, and <code>coinType</code>. This is a main-wallet Tier1 query: the signing message is only <code>wallet_address</code>, and the <code>X-Params</code> JSON contains only <code>wallet_address</code> and <code>signature</code>. Do not include <code>money</code> or <code>money_id</code>.</p>
+        <table>
+          <thead><tr><th>Endpoint</th><th>Purpose</th><th>Authentication</th></tr></thead>
+          <tbody>
+            <tr><td><code>GET /api/bff/v1/wallet</code></td><td>Fetch the bitgo account, available balance, frozen balance, and cumulative deposit amount for the user's self-custody wallet.</td><td>Send <code>X-Params</code> in the request header</td></tr>
+            <tr><td><code>GET /api/bff/v1/wallet/transactions</code></td><td>Fetch paginated historical deposit records. Supports <code>page</code> and <code>page_size</code>.</td><td>Send the same <code>X-Params</code> in the request header</td></tr>
+          </tbody>
+        </table>
+        <h3>X-Params structure</h3>
+        <pre><code class="language-json">{
+  &quot;wallet_address&quot;: &quot;YOUR_SELF_CUSTODY_WALLET_ADDRESS&quot;,
+  &quot;signature&quot;: &quot;BASE64_WALLET_ADDRESS_SIGNATURE&quot;
+}</code></pre>
+        <p>Generation flow: hash <code>wallet_address</code> with SHA-256, then sign the digest with the private key for that address. ETH addresses use <code>go-ethereum/crypto.Sign</code>; standard BTC/LTC addresses use compact ECDSA; BTC/LTC Taproot addresses use Schnorr. Finally, base64-encode the JSON above and write it to the <code>X-Params</code> request header.</p>
+        <h3>GetWallet request example</h3>
+        <pre><code>curl -X GET &quot;https://bitgo.enigmhaven.com/api/bff/v1/wallet&quot; \
+  -H &quot;X-Params: BASE64_ENCODED_TIER1_X_PARAMS&quot;</code></pre>
+        <h3>GetWallet response example</h3>
+        <pre><code class="language-json">{
+  &quot;wallet&quot;: {
+    &quot;accountId&quot;: &quot;ACCOUNT_ID_PLACEHOLDER&quot;,
+    &quot;balance&quot;: &quot;AVAILABLE_BALANCE_PLACEHOLDER&quot;,
+    &quot;frozen&quot;: &quot;FROZEN_BALANCE_PLACEHOLDER&quot;,
+    &quot;totalRechargeAmount&quot;: &quot;TOTAL_RECHARGE_AMOUNT_PLACEHOLDER&quot;,
+    &quot;coinType&quot;: &quot;COIN_TYPE&quot;,
+    &quot;createdAt&quot;: &quot;CREATED_AT_RFC3339&quot;,
+    &quot;updatedAt&quot;: &quot;UPDATED_AT_RFC3339&quot;
+  }
+}</code></pre>
+        <h3>GetTransactions request example</h3>
+        <pre><code>curl -X GET &quot;https://bitgo.enigmhaven.com/api/bff/v1/wallet/transactions?page=1&amp;page_size=20&quot; \
+  -H &quot;X-Params: BASE64_ENCODED_TIER1_X_PARAMS&quot;</code></pre>
+        <h3>GetTransactions response example</h3>
+        <pre><code class="language-json">{
+  &quot;transactions&quot;: [
+    {
+      &quot;id&quot;: &quot;TRANSACTION_ID_PLACEHOLDER&quot;,
+      &quot;accountId&quot;: &quot;ACCOUNT_ID_PLACEHOLDER&quot;,
+      &quot;txHash&quot;: &quot;TX_HASH_PLACEHOLDER&quot;,
+      &quot;type&quot;: &quot;charge&quot;,
+      &quot;coinType&quot;: &quot;COIN_TYPE&quot;,
+      &quot;priceCoin&quot;: &quot;RECHARGE_AMOUNT_PLACEHOLDER&quot;,
+      &quot;priceUsd&quot;: &quot;RECHARGE_USD_AMOUNT_PLACEHOLDER&quot;,
+      &quot;description&quot;: &quot;COIN_TYPE deposit confirmed, tx: TX_HASH_PLACEHOLDER&quot;,
+      &quot;createdAt&quot;: &quot;CREATED_AT_RFC3339&quot;
+    }
+  ],
+  &quot;total&quot;: 20
+}</code></pre>
+        <p class="callout">In production, keep private keys in environment variables, a secret manager, or deployment-platform secrets, and generate <code>X-Params</code> only at runtime. Logs may record <code>accountId</code>, <code>balance</code>, and pagination metadata, but must not record private keys or complete signing material.</p>
         <div class="warning">Security note: a wrong address, wrong mainnet, or mismatched network type such as Taproot/ERC-20 may cause permanent asset loss.</div>
       </section>
 

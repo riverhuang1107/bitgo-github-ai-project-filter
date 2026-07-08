@@ -52,6 +52,7 @@ func main() {
 	privateKey := flag.String("private-key", "", "WIF private key for ltc/btc or hex private key for eth")
 	includeDebug := flag.Bool("debug", false, "include digest metadata in the JSON output")
 	shouldGenerateWallet := flag.Bool("generate-wallet", false, "generate a fresh wallet for the selected chain")
+	tier1 := flag.Bool("tier1", false, "sign only the wallet address for BFF Tier1 requests")
 	flag.Parse()
 
 	if *shouldGenerateWallet {
@@ -63,11 +64,32 @@ func main() {
 		return
 	}
 
-	if strings.TrimSpace(*walletAddress) == "" || strings.TrimSpace(*money) == "" || strings.TrimSpace(*moneyID) == "" {
-		fail("wallet-address, money, and money-id are required")
+	if strings.TrimSpace(*walletAddress) == "" {
+		fail("wallet-address is required")
 	}
 	if strings.TrimSpace(*privateKey) == "" {
 		fail("private-key is required")
+	}
+
+	if *tier1 {
+		signature, digest, err := signWalletAddress(*chain, *walletAddress, *privateKey)
+		if err != nil {
+			fail(err.Error())
+		}
+		output := signedParams{
+			WalletAddress: *walletAddress,
+			Signature:     signature,
+		}
+		if *includeDebug {
+			output.MessageSHA256Hex = hex.EncodeToString(digest[:])
+			output.MessageSHA256Size = len(digest)
+		}
+		writeJSON(output)
+		return
+	}
+
+	if strings.TrimSpace(*money) == "" || strings.TrimSpace(*moneyID) == "" {
+		fail("money and money-id are required")
 	}
 
 	signature, digest, err := signMessage(*chain, *walletAddress, *money, *moneyID, *privateKey)
@@ -136,8 +158,16 @@ func p2pkhAddress(compressedPublicKey []byte, version byte) string {
 }
 
 func signMessage(chain, walletAddress, money, moneyID, privateKey string) (string, [32]byte, error) {
-	message := []byte(walletAddress + money + moneyID)
-	digest := sha256.Sum256(message)
+	return signText(chain, walletAddress, walletAddress+money+moneyID, privateKey)
+}
+
+func signWalletAddress(chain, walletAddress, privateKey string) (string, [32]byte, error) {
+	return signText(chain, walletAddress, walletAddress, privateKey)
+}
+
+func signText(chain, walletAddress, message, privateKey string) (string, [32]byte, error) {
+	messageBytes := []byte(message)
+	digest := sha256.Sum256(messageBytes)
 
 	switch strings.ToLower(strings.TrimSpace(chain)) {
 	case "ltc":

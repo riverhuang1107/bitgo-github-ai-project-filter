@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -14,6 +15,7 @@ from .config import (
     default_config_path,
     user_config_dir,
 )
+from .bff import BFFClient, BFFTier1Auth, DEFAULT_BFF_BASE_URL, build_tier1_x_params
 from .crypto import (
     WalletAuth,
     generate_money_id,
@@ -76,6 +78,19 @@ def parser() -> argparse.ArgumentParser:
     reasoning_test.add_argument(
         "--key", type=Path, help="ECDSA interface signing key path"
     )
+
+    bff = sub.add_parser("bff", help="Query Bitgo BFF wallet APIs")
+    bff_sub = bff.add_subparsers(dest="bff_command", required=True)
+    bff_wallet = bff_sub.add_parser(
+        "wallet", help="Fetch Tier1 wallet information and recharge transactions"
+    )
+    bff_wallet.add_argument("--base-url", default=DEFAULT_BFF_BASE_URL)
+    bff_wallet.add_argument("--chain", choices=["ltc", "btc", "eth"], required=True)
+    bff_wallet.add_argument("--wallet-address", required=True)
+    bff_wallet.add_argument("--private-key")
+    bff_wallet.add_argument("--signer-command")
+    bff_wallet.add_argument("--page", type=int, default=1)
+    bff_wallet.add_argument("--page-size", type=int, default=20)
     return root
 
 
@@ -148,6 +163,8 @@ def dispatch(args) -> int:
         return cmd_mail(args, settings)
     if args.command == "reasoning":
         return cmd_reasoning(args, settings)
+    if args.command == "bff":
+        return cmd_bff(args)
     raise RuntimeError("Unknown command")
 
 
@@ -290,6 +307,47 @@ def cmd_reasoning(args, settings: Settings) -> int:
     finally:
         print(reasoning.last_usage.format_json())
         reasoning.close()
+    return 0
+
+
+def cmd_bff(args) -> int:
+    if args.bff_command != "wallet":
+        raise RuntimeError("Unknown BFF command")
+    if args.page < 1:
+        raise ValueError("--page must be greater than zero")
+    if args.page_size < 1:
+        raise ValueError("--page-size must be greater than zero")
+    private_key = (
+        args.private_key
+        or os.environ.get(_chain_env_name(args.chain, "PRIVATE_KEY"))
+        or os.environ.get("BFF_PRIVATE_KEY")
+        or os.environ.get("REASONING_PRIVATE_KEY")
+    )
+    auth = BFFTier1Auth(
+        chain=args.chain,
+        wallet_address=args.wallet_address,
+        private_key=private_key or "",
+        signer_command=args.signer_command or "",
+    )
+    x_params = build_tier1_x_params(auth)
+    client = BFFClient(args.base_url)
+    try:
+        wallet = client.get_wallet(x_params)
+        transactions = client.get_transactions(
+            x_params, page=args.page, page_size=args.page_size
+        )
+    finally:
+        client.close()
+    print(
+        json.dumps(
+            {
+                "wallet": wallet,
+                "transactions": transactions,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     return 0
 
 

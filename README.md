@@ -226,9 +226,42 @@ RESEND_MANAGEMENT_API_KEY=re_... .venv/bin/github-ai-daily mail rotate
 RESEND_MANAGEMENT_API_KEY=re_... .venv/bin/github-ai-daily mail remove
 REASONING_PRIVATE_KEY=... .venv/bin/github-ai-daily reasoning test --chain YOUR_WALLET_CHAIN --wallet-address YOUR_WALLET_ADDRESS --money YOUR_WALLET_MONEY
 REASONING_NEW_WALLET=true .venv/bin/github-ai-daily reasoning test --chain eth --money YOUR_WALLET_MONEY
+
+REASONING_ETH_PRIVATE_KEY=... .venv/bin/github-ai-daily bff wallet --chain eth --wallet-address YOUR_ETH_WALLET_ADDRESS
 ```
 
 `generate` 只生成报告文件，不发送邮件。通过 agent 执行邮件命令时使用 Agent Mail；在非 agent 环境中，`run --to ...`、`send ... --to ...`、`mail test` 会通过 Resend SMTP 发送邮件。
+
+## Bitgo BFF 钱包查询
+
+`bff wallet` 会按 `SIGNING_GUIDE.md` 的 Tier1 规则对 `wallet_address` 做钱包私钥签名，生成只包含 `wallet_address` 和 `signature` 的 `X-Params`，然后请求：
+
+- `GET /api/bff/v1/wallet`
+- `GET /api/bff/v1/wallet/transactions`
+
+示例：
+
+```bash
+export REASONING_ETH_PRIVATE_KEY="eth-hex-private-key"
+.venv/bin/github-ai-daily bff wallet \
+  --chain eth \
+  --wallet-address 0x49e4f15e31fade852bbd0eb9f5d07bbc68b01a16 \
+  --page 1 \
+  --page-size 20
+```
+
+PowerShell：
+
+```powershell
+$env:REASONING_ETH_PRIVATE_KEY = "eth-hex-private-key"
+python -m github_ai_daily bff wallet `
+  --chain eth `
+  --wallet-address 0x49e4f15e31fade852bbd0eb9f5d07bbc68b01a16 `
+  --page 1 `
+  --page-size 20
+```
+
+私钥也可用 `BFF_PRIVATE_KEY` 或 `REASONING_PRIVATE_KEY` 注入；不建议把真实私钥写入配置文件、README 或 shell 历史。
 
 ## 推理 API 签名
 

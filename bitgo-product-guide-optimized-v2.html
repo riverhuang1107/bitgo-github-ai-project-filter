@@ -865,6 +865,57 @@
             <tr><td>private key</td><td>用户自持</td><td>必须由充值地址所有者掌握，用于后续 bitgo 资产处理中的签名验证。请使用可导出或可签名的 Web3 钱包私钥/账户授权能力，切勿使用无法取得私钥的交易所地址；工程接入时再通过环境变量、Secret 管理器或部署平台安全注入，不写入仓库、文档或日志。</td></tr>
           </tbody>
         </table>
+        <h3>查询自持钱包账号</h3>
+        <p>充值完成后，软件可以使用同一自持钱包地址查询 bitgo 账户信息，重点读取 <code>balance</code>、<code>frozen</code>、<code>totalRechargeAmount</code> 和 <code>coinType</code>。该查询属于主钱包 Tier1 接口：签名消息仅为 <code>wallet_address</code>，<code>X-Params</code> 的 JSON 只包含 <code>wallet_address</code> 和 <code>signature</code>，不要加入 <code>money</code> 或 <code>money_id</code>。</p>
+        <table>
+          <thead><tr><th>接口</th><th>用途</th><th>认证方式</th></tr></thead>
+          <tbody>
+            <tr><td><code>GET /api/bff/v1/wallet</code></td><td>获取用户自持钱包对应的 bitgo 账户、余额、冻结金额和累计充值金额。</td><td>Header 携带 <code>X-Params</code></td></tr>
+            <tr><td><code>GET /api/bff/v1/wallet/transactions</code></td><td>分页获取历史充值记录，支持 <code>page</code> 和 <code>page_size</code>。</td><td>Header 携带同一个 <code>X-Params</code></td></tr>
+          </tbody>
+        </table>
+        <h3>X-Params 结构</h3>
+        <pre><code class="language-json">{
+  &quot;wallet_address&quot;: &quot;YOUR_SELF_CUSTODY_WALLET_ADDRESS&quot;,
+  &quot;signature&quot;: &quot;BASE64_WALLET_ADDRESS_SIGNATURE&quot;
+}</code></pre>
+        <p>生成方式：对 <code>wallet_address</code> 做 SHA-256，然后用该地址对应的私钥签名。ETH 地址使用 <code>go-ethereum/crypto.Sign</code>；BTC/LTC 普通地址使用 compact ECDSA；BTC/LTC Taproot 地址使用 Schnorr。最后把上述 JSON 再做 base64，写入请求头 <code>X-Params</code>。</p>
+        <h3>GetWallet 请求示例</h3>
+        <pre><code>curl -X GET &quot;https://bitgo.enigmhaven.com/api/bff/v1/wallet&quot; \
+  -H &quot;X-Params: BASE64_ENCODED_TIER1_X_PARAMS&quot;</code></pre>
+        <h3>GetWallet 响应示例</h3>
+        <pre><code class="language-json">{
+  &quot;wallet&quot;: {
+    &quot;accountId&quot;: &quot;ACCOUNT_ID_PLACEHOLDER&quot;,
+    &quot;balance&quot;: &quot;AVAILABLE_BALANCE_PLACEHOLDER&quot;,
+    &quot;frozen&quot;: &quot;FROZEN_BALANCE_PLACEHOLDER&quot;,
+    &quot;totalRechargeAmount&quot;: &quot;TOTAL_RECHARGE_AMOUNT_PLACEHOLDER&quot;,
+    &quot;coinType&quot;: &quot;COIN_TYPE&quot;,
+    &quot;createdAt&quot;: &quot;CREATED_AT_RFC3339&quot;,
+    &quot;updatedAt&quot;: &quot;UPDATED_AT_RFC3339&quot;
+  }
+}</code></pre>
+        <h3>GetTransactions 请求示例</h3>
+        <pre><code>curl -X GET &quot;https://bitgo.enigmhaven.com/api/bff/v1/wallet/transactions?page=1&amp;page_size=20&quot; \
+  -H &quot;X-Params: BASE64_ENCODED_TIER1_X_PARAMS&quot;</code></pre>
+        <h3>GetTransactions 响应示例</h3>
+        <pre><code class="language-json">{
+  &quot;transactions&quot;: [
+    {
+      &quot;id&quot;: &quot;TRANSACTION_ID_PLACEHOLDER&quot;,
+      &quot;accountId&quot;: &quot;ACCOUNT_ID_PLACEHOLDER&quot;,
+      &quot;txHash&quot;: &quot;TX_HASH_PLACEHOLDER&quot;,
+      &quot;type&quot;: &quot;charge&quot;,
+      &quot;coinType&quot;: &quot;COIN_TYPE&quot;,
+      &quot;priceCoin&quot;: &quot;RECHARGE_AMOUNT_PLACEHOLDER&quot;,
+      &quot;priceUsd&quot;: &quot;RECHARGE_USD_AMOUNT_PLACEHOLDER&quot;,
+      &quot;description&quot;: &quot;COIN_TYPE deposit confirmed, tx: TX_HASH_PLACEHOLDER&quot;,
+      &quot;createdAt&quot;: &quot;CREATED_AT_RFC3339&quot;
+    }
+  ],
+  &quot;total&quot;: 20
+}</code></pre>
+        <p class="callout">工程实现时请把私钥放在环境变量、Secret 管理器或部署平台密钥中，只在运行时生成 <code>X-Params</code>；日志里可以记录 <code>accountId</code>、<code>balance</code> 和分页信息，但不要记录私钥或完整签名材料。</p>
         <div class="warning">安全提示：地址填错、主网选错或 Taproot/ERC-20 等网络类型不匹配，可能导致资产永久丢失。</div>
       </section>
 
