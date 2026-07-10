@@ -1156,14 +1156,14 @@ Security and authorization principles:
           <li>The actual balance for <code>balance</code> is the field value multiplied by <code>10^-8</code>.</li>
           <li>If the server response does not include <code>usage</code>, the CLI should output <code>&quot;usage&quot;: null</code> and should not estimate or fabricate values.</li>
         </ul>
-        <h3>Sub-wallet Consumption Records</h3>
-        <p>After a model or API call, query the BFF sub-wallet endpoint for consumption orders associated with a specific <code>money_id</code>. Before querying, confirm the same chain, <code>wallet_address</code>, authorized amount <code>money</code>, and <code>money_id</code>; the BFF response exposes <code>money_id</code> as <code>subId</code>.</p>
+        <h3>bitgo wallet Consumption Records</h3>
+        <p>After a model or API call, query the BFF bitgo wallet endpoint for consumption orders associated with a specific <code>money_id</code>. Before querying, confirm the same chain, <code>wallet_address</code>, authorized amount <code>money</code>, and <code>money_id</code>; the BFF response exposes <code>money_id</code> as <code>subId</code>.</p>
         <table>
           <thead><tr><th>Item</th><th>Value</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td><code>endpoint</code></td><td><code>https://bitgo.enigmhaven.com/api/bff/v1/sub-wallet/orders</code></td><td>Queries sub-wallet consumption orders.</td></tr>
+            <tr><td><code>endpoint</code></td><td><code>https://bitgo.enigmhaven.com/api/bff/v1/sub-wallet/orders</code></td><td>Queries bitgo wallet consumption orders.</td></tr>
             <tr><td><code>method</code></td><td><code>GET</code></td><td>Supports the <code>page</code> and <code>page_size</code> pagination parameters.</td></tr>
-            <tr><td><code>X-Params</code></td><td><code>BASE64_ENCODED_TIER2_X_PARAMS</code></td><td>Tier2 sub-wallet signing parameters, generated and transmitted only at runtime.</td></tr>
+            <tr><td><code>X-Params</code></td><td><code>BASE64_ENCODED_TIER2_X_PARAMS</code></td><td>Tier2 bitgo wallet signing parameters, generated and transmitted only at runtime.</td></tr>
           </tbody>
         </table>
         <p>The Tier2 <code>X-Params</code> is Base64-encoded from the following JSON. Create the wallet signature over <code>wallet_address + money + money_id</code>; do not store the complete signature or encoded value.</p>
@@ -1204,7 +1204,7 @@ Security and authorization principles:
   ],
   &quot;total&quot;: 2
 }</code></pre>
-        <p class="callout">An <code>orders: []</code> response with <code>total: 0</code> means that the sub-wallet has no consumption records yet. Logs and documentation may include business fields such as <code>wallet_address</code>, <code>money</code>, <code>money_id</code>, the endpoint URL, order list, and <code>total</code>; redact <code>orderId</code>, <code>accountId</code>, <code>subId</code>, <code>userId</code>, signature fields, and other identifiers as appropriate. Never record private keys, complete signatures, complete <code>X-Params</code>, <code>X-Signature</code>, or <code>X-Public-Key</code>.</p>
+        <p class="callout">An <code>orders: []</code> response with <code>total: 0</code> means that the bitgo wallet has no consumption records yet. Logs and documentation may include business fields such as <code>wallet_address</code>, <code>money</code>, <code>money_id</code>, the endpoint URL, order list, and <code>total</code>; redact <code>orderId</code>, <code>accountId</code>, <code>subId</code>, <code>userId</code>, signature fields, and other identifiers as appropriate. Never record private keys, complete signatures, complete <code>X-Params</code>, <code>X-Signature</code>, or <code>X-Public-Key</code>.</p>
       </section>
 
       <section class="section dark" id="model-pricing">
