@@ -404,3 +404,71 @@ signer_command = ""
 ```
 
 自动测试使用本地 mock，不调用真实 GitHub、推理 API、Resend 或 SMTP。
+## Bitgo BFF 子钱包消费记录查询
+
+子钱包消费记录查询使用 `SIGNING_GUIDE.md` 的 Tier2 规则。查询前必须已经确认同一币种、同一 `wallet_address`、授权金额 `money` 和子钱包标识 `money_id`；`money_id` 在 BFF 响应中对应 `subId`，用于定位指定子钱包。
+
+Tier2 钱包签名消息为三个字段直接拼接，不加分隔符：
+
+```text
+${wallet_address}${money}${money_id}
+```
+
+签名后的 `X-Params` JSON 结构为：
+
+```json
+{
+  "wallet_address": "YOUR_WALLET_ADDRESS",
+  "money": "YOUR_WALLET_MONEY",
+  "money_id": "YOUR_MONEY_ID",
+  "signature": "BASE64_WALLET_SIGNATURE"
+}
+```
+
+该 JSON 需要再 base64 编码后放入请求头 `X-Params`，然后请求：
+
+```bash
+curl -X GET "https://bitgo.enigmhaven.com/api/bff/v1/sub-wallet/orders?page=1&page_size=20" \
+  -H "X-Params: BASE64_ENCODED_TIER2_X_PARAMS"
+```
+
+示例响应：
+
+```json
+{
+  "orders": [
+    {
+      "orderId": "ORDER_ID_REDACTED_1",
+      "accountId": "ACCOUNT_ID_REDACTED",
+      "subId": "money_20260710_REDACTED",
+      "category": "TOKEN",
+      "type": "deduct",
+      "amount": "0.01377900",
+      "refOrderId": "",
+      "description": "model: claude-4.6-opus; input_token: 1017; output_token: 345",
+      "createdAt": "2026-07-10T03:32:13.465Z",
+      "userId": "USER_ID_REDACTED_1"
+    },
+    {
+      "orderId": "ORDER_ID_REDACTED_2",
+      "accountId": "ACCOUNT_ID_REDACTED",
+      "subId": "money_20260710_REDACTED",
+      "category": "TOKEN",
+      "type": "deduct",
+      "amount": "0.01362780",
+      "refOrderId": "",
+      "description": "model: claude-4.6-opus; input_token: 1017; output_token: 339",
+      "createdAt": "2026-07-10T03:31:21.512Z",
+      "userId": "USER_ID_REDACTED_2"
+    }
+  ],
+  "total": 2
+}
+```
+
+安全规则：
+
+- 查询前应由人确认 `wallet_chain`、`wallet_address`、`money` 和 `money_id`，不能把其他币种或其他子钱包的旧参数混用。
+- 完整 `X-Params`、`signature`、私钥、`X-Signature`、`X-Public-Key` 和管理 token 只允许在运行时生成或注入，不得写入源码、README、日志或聊天摘要。
+- 对外展示查询结果时，只展示 `wallet_address`、`money`、`money_id`、接口 URL、订单列表、`total` 等业务字段；`orderId`、`accountId`、`subId`、`userId`、签名字段和其他身份标识应按场景脱敏。
+- 如果接口返回 `orders: []` 且 `total: 0`，表示该 `money_id` 对应子钱包当前没有消费记录。

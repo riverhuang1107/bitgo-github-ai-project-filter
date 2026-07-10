@@ -996,8 +996,58 @@
           <li><code>balance</code> 的实际余额为字段值乘以 <code>10^-8</code>。</li>
           <li>如果服务端响应没有 <code>usage</code> 字段，CLI 应输出 <code>&quot;usage&quot;: null</code>，不要估算或编造。</li>
         </ul>
+        <h3>子钱包消费记录查询</h3>
+        <p>模型或 API 消费完成后，可以用 BFF 子钱包接口查询指定 <code>money_id</code> 的消费订单。查询前必须确认同一币种、同一 <code>wallet_address</code>、授权金额 <code>money</code> 和 <code>money_id</code>；<code>money_id</code> 在 BFF 响应中对应 <code>subId</code>。</p>
+        <table>
+          <thead><tr><th>项目</th><th>值</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td><code>endpoint</code></td><td><code>https://bitgo.enigmhaven.com/api/bff/v1/sub-wallet/orders</code></td><td>查询子钱包消费订单。</td></tr>
+            <tr><td><code>method</code></td><td><code>GET</code></td><td>支持 <code>page</code> 和 <code>page_size</code> 分页参数。</td></tr>
+            <tr><td><code>X-Params</code></td><td><code>BASE64_ENCODED_TIER2_X_PARAMS</code></td><td>Tier2 子钱包签名参数，只在运行时生成和传输。</td></tr>
+          </tbody>
+        </table>
+        <p>Tier2 签名消息为：</p>
+        <pre><code>${wallet_address}${money}${money_id}</code></pre>
+        <p><code>X-Params</code> 解码后的 JSON 结构为：</p>
+        <pre><code class="language-json">{
+  &quot;wallet_address&quot;: &quot;YOUR_WALLET_ADDRESS&quot;,
+  &quot;money&quot;: &quot;YOUR_WALLET_MONEY&quot;,
+  &quot;money_id&quot;: &quot;YOUR_MONEY_ID&quot;,
+  &quot;signature&quot;: &quot;BASE64_WALLET_SIGNATURE&quot;
+}</code></pre>
+        <pre><code>curl -X GET &quot;https://bitgo.enigmhaven.com/api/bff/v1/sub-wallet/orders?page=1&amp;page_size=20&quot; \
+  -H &quot;X-Params: BASE64_ENCODED_TIER2_X_PARAMS&quot;</code></pre>
+        <pre><code class="language-json">{
+  &quot;orders&quot;: [
+    {
+      &quot;orderId&quot;: &quot;ORDER_ID_REDACTED_1&quot;,
+      &quot;accountId&quot;: &quot;ACCOUNT_ID_REDACTED&quot;,
+      &quot;subId&quot;: &quot;money_20260710_REDACTED&quot;,
+      &quot;category&quot;: &quot;TOKEN&quot;,
+      &quot;type&quot;: &quot;deduct&quot;,
+      &quot;amount&quot;: &quot;0.01377900&quot;,
+      &quot;refOrderId&quot;: &quot;&quot;,
+      &quot;description&quot;: &quot;model: claude-4.6-opus; input_token: 1017; output_token: 345&quot;,
+      &quot;createdAt&quot;: &quot;2026-07-10T03:32:13.465Z&quot;,
+      &quot;userId&quot;: &quot;USER_ID_REDACTED_1&quot;
+    },
+    {
+      &quot;orderId&quot;: &quot;ORDER_ID_REDACTED_2&quot;,
+      &quot;accountId&quot;: &quot;ACCOUNT_ID_REDACTED&quot;,
+      &quot;subId&quot;: &quot;money_20260710_REDACTED&quot;,
+      &quot;category&quot;: &quot;TOKEN&quot;,
+      &quot;type&quot;: &quot;deduct&quot;,
+      &quot;amount&quot;: &quot;0.01362780&quot;,
+      &quot;refOrderId&quot;: &quot;&quot;,
+      &quot;description&quot;: &quot;model: claude-4.6-opus; input_token: 1017; output_token: 339&quot;,
+      &quot;createdAt&quot;: &quot;2026-07-10T03:31:21.512Z&quot;,
+      &quot;userId&quot;: &quot;USER_ID_REDACTED_2&quot;
+    }
+  ],
+  &quot;total&quot;: 2
+}</code></pre>
+        <p class="callout">如果接口返回 <code>orders: []</code> 且 <code>total: 0</code>，表示该子钱包当前没有消费记录。日志和文档只能展示 <code>wallet_address</code>、<code>money</code>、<code>money_id</code>、接口 URL、订单列表和 <code>total</code> 等业务字段；<code>orderId</code>、<code>accountId</code>、<code>subId</code>、<code>userId</code>、签名字段和其他身份标识应按场景脱敏。不要记录私钥、完整签名、完整 <code>X-Params</code>、<code>X-Signature</code> 或 <code>X-Public-Key</code>。</p>
       </section>
-
       <section class="section dark" id="model-pricing">
         <h2>模型价格</h2>
         <p>通过请求体中的 <code>model</code> 字段选择模型。主流程建议按质量、速度和成本选择常用模型；完整模型价格表见附录。</p>
