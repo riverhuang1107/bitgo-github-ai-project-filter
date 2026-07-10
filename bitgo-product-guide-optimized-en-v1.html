@@ -670,6 +670,24 @@
       overflow-wrap: anywhere;
     }
 
+    #api-call code.endpoint-url {
+      white-space: nowrap;
+      word-break: normal;
+      overflow-wrap: normal;
+    }
+
+    #api-call .api-auth-table col:nth-child(1) {
+      width: 20%;
+    }
+
+    #api-call .api-auth-table col:nth-child(2) {
+      width: 44%;
+    }
+
+    #api-call .api-auth-table col:nth-child(3) {
+      width: 36%;
+    }
+
     th {
       background: var(--black);
       color: #8fc2ff;
@@ -775,6 +793,13 @@
         max-width: 100%;
       }
 
+    }
+
+    @media (max-width: 720px) {
+      #api-call code.endpoint-url {
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
     }
 
     @media (max-width: 640px) {
@@ -1128,10 +1153,11 @@ Security and authorization principles:
       <section class="section" id="api-call">
         <h2>Reasoning API Call</h2>
         <p>The agent or software writes task context into <code>messages</code>, selects a model, and sends the request to the reasoning API. The request body follows the Anthropic Messages style.</p>
-        <table>
+        <table class="api-auth-table">
+          <colgroup><col><col><col></colgroup>
           <thead><tr><th>Item</th><th>Value</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td><code>endpoint</code></td><td><code>https://api-bitgo.enigmhaven.com/v1/messages</code></td><td>Reasoning API request URL</td></tr>
+            <tr><td><code>endpoint</code></td><td><code class="endpoint-url">https://api-bitgo.enigmhaven.com/v1/messages</code></td><td>Reasoning API request URL</td></tr>
             <tr><td><code>method</code></td><td><code>POST</code></td><td>Send a JSON request body</td></tr>
             <tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>Always use JSON</td></tr>
             <tr><td><code>X-Params</code></td><td><code>BASE64_ENCODED_WALLET_PARAMS</code></td><td>Wallet business-signature authentication parameter</td></tr>
