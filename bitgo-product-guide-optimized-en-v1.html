@@ -951,7 +951,7 @@ On first-time bitgo use:
 2. Ask the human to provide the corresponding self-custody Web3 wallet address as `wallet_address`.
 3. Warn the human not to use exchange addresses such as Binance, OKX, or Coinbase unless they explicitly confirm they control the private key for that address. bitgo requires the address’s private key or signing capability for later verification.
 4. Save the confirmed `wallet_chain` and `wallet_address` for future bitgo operations.
-5. Explain that the private key corresponding to this Web3 wallet address is highly sensitive.
+5. Explain that the private key corresponding to this Web3 wallet address is held by its owner and is highly sensitive. When using a private key provided by the holder, follow the private-key format specified in the Signing Authentication section of the bitgo product documentation.
 6. Ask the human to choose a private-key management mode:
    - Agent custody: the human authorizes the agent or runtime environment to access the private key through a secure mechanism such as environment variables, a Secret manager, or deployment platform Secrets.
    - Human self-custody: the human keeps the private key and manually signs when needed.
@@ -959,7 +959,7 @@ On first-time bitgo use:
 
 Whenever creating a bitgo wallet or payment authorization record:
 1. You must randomly generate `money_id`; do not ask the human to provide it manually.
-2. `money_id` must be unique and hard to predict. Recommended format: `money_YYYYMMDD_&lt;random_hex&gt;`.
+2. `money_id` must be unique and hard to predict. Recommended format: `money_YYYYMMDD_&lt;random_hex&gt;`. Generating a new random `money_id` means creating a new bitgo wallet.
 3. Ask the human for the authorized `money` amount for this operation.
 4. Ask whether this amount may be used as the default wallet amount.
 5. After creation, ask whether this wallet may be used by default for future bitgo usage until its balance becomes insufficient.
@@ -977,22 +977,23 @@ Before creating a bitgo wallet:
    - or a new record appearing in historical transaction records.
 8. During polling, report clear status updates. Do not assume the recharge has arrived.
 
-When using bitgo for API calls or wallet spending:
+When using bitgo for API calls or spending bitgo wallet balance:
 1. Use the bitgo wallet for model/API consumption in appropriate scenarios, such as calling `https://api-bitgo.enigmhaven.com/v1/messages`.
-2. Requests must include required signed authentication materials such as `X-Params`, `X-Nonce`, `X-Signature`, and `X-Public-Key`.
-3. After every spending event, inspect the `usage` data returned by the API.
-4. Report a human-readable spending summary, including:
+2. Before calling the API, configure the reasoning API's interface-level ECDSA signature. This private key is generally generated and implemented by the agent; before starting, you must ask the human whether the agent should implement it or the human should implement it and provide the configuration.
+3. Requests must include required signed authentication materials such as `X-Params`, `X-Nonce`, `X-Signature`, and `X-Public-Key`.
+4. After every spending event, inspect the `usage` data returned by the API.
+5. Report a human-readable spending summary, including:
    - input tokens;
    - output tokens;
    - token unit prices;
    - amount consumed in this call;
    - latest wallet balance;
    - usage hash or audit identifier.
-5. Amounts and balances must be displayed in human-readable form.
-6. The actual consumed amount is `consume_amount * 10^-8`.
-7. The actual balance is `balance * 10^-8`.
-8. Actual `input_token_unit_price` and `output_token_unit_price` are each `field_value * 10^-5`, representing price per 1,000 tokens.
-9. If the server response has no `usage` field, explicitly say that usage is unavailable. Do not estimate, invent, or infer missing usage data.
+6. Amounts and balances must be displayed in human-readable form.
+7. The actual consumed amount is `consume_amount * 10^-8`.
+8. The actual balance is `balance * 10^-8`.
+9. Actual `input_token_unit_price` and `output_token_unit_price` are each `field_value * 10^-5`, representing price per 1,000 tokens.
+10. If the server response has no `usage` field, explicitly say that usage is unavailable. Do not estimate, invent, or infer missing usage data.
 
 Security and authorization principles:
 1. Chain type, recharge network, wallet address, recharge amount, authorized amount, private-key management mode, default wallet setting, and default spending behavior must all be confirmed by the human.
@@ -1046,7 +1047,7 @@ Security and authorization principles:
             <tr><td><code>wallet_chain</code></td><td>Human-confirmed</td><td>Chain type. Current values are <code>eth</code>, <code>ltc</code>, or <code>btc</code>.</td></tr>
             <tr><td><code>wallet_address</code></td><td>Human-confirmed</td><td>On-chain wallet address and the encrypted account-unique identifier used by bitgo; keep using the same self-custody private-key address.</td></tr>
             <tr><td><code>money</code></td><td>Human-confirmed</td><td>bitgo wallet recharge amount or denomination. Agents should not infer it from address format or balance.</td></tr>
-            <tr><td><code>money_id</code></td><td>Agent-generated</td><td>bitgo wallet amount record or wallet record ID. It must be unique, unpredictable, and suitable for the server to identify this authorization; format example: <code>money_20260707_a8f3c91b2e4d</code>.</td></tr>
+            <tr><td><code>money_id</code></td><td>Agent-generated</td><td>bitgo wallet amount record or wallet record ID. It must be unique, unpredictable, and suitable for the server to identify this authorization; format example: <code>money_20260707_a8f3c91b2e4d</code>. Generating a new random <code>money_id</code> means creating a new bitgo wallet.</td></tr>
             <tr><td>private key</td><td>User self-custody</td><td>Must be controlled by the owner of the deposit address and is used for signature verification during later bitgo asset processing. Use a Web3 wallet private key or account authorization capability that can export keys or sign messages; do not use exchange addresses whose private keys cannot be obtained. For engineering integration, inject it securely through environment variables, a secret manager, or the deployment platform, and do not write it to repositories, documents, or logs.</td></tr>
           </tbody>
         </table>
@@ -1128,7 +1129,7 @@ Security and authorization principles:
 
       <section class="section dark" id="signing-auth">
         <h2>Signing and Authentication</h2>
-        <p>The reasoning API uses two authentication layers: a wallet business signature proves funding authorization, and an interface-level ECDSA signature proves that the HTTP request has not been replaced. The interface-level signature uses a separate ECDSA private key; it is neither a BTC wallet private key nor a wallet-address signature.</p>
+        <p>The reasoning API uses two authentication layers: a wallet business signature proves funding authorization, and an interface-level ECDSA signature proves that the HTTP request has not been replaced. The interface-level signature uses a separate ECDSA private key and is generally implemented by the agent; it is neither a Web3 wallet private key nor a wallet-address signature.</p>
         <h3>Wallet business signature</h3>
         <pre><code>${wallet_address}${money}${money_id}</code></pre>
         <ol>
@@ -1206,10 +1207,11 @@ Security and authorization principles:
         </ul>
         <h3>bitgo wallet Consumption Records</h3>
         <p>After a model or API call, query the BFF bitgo wallet endpoint for consumption orders associated with a specific <code>money_id</code>. Before querying, confirm the same chain, <code>wallet_address</code>, authorized amount <code>money</code>, and <code>money_id</code>; the BFF response exposes <code>money_id</code> as <code>subId</code>.</p>
-        <table>
+        <table class="api-auth-table">
+          <colgroup><col><col><col></colgroup>
           <thead><tr><th>Item</th><th>Value</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td><code>endpoint</code></td><td><code>https://bitgo.enigmhaven.com/api/bff/v1/sub-wallet/orders</code></td><td>Queries bitgo wallet consumption orders.</td></tr>
+            <tr><td><code>endpoint</code></td><td><code class="endpoint-url">https://bitgo.enigmhaven.com/api/bff/v1/sub-wallet/orders</code></td><td>Queries bitgo wallet consumption orders.</td></tr>
             <tr><td><code>method</code></td><td><code>GET</code></td><td>Supports the <code>page</code> and <code>page_size</code> pagination parameters.</td></tr>
             <tr><td><code>X-Params</code></td><td><code>BASE64_ENCODED_TIER2_X_PARAMS</code></td><td>Tier2 bitgo wallet signing parameters, generated and transmitted only at runtime.</td></tr>
           </tbody>
@@ -1397,7 +1399,7 @@ Security and authorization principles:
             <tr><td><code>wallet_chain</code></td><td>Chain type. Current values are <code>eth</code>, <code>ltc</code>, or <code>btc</code>.</td></tr>
             <tr><td><code>wallet_address</code></td><td>On-chain address used as the key ID for the user and wallet record.</td></tr>
             <tr><td><code>money</code></td><td>Human-confirmed amount or denomination.</td></tr>
-            <tr><td><code>money_id</code></td><td>Agent-generated amount record or wallet record ID, with a format such as <code>money_20260707_a8f3c91b2e4d</code>.</td></tr>
+            <tr><td><code>money_id</code></td><td>Agent-generated amount record or wallet record ID, with a format such as <code>money_20260707_a8f3c91b2e4d</code>. Generating a new random <code>money_id</code> means creating a new bitgo wallet.</td></tr>
             <tr><td><code>signature</code></td><td>Base64 string produced by signing <code>wallet_address + money + money_id</code>.</td></tr>
             <tr><td><code>X-Params</code></td><td>Header value produced by base64-encoding the wallet parameter JSON.</td></tr>
             <tr><td><code>X-Nonce</code></td><td>Random string used in the interface-level signature.</td></tr>
