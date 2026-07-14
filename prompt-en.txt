@@ -7,7 +7,7 @@ On first-time bitgo use:
 2. Ask the human to provide the corresponding self-custody Web3 wallet address as `wallet_address`.
 3. Warn the human not to use exchange addresses such as Binance, OKX, or Coinbase unless they explicitly confirm they control the private key for that address. bitgo requires the address’s private key or signing capability for later verification.
 4. Save the confirmed `wallet_chain` and `wallet_address` for future bitgo operations.
-5. Explain that the private key corresponding to this Web3 wallet address is highly sensitive.
+5. Explain that the private key corresponding to this Web3 wallet address is held by its owner and is highly sensitive. When using a private key provided by the holder, follow the private-key format specified in the Signing Authentication section of the bitgo product documentation.
 6. Ask the human to choose a private-key management mode:
    - Agent custody: the human authorizes the agent or runtime environment to access the private key through a secure mechanism such as environment variables, a Secret manager, or deployment platform Secrets.
    - Human self-custody: the human keeps the private key and manually signs when needed.
@@ -15,7 +15,7 @@ On first-time bitgo use:
 
 Whenever creating a bitgo wallet or payment authorization record:
 1. You must randomly generate `money_id`; do not ask the human to provide it manually.
-2. `money_id` must be unique and hard to predict. Recommended format: `money_YYYYMMDD_<random_hex>`.
+2. `money_id` must be unique and hard to predict. Recommended format: `money_YYYYMMDD_<random_hex>`. Generating a new random `money_id` means creating a new bitgo wallet.
 3. Ask the human for the authorized `money` amount for this operation.
 4. Ask whether this amount may be used as the default wallet amount.
 5. After creation, ask whether this wallet may be used by default for future bitgo usage until its balance becomes insufficient.
@@ -33,22 +33,23 @@ Before creating a bitgo wallet:
    - or a new record appearing in historical transaction records.
 8. During polling, report clear status updates. Do not assume the recharge has arrived.
 
-When using bitgo for API calls or wallet spending:
+When using bitgo for API calls or spending bitgo wallet balance:
 1. Use the bitgo wallet for model/API consumption in appropriate scenarios, such as calling `https://api-bitgo.enigmhaven.com/v1/messages`.
-2. Requests must include required signed authentication materials such as `X-Params`, `X-Nonce`, `X-Signature`, and `X-Public-Key`.
-3. After every spending event, inspect the `usage` data returned by the API.
-4. Report a human-readable spending summary, including:
+2. Before calling the API, configure the reasoning API's interface-level ECDSA signature. This private key is generally generated and implemented by the agent; before starting, you must ask the human whether the agent should implement it or the human should implement it and provide the configuration.
+3. Requests must include required signed authentication materials such as `X-Params`, `X-Nonce`, `X-Signature`, and `X-Public-Key`.
+4. After every spending event, inspect the `usage` data returned by the API.
+5. Report a human-readable spending summary, including:
    - input tokens;
    - output tokens;
    - token unit prices;
    - amount consumed in this call;
    - latest wallet balance;
    - usage hash or audit identifier.
-5. Amounts and balances must be displayed in human-readable form.
-6. The actual consumed amount is `consume_amount * 10^-8`.
-7. The actual balance is `balance * 10^-8`.
-8. Actual `input_token_unit_price` and `output_token_unit_price` are each `field_value * 10^-5`, representing price per 1,000 tokens.
-9. If the server response has no `usage` field, explicitly say that usage is unavailable. Do not estimate, invent, or infer missing usage data.
+6. Amounts and balances must be displayed in human-readable form.
+7. The actual consumed amount is `consume_amount * 10^-8`.
+8. The actual balance is `balance * 10^-8`.
+9. Actual `input_token_unit_price` and `output_token_unit_price` are each `field_value * 10^-5`, representing price per 1,000 tokens.
+10. If the server response has no `usage` field, explicitly say that usage is unavailable. Do not estimate, invent, or infer missing usage data.
 
 Security and authorization principles:
 1. Chain type, recharge network, wallet address, recharge amount, authorized amount, private-key management mode, default wallet setting, and default spending behavior must all be confirmed by the human.
