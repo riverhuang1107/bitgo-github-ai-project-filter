@@ -43,11 +43,13 @@ def test_build_tier1_x_params_omits_money_fields(monkeypatch):
     assert "money_id" not in decoded
 
 
-def test_bff_client_fetches_wallet_and_transactions_with_x_params():
+def test_bff_client_fetches_wallet_transactions_and_sub_wallet_with_x_params():
     seen_requests = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen_requests.append(request)
+        if request.url.path.endswith("/sub-wallet"):
+            return httpx.Response(200, json={"wallet": {"subBalance": "0.23"}})
         if request.url.path.endswith("/wallet"):
             return httpx.Response(200, json={"wallet": {"balance": "1.23"}})
         return httpx.Response(200, json={"transactions": [], "total": 0})
@@ -58,12 +60,15 @@ def test_bff_client_fetches_wallet_and_transactions_with_x_params():
     try:
         wallet = client.get_wallet("xparams")
         transactions = client.get_transactions("xparams", page=2, page_size=50)
+        sub_wallet = client.get_sub_wallet("xparams")
     finally:
         client.close()
 
     assert wallet == {"wallet": {"balance": "1.23"}}
     assert transactions == {"transactions": [], "total": 0}
+    assert sub_wallet == {"wallet": {"subBalance": "0.23"}}
     assert seen_requests[0].headers["X-Params"] == "xparams"
     assert seen_requests[1].headers["X-Params"] == "xparams"
     assert seen_requests[1].url.params["page"] == "2"
     assert seen_requests[1].url.params["page_size"] == "50"
+    assert seen_requests[2].url.path.endswith("/sub-wallet")

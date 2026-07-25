@@ -21,8 +21,11 @@ from .crypto import (
     generate_money_id,
     generate_private_key,
     generate_wallet,
+    build_x_params,
     load_private_key,
+    load_private_key_pem,
 )
+from .gmail import authorize_gmail, parse_recipients, send_report_email
 from .github import GitHubClient
 from .mail import (
     SMTP_KEY,
@@ -33,7 +36,19 @@ from .mail import (
     send_message,
 )
 from .reasoning import ReasoningClient
-from .reports import build_items, write_reports
+from .model_check import (
+    LOCAL_MODEL_SOURCE,
+    MODEL_GUIDE_URL,
+    MODELS,
+    WalletBalance,
+    fetch_models_from_web,
+    load_model_catalog,
+    model_catalog_path,
+    run_model_check,
+    save_model_catalog,
+    wallet_balance_from_response,
+)
+from .reports import build_items, write_model_check_reports, write_reports
 from .secrets import get_secret_store
 
 
@@ -61,6 +76,33 @@ def parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="Generate and optionally email reports")
     _report_args(run)
     run.add_argument("--to")
+
+    model_check = sub.add_parser(
+        "model-check", help="Test every Bitgo model listed in the product guide appendix"
+    )
+    model_check.add_argument("--output-dir", type=Path)
+    model_check.add_argument("--max-tokens", type=int, default=128)
+    model_check.add_argument(
+        "--read-web-models",
+        action="store_true",
+        help="Fetch the latest model list from the Bitgo product guide instead of using the local list",
+    )
+    model_check.add_argument("--bff-base-url", default=DEFAULT_BFF_BASE_URL)
+    model_check.add_argument("--send-email", action="store_true")
+    model_check.add_argument("--to", help="Comma-separated Gmail recipients")
+    _wallet_args(
+        model_check,
+        money_id_help="Persistent money_id required for the reused Bitgo sub-wallet",
+    )
+    model_check.add_argument(
+        "--key", type=Path, help="ECDSA interface signing key path"
+    )
+
+    gmail_auth = sub.add_parser("gmail-auth", help="Authorize Gmail API report delivery")
+    gmail_auth.add_argument("--force", action="store_true")
+    gmail_auth.add_argument(
+        "--console", action="store_true", help="Use a pasted browser redirect URL"
+    )
 
     mail = sub.add_parser("mail", help="Manage SMTP credentials")
     mail_sub = mail.add_subparsers(dest="mail_command", required=True)
@@ -106,13 +148,16 @@ def _report_args(command: argparse.ArgumentParser) -> None:
     _wallet_args(command)
 
 
-def _wallet_args(command: argparse.ArgumentParser) -> None:
+def _wallet_args(
+    command: argparse.ArgumentParser,
+    money_id_help: str = "Optional existing authorization money_id; generated automatically when omitted",
+) -> None:
     command.add_argument("--chain", choices=["ltc", "btc", "eth"])
     command.add_argument("--wallet-address")
     command.add_argument("--money")
     command.add_argument(
         "--money-id",
-        help="Optional existing authorization money_id; generated automatically when omitted",
+        help=money_id_help,
     )
     command.add_argument("--private-key")
     command.add_argument("--signer-command")
@@ -159,6 +204,10 @@ def dispatch(args) -> int:
                 )
             send_existing(settings, html_path, args.to, list(paths.values()))
         return 0
+    if args.command == "model-check":
+        return cmd_model_check(args, settings)
+    if args.command == "gmail-auth":
+        return cmd_gmail_auth(args)
     if args.command == "mail":
         return cmd_mail(args, settings)
     if args.command == "reasoning":
@@ -208,7 +257,7 @@ def generate(settings: Settings, args) -> dict[str, Path]:
     github = GitHubClient(os.environ.get("GITHUB_TOKEN"))
     auth = reasoning_auth(settings, args)
     reasoning = ReasoningClient(
-        settings.endpoint, settings.model, auth, reasoning_interface_key(settings)
+        reasoning_endpoint(settings), settings.model, auth, reasoning_interface_key(settings)
     )
     try:
         repos = github.enrich(github.trending())
@@ -295,7 +344,7 @@ def cmd_reasoning(args, settings: Settings) -> int:
         raise RuntimeError("Provide --model or REASONING_API_MODEL")
     auth = reasoning_auth(settings, args)
     reasoning = ReasoningClient(
-        settings.endpoint, model, auth, reasoning_interface_key(settings, args)
+        reasoning_endpoint(settings), model, auth, reasoning_interface_key(settings, args)
     )
     try:
         response = reasoning.test_access()
@@ -307,6 +356,99 @@ def cmd_reasoning(args, settings: Settings) -> int:
     finally:
         print(reasoning.last_usage.format_json())
         reasoning.close()
+    return 0
+
+
+def cmd_model_check(args, settings: Settings) -> int:
+    if getattr(args, "new_wallet", False):
+        raise ValueError("model-check must reuse an existing wallet and money_id")
+    auth = reasoning_auth(settings, args)
+    if _persist_generated_model_check_money_id(settings, args, auth):
+        print(f"Money ID: {auth.money_id} (generated and saved for reuse)", flush=True)
+    else:
+        print(f"Money ID: {auth.money_id} (reused for every model-check run and call)", flush=True)
+    catalog_path = model_catalog_path(getattr(args, "config", None) or default_config_path())
+    models = MODELS
+    model_source = LOCAL_MODEL_SOURCE
+    if getattr(args, "read_web_models", False):
+        print(f"Fetching current model list from: {MODEL_GUIDE_URL}", flush=True)
+        models = fetch_models_from_web()
+        catalog = save_model_catalog(catalog_path, models)
+        model_source = f"本地模型缓存（本次从网页更新）：{catalog_path}（{len(models)} 个模型）"
+        print(f"Loaded and saved {len(models)} models to: {catalog_path}", flush=True)
+    else:
+        catalog = load_model_catalog(catalog_path)
+        if catalog is not None:
+            models = catalog.models
+            model_source = (
+                f"本地模型缓存：{catalog_path}"
+                f"（{len(models)} 个模型，更新于 {catalog.fetched_at.isoformat(timespec='seconds')}）"
+            )
+            print(f"Using local model catalog: {catalog_path} ({len(models)} models)", flush=True)
+    client = ReasoningClient(
+        reasoning_endpoint(settings), settings.model or DEFAULT_MODEL, auth, reasoning_interface_key(settings, args)
+    )
+    try:
+        report = run_model_check(
+            client,
+            max_tokens=args.max_tokens,
+            models=models,
+            model_source=model_source,
+        )
+    finally:
+        client.close()
+    report.money_id = auth.money_id
+    report.wallet_balance = fetch_latest_sub_wallet_balance(auth, args.bff_base_url)
+    output_dir = args.output_dir or Path(settings.output_dir)
+    paths = write_model_check_reports(report, output_dir)
+    _print_paths(paths)
+    print(
+        f"Model check complete: success={report.success_count}, failures={len(report.failures)}, "
+        f"input_tokens={report.input_tokens}, output_tokens={report.output_tokens}, "
+        f"reported_cost={report.reported_cost:.8f}"
+    )
+    if args.send_email:
+        recipients = parse_recipients(args.to or os.environ.get("REPORT_RECIPIENTS", ""))
+        if not recipients:
+            raise RuntimeError("Email recipients are required via --to or REPORT_RECIPIENTS")
+        html_body = paths["html"].read_text(encoding="utf-8")
+        send_report_email(
+            html_body,
+            recipients,
+            f"Bitgo 大模型连通性报告 {report.generated_at.date().isoformat()}",
+            list(paths.values()),
+        )
+        print(f"Sent Gmail report to {', '.join(recipients)}")
+    return 0
+
+
+def fetch_latest_sub_wallet_balance(auth: WalletAuth, base_url: str) -> WalletBalance:
+    print("Fetching latest Bitgo sub-wallet balance...", flush=True)
+    retrieved_at = datetime.now().astimezone()
+    try:
+        x_params = build_x_params(auth)
+        client = BFFClient(base_url)
+        try:
+            data = client.get_sub_wallet(x_params)
+        finally:
+            client.close()
+        snapshot = wallet_balance_from_response(data, retrieved_at, auth.money_id)
+    except Exception as exc:
+        snapshot = WalletBalance(retrieved_at=retrieved_at, money_id=auth.money_id, error=str(exc))
+    if snapshot.error:
+        print(f"Sub-wallet balance unavailable: {snapshot.error}", flush=True)
+    else:
+        print(
+            f"Latest sub-wallet balance: {snapshot.balance} USD"
+            + (f" (coin type: {snapshot.coin_type})" if snapshot.coin_type else ""),
+            flush=True,
+        )
+    return snapshot
+
+
+def cmd_gmail_auth(args) -> int:
+    path = authorize_gmail(force=args.force, console=args.console)
+    print(f"Gmail OAuth token saved to: {path}")
     return 0
 
 
@@ -368,14 +510,12 @@ def reasoning_auth(settings: Settings, args=None) -> WalletAuth:
     private_key = (
         generated.private_key if generated else _private_key_for_chain(args, chain)
     )
-    money_id = (
-        generate_money_id()
-        if use_new_wallet
-        else _wallet_value(
-            args, settings, profile, chain, "money_id", "REASONING_MONEY_ID"
-        )
-        or generate_money_id()
+    configured_money_id = _wallet_value(
+        args, settings, profile, chain, "money_id", "REASONING_MONEY_ID"
     )
+    money_id = generate_money_id() if use_new_wallet else configured_money_id
+    if not money_id:
+        money_id = generate_money_id()
     auth = WalletAuth(
         chain=chain,
         wallet_address=(
@@ -399,8 +539,32 @@ def reasoning_auth(settings: Settings, args=None) -> WalletAuth:
     return auth
 
 
+def _persist_generated_model_check_money_id(
+    settings: Settings, args, auth: WalletAuth
+) -> bool:
+    profile = _wallet_profile(settings, auth.chain)
+    configured_money_id = _wallet_value(
+        args, settings, profile, auth.chain, "money_id", "REASONING_MONEY_ID"
+    )
+    if configured_money_id:
+        return False
+    settings.wallets[auth.normalized_chain()] = WalletProfile(
+        wallet_address=auth.wallet_address,
+        money=auth.money,
+        money_id=auth.money_id,
+        signer_command=auth.signer_command,
+    )
+    config_path = getattr(args, "config", None) or default_config_path()
+    settings.save(config_path)
+    return True
+
+
 def reasoning_interface_key(settings: Settings, args=None):
     configured = getattr(args, "key", None) if args is not None else None
+    if not configured:
+        pem = os.environ.get("REASONING_INTERFACE_PRIVATE_KEY_PEM")
+        if pem:
+            return load_private_key_pem(pem)
     key_path = configured or (
         Path(settings.private_key_path)
         if settings.private_key_path
@@ -412,6 +576,10 @@ def reasoning_interface_key(settings: Settings, args=None):
             f"`github-ai-daily keygen --path {key_path}`"
         )
     return load_private_key(key_path)
+
+
+def reasoning_endpoint(settings: Settings) -> str:
+    return os.environ.get("REASONING_API_ENDPOINT") or settings.endpoint
 
 
 def _arg_or_env(args, attr: str, env_name: str, default: str) -> str:

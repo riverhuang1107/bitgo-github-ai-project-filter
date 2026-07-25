@@ -53,6 +53,9 @@ class BFFClient:
     def get_wallet(self, x_params: str) -> dict[str, Any]:
         return self._get_json("/api/bff/v1/wallet", x_params=x_params)
 
+    def get_sub_wallet(self, x_params: str) -> dict[str, Any]:
+        return self._get_json("/api/bff/v1/sub-wallet", x_params=x_params)
+
     def get_transactions(
         self, x_params: str, *, page: int = 1, page_size: int = 20
     ) -> dict[str, Any]:

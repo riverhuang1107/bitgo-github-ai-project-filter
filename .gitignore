@@ -12,7 +12,8 @@ build/
 .env.*
 !.env.example
 output/
+reports/
+secrets/
 *.pem
 *.key
 *.log
-

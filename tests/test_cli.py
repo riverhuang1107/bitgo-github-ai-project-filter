@@ -1,8 +1,24 @@
 from argparse import Namespace
+from datetime import datetime, timezone
+from decimal import Decimal
 from types import SimpleNamespace
 
-from github_ai_daily.cli import cmd_init, reasoning_auth
+from github_ai_daily.cli import (
+    _persist_generated_model_check_money_id,
+    cmd_init,
+    cmd_model_check,
+    parser,
+    reasoning_auth,
+)
 from github_ai_daily.config import DEFAULT_MAIL_FROM, Settings, WalletProfile
+from github_ai_daily.crypto import WalletAuth
+from github_ai_daily.model_check import (
+    ModelCheckReport,
+    ModelCheckResult,
+    ModelDefinition,
+    load_model_catalog,
+    save_model_catalog,
+)
 
 
 def test_init_does_not_require_mail_from(monkeypatch, tmp_path):
@@ -145,6 +161,24 @@ def test_reasoning_auth_generates_money_id_when_missing(monkeypatch):
     assert auth.money_id == "money_generated"
 
 
+def test_model_check_generates_missing_money_id(monkeypatch):
+    monkeypatch.setenv("REASONING_PRIVATE_KEY", "private")
+    settings = Settings(wallet_chain="ltc", wallet_address="wallet", money="10")
+    args = Namespace(
+        private_key=None,
+        chain=None,
+        wallet_address=None,
+        money=None,
+        money_id=None,
+        signer_command=None,
+        new_wallet=False,
+    )
+
+    auth = reasoning_auth(settings, args)
+
+    assert auth.money_id.startswith("money_")
+
+
 def test_reasoning_auth_does_not_reuse_mismatched_legacy_wallet(monkeypatch):
     monkeypatch.setenv("REASONING_ETH_PRIVATE_KEY", "eth-private")
     settings = Settings(
@@ -254,3 +288,203 @@ def test_reasoning_auth_requires_wallet_chain(monkeypatch):
         assert "reasoning wallet chain must be one of" in str(exc)
     else:
         raise AssertionError("Expected wallet chain requirement")
+
+
+def test_model_check_command_reports_partial_failure_without_failing(monkeypatch, tmp_path):
+    model = ModelDefinition("bad", "Bad", "Test", Decimal("1"), Decimal("2"))
+    report = ModelCheckReport(
+        generated_at=datetime(2026, 7, 25, tzinfo=timezone.utc),
+        prompt="test",
+        max_tokens=128,
+        results=[
+            ModelCheckResult(
+                model=model,
+                started_at=datetime(2026, 7, 25, tzinfo=timezone.utc),
+                duration_ms=10,
+                ok=False,
+                status_code=400,
+                error_category="模型不可用",
+                error_message="invalid model",
+            )
+        ],
+    )
+
+    class FakeClient:
+        def __init__(self, *args):
+            pass
+
+        def close(self):
+            pass
+
+    auth = WalletAuth("eth", "0xwallet", "10", "shared-id", "private")
+    monkeypatch.setattr("github_ai_daily.cli.reasoning_auth", lambda settings, args, **kwargs: auth)
+    monkeypatch.setattr("github_ai_daily.cli.reasoning_interface_key", lambda settings, args: object())
+    monkeypatch.setattr("github_ai_daily.cli.ReasoningClient", FakeClient)
+    monkeypatch.setattr("github_ai_daily.cli.run_model_check", lambda client, max_tokens, **kwargs: report)
+    monkeypatch.setattr(
+        "github_ai_daily.cli.fetch_latest_sub_wallet_balance",
+        lambda auth, base_url: SimpleNamespace(error="BFF unavailable"),
+    )
+    args = Namespace(
+        output_dir=tmp_path,
+        max_tokens=128,
+        send_email=False,
+        to=None,
+        money_id="explicit-id",
+        bff_base_url="https://bitgo.example.test",
+    )
+
+    assert cmd_model_check(args, Settings()) == 0
+    assert list(tmp_path.glob("bitgo-model-check_*.html"))
+
+
+def test_model_check_reuses_the_configured_money_id(monkeypatch, tmp_path):
+    captured = {}
+    report = ModelCheckReport(
+        generated_at=datetime(2026, 7, 25, tzinfo=timezone.utc),
+        prompt="test",
+        max_tokens=128,
+        results=[],
+    )
+
+    class FakeClient:
+        def __init__(self, endpoint, model, auth, interface_key):
+            captured["money_id"] = auth.money_id
+
+        def close(self):
+            pass
+
+    auth = WalletAuth("eth", "0xwallet", "10", "old-id", "private")
+    monkeypatch.setattr("github_ai_daily.cli.reasoning_auth", lambda settings, args, **kwargs: auth)
+    monkeypatch.setattr("github_ai_daily.cli.reasoning_interface_key", lambda settings, args: object())
+    monkeypatch.setattr("github_ai_daily.cli.ReasoningClient", FakeClient)
+    monkeypatch.setattr("github_ai_daily.cli.run_model_check", lambda client, max_tokens, **kwargs: report)
+    monkeypatch.setattr(
+        "github_ai_daily.cli.fetch_latest_sub_wallet_balance",
+        lambda auth, base_url: SimpleNamespace(error="BFF unavailable"),
+    )
+    args = Namespace(
+        output_dir=tmp_path,
+        max_tokens=128,
+        send_email=False,
+        to=None,
+        money_id="old-id",
+        bff_base_url="https://bitgo.example.test",
+    )
+
+    assert cmd_model_check(args, Settings()) == 0
+    assert captured["money_id"] == "old-id"
+
+
+def test_model_check_reads_web_models_and_updates_local_catalog(monkeypatch, tmp_path):
+    captured = {}
+    web_models = (ModelDefinition("web-model", "Web", "Test", Decimal("1"), Decimal("2")),)
+    report = ModelCheckReport(
+        generated_at=datetime(2026, 7, 25, tzinfo=timezone.utc),
+        prompt="test",
+        max_tokens=128,
+        results=[],
+    )
+
+    class FakeClient:
+        def __init__(self, *args):
+            pass
+
+        def close(self):
+            pass
+
+    auth = WalletAuth("eth", "0xwallet", "10", "old-id", "private")
+    monkeypatch.setattr("github_ai_daily.cli.reasoning_auth", lambda settings, args, **kwargs: auth)
+    monkeypatch.setattr("github_ai_daily.cli.reasoning_interface_key", lambda settings, args: object())
+    monkeypatch.setattr("github_ai_daily.cli.ReasoningClient", FakeClient)
+    monkeypatch.setattr("github_ai_daily.cli.fetch_models_from_web", lambda: web_models)
+    monkeypatch.setattr(
+        "github_ai_daily.cli.run_model_check",
+        lambda client, max_tokens, **kwargs: captured.update(kwargs) or report,
+    )
+    monkeypatch.setattr(
+        "github_ai_daily.cli.fetch_latest_sub_wallet_balance",
+        lambda auth, base_url: SimpleNamespace(error="BFF unavailable"),
+    )
+    args = Namespace(
+        config=tmp_path / "config.toml",
+        output_dir=tmp_path,
+        max_tokens=128,
+        read_web_models=True,
+        send_email=False,
+        to=None,
+        money_id="old-id",
+        bff_base_url="https://bitgo.example.test",
+    )
+
+    assert cmd_model_check(args, Settings()) == 0
+    assert captured["models"] == web_models
+    assert "本次从网页更新" in captured["model_source"]
+    assert load_model_catalog(tmp_path / "model_catalog.json").models == web_models
+
+
+def test_model_check_uses_existing_local_catalog_without_fetching(monkeypatch, tmp_path):
+    cached_models = (ModelDefinition("cached-model", "Cached", "Test", Decimal("1"), Decimal("2")),)
+    save_model_catalog(tmp_path / "model_catalog.json", cached_models)
+    captured = {}
+    report = ModelCheckReport(
+        generated_at=datetime(2026, 7, 25, tzinfo=timezone.utc),
+        prompt="test",
+        max_tokens=128,
+        results=[],
+    )
+
+    class FakeClient:
+        def __init__(self, *args):
+            pass
+
+        def close(self):
+            pass
+
+    auth = WalletAuth("eth", "0xwallet", "10", "old-id", "private")
+    monkeypatch.setattr("github_ai_daily.cli.reasoning_auth", lambda settings, args, **kwargs: auth)
+    monkeypatch.setattr("github_ai_daily.cli.reasoning_interface_key", lambda settings, args: object())
+    monkeypatch.setattr("github_ai_daily.cli.ReasoningClient", FakeClient)
+    monkeypatch.setattr(
+        "github_ai_daily.cli.fetch_models_from_web",
+        lambda: (_ for _ in ()).throw(AssertionError("default mode must not read the web")),
+    )
+    monkeypatch.setattr(
+        "github_ai_daily.cli.run_model_check",
+        lambda client, max_tokens, **kwargs: captured.update(kwargs) or report,
+    )
+    monkeypatch.setattr(
+        "github_ai_daily.cli.fetch_latest_sub_wallet_balance",
+        lambda auth, base_url: SimpleNamespace(error="BFF unavailable"),
+    )
+    args = Namespace(
+        config=tmp_path / "config.toml",
+        output_dir=tmp_path,
+        max_tokens=128,
+        read_web_models=False,
+        send_email=False,
+        to=None,
+        money_id="old-id",
+        bff_base_url="https://bitgo.example.test",
+    )
+
+    assert cmd_model_check(args, Settings()) == 0
+    assert captured["models"] == cached_models
+    assert "本地模型缓存" in captured["model_source"]
+
+
+def test_model_check_persists_its_generated_money_id(tmp_path):
+    settings = Settings()
+    auth = WalletAuth("eth", "0xwallet", "10", "generated-id", "private")
+    args = Namespace(money_id=None, config=tmp_path / "config.toml")
+
+    assert _persist_generated_model_check_money_id(settings, args, auth) is True
+    saved = Settings.load(args.config)
+    assert saved.wallets["eth"].money_id == "generated-id"
+    assert _persist_generated_model_check_money_id(saved, args, auth) is False
+
+
+def test_parser_supports_model_check_and_gmail_auth():
+    assert parser().parse_args(["model-check", "--send-email"]).command == "model-check"
+    assert parser().parse_args(["model-check", "--read-web-models"]).read_web_models is True
+    assert parser().parse_args(["gmail-auth", "--console"]).command == "gmail-auth"

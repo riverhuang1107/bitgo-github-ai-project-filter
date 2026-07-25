@@ -50,6 +50,13 @@ class TokenUsage:
         return json.dumps({"usage": self.raw}, ensure_ascii=False, indent=2)
 
 
+@dataclass(slots=True)
+class ReasoningResponse:
+    status_code: int
+    data: dict | None
+    text: str
+
+
 class ReasoningClient:
     def __init__(
         self,
@@ -99,22 +106,28 @@ class ReasoningClient:
         return _validate_selections(result, {repo.full_name for repo in repos}, strict=False)
 
     def test_access(self) -> dict:
+        response = self.test_model(
+            self.model, "只回复 JSON：{\"status\":\"ok\"}", max_tokens=32
+        )
+        data = response.data or {}
+        _raise_for_status_from_response(response.status_code, data)
+        return data
+
+    def test_model(self, model: str, prompt: str, max_tokens: int) -> ReasoningResponse:
         body = {
-            "model": self.model,
-            "max_tokens": 32,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "只回复 JSON：{\"status\":\"ok\"}",
-                }
-            ],
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
         }
         headers = wallet_signed_headers(self.auth, self.interface_key)
         response = self.client.post(self.endpoint, headers=headers, json=body)
-        response_data = _response_json(response)
-        self.last_usage = TokenUsage.from_response(response_data)
-        _raise_for_status(response, response_data)
-        return response_data
+        try:
+            decoded = response.json()
+        except ValueError:
+            decoded = None
+        data = decoded if isinstance(decoded, dict) else None
+        self.last_usage = TokenUsage.from_response(data or {})
+        return ReasoningResponse(response.status_code, data, response.text)
 
     def close(self) -> None:
         self.client.close()
@@ -199,12 +212,16 @@ def _response_json(response: httpx.Response) -> dict:
 
 
 def _raise_for_status(response: httpx.Response, data: dict) -> None:
-    if response.is_success:
+    _raise_for_status_from_response(response.status_code, data)
+
+
+def _raise_for_status_from_response(status_code: int, data: dict) -> None:
+    if 200 <= status_code < 300:
         return
     detail = data.get("error", data.get("message"))
     if isinstance(detail, dict):
         detail = detail.get("message", detail.get("type"))
     suffix = f": {str(detail)[:500]}" if detail else ""
     raise RuntimeError(
-        f"Reasoning API returned HTTP {response.status_code}{suffix}"
+        f"Reasoning API returned HTTP {status_code}{suffix}"
     )

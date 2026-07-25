@@ -74,7 +74,12 @@ def generate_private_key(path: Path, overwrite: bool = False) -> None:
 
 
 def load_private_key(path: Path) -> ec.EllipticCurvePrivateKey:
-    key = serialization.load_pem_private_key(path.read_bytes(), password=None)
+    return load_private_key_pem(path.read_bytes())
+
+
+def load_private_key_pem(value: bytes | str) -> ec.EllipticCurvePrivateKey:
+    pem = value.encode("utf-8") if isinstance(value, str) else value
+    key = serialization.load_pem_private_key(pem, password=None)
     if not isinstance(key, ec.EllipticCurvePrivateKey):
         raise TypeError("Configured key is not an ECDSA private key")
     return key

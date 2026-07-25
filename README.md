@@ -232,6 +232,77 @@ REASONING_ETH_PRIVATE_KEY=... .venv/bin/github-ai-daily bff wallet --chain eth -
 
 `generate` 只生成报告文件，不发送邮件。通过 agent 执行邮件命令时使用 Agent Mail；在非 agent 环境中，`run --to ...`、`send ... --to ...`、`mail test` 会通过 Resend SMTP 发送邮件。
 
+## Bitgo 大模型连通性检测
+
+`model-check` 默认优先使用本地模型缓存；首次尚未缓存时使用仓库内置的 34 个模型清单。默认运行时不会读取网页，因此适合定时任务和网络受限环境。每个模型都会收到固定提示词：`你好。这个工具测试bitgo后端大模型的连通性。`。调用串行执行，默认 `max_tokens=128`，避免并发请求影响钱包授权、限流或费用统计。
+
+先准备与普通推理调用相同的钱包参数及接口 ECDSA 私钥。接口私钥可继续通过配置文件的 `private_key_path` 指定，也可通过环境变量注入 PEM：
+
+```bash
+export REASONING_API_ENDPOINT="https://api-bitgo.enigmhaven.com/v1/messages"
+export REASONING_WALLET_CHAIN="eth"
+export REASONING_WALLET_ADDRESS="0x..."
+export REASONING_MONEY="YOUR_WALLET_MONEY"
+export REASONING_PRIVATE_KEY="YOUR_WALLET_PRIVATE_KEY"
+export REASONING_INTERFACE_PRIVATE_KEY_PEM="$(cat /secure/ecdsa-private.pem)"
+
+.venv/bin/github-ai-daily model-check --output-dir reports
+```
+
+需要以 [Bitgo 产品指南附录](https://bitgo.enigmhaven.com/bitgo-product-guide-optimized-v1.html#appendix) 的最新模型表替换本地清单时，显式传入 `--read-web-models`：
+
+```bash
+.venv/bin/github-ai-daily model-check --read-web-models --output-dir reports
+```
+
+该选项会下载并解析附录模型表中的模型 ID、名称、发行商和输入/输出价格，并在完整解析成功后更新本地缓存。默认缓存路径为 `${XDG_CONFIG_HOME:-$HOME/.config}/github-ai-daily/model_catalog.json`；使用全局 `--config PATH` 时，缓存写入 `PATH` 同目录。后续不带该参数的 `model-check` 会直接使用这份缓存，不会再次访问网页。网页读取或解析失败时命令会报错，既有缓存不会被覆盖；报告会注明本次模型列表来源。
+
+该命令总会生成同一批次的 HTML 和 Markdown 报告。报告包含每个模型的状态、响应、耗时、完整 `usage`、失败的 raw JSON 或原始文本，以及按错误类型归类的失败模型列表。总费用只汇总接口返回的 `usage.consume_amount * 10^-8`；服务端没有返回费用时会明确标记，不会根据文档价格表估算。完成全部模型调用后，工具还会使用 Tier2 BFF `GET /api/bff/v1/sub-wallet` 查询该 `money_id` 对应零钱包的最新余额和总授权金额（均按 USD 展示）、充值币种和更新时间；余额查询失败也会在报告中注明。
+
+首次本地运行 `model-check` 时，工具会生成一个随机 `money_id`，保存到用户配置中当前链的钱包 profile；后续每次执行及该次内部的全部模型调用都会复用该 ID，报告会完整打印它。也可以通过 `--money-id`、`REASONING_MONEY_ID` 或配置文件中的 `reasoning.money_id` 指定既有值。GitHub Actions 的 runner 不保留本地配置，必须把稳定值配置为 `REASONING_MONEY_ID` Secret。
+
+部分模型失败被视为检测结果，命令仍会生成完整报告并以成功状态结束。钱包配置、报告写入或邮件发送失败则会以非零状态退出。
+
+### Gmail 邮件
+
+Gmail 使用 OAuth，不使用 Gmail 密码。先在本机从 Google Cloud 下载 OAuth Desktop Client JSON，并保存为 `secrets/gmail_credentials.json`（该目录已被 Git 忽略），然后运行：
+
+```bash
+.venv/bin/github-ai-daily gmail-auth
+```
+
+首次授权完成后，token 默认写入 `secrets/gmail_token.json`。本地发送报告：
+
+```bash
+export MAIL_FROM="me@example.com"
+.venv/bin/github-ai-daily model-check \
+  --output-dir reports \
+  --send-email \
+  --to "ops@example.com,reader@example.com"
+```
+
+`--send-email` 会将 HTML 作为正文，并同时附加 HTML 和 Markdown 文件。也可省略 `--to`，改由 `REPORT_RECIPIENTS` 提供逗号分隔的收件人。
+
+### GitHub Actions
+
+工作流位于 `.github/workflows/bitgo-model-check.yml`，每天北京时间 09:17（UTC 01:17）执行，并可从 Actions 页面手动触发。每次运行都会上传 `reports/` artifact，保留 30 天。
+
+在仓库的 Actions Secrets 中配置以下值：
+
+- `REASONING_WALLET_CHAIN`
+- `REASONING_WALLET_ADDRESS`
+- `REASONING_MONEY`
+- `REASONING_MONEY_ID`
+- `REASONING_PRIVATE_KEY`
+- `REASONING_INTERFACE_PRIVATE_KEY_PEM`
+- `REASONING_SIGNER_COMMAND`（可选；不设置时使用仓库内 Go signer）
+- `GMAIL_CREDENTIALS_JSON`（OAuth client JSON 的完整内容）
+- `GMAIL_TOKEN_JSON`（本地授权生成 token JSON 的完整内容）
+- `MAIL_FROM`
+- `REPORT_RECIPIENTS`
+
+Actions 使用产品指南中的 `https://api-bitgo.enigmhaven.com/v1/messages`。本地命令可用 `REASONING_API_ENDPOINT` 覆盖接口地址；配置模板和 CI 日志都不应写入钱包私钥、ECDSA 私钥或 OAuth JSON。
+
 ## Bitgo BFF 钱包查询
 
 `bff wallet` 会按 `SIGNING_GUIDE.md` 的 Tier1 规则对 `wallet_address` 做钱包私钥签名，生成只包含 `wallet_address` 和 `signature` 的 `X-Params`，然后请求：
