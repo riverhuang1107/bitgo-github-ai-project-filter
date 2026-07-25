@@ -263,7 +263,21 @@ export REASONING_INTERFACE_PRIVATE_KEY_PEM="$(cat /secure/ecdsa-private.pem)"
 
 部分模型失败被视为检测结果，命令仍会生成完整报告并以成功状态结束。钱包配置、报告写入或邮件发送失败则会以非零状态退出。
 
-### Gmail 邮件
+### 报告邮件
+
+`model-check --send-email` 默认使用 `auto` 后端：已安装并授权 `agently-cli` 时优先通过 Agent Mail 发送；否则使用 Gmail OAuth。可用 `--mail-backend agent` 强制 Agent Mail，或用 `--mail-backend gmail` 强制 Gmail。两种方式都会将 HTML 作为正文，并附加 HTML 和 Markdown 报告。
+
+Agent Mail 使用项目已有的 `agently-cli` 授权；先按本 README 的 [Agent Mail](#agent-%E7%8E%AF%E5%A2%83agent-mail) 步骤完成登录，然后执行：
+
+```bash
+.venv/bin/github-ai-daily model-check \
+  --output-dir reports \
+  --send-email \
+  --mail-backend agent \
+  --to "ops@example.com,reader@example.com"
+```
+
+GitHub Actions 没有 Agent Mail 的交互式授权环境，默认应继续使用 Gmail OAuth。
 
 Gmail 使用 OAuth，不使用 Gmail 密码。先在本机从 Google Cloud 下载 OAuth Desktop Client JSON，并保存为 `secrets/gmail_credentials.json`（该目录已被 Git 忽略），然后运行：
 
@@ -278,10 +292,11 @@ export MAIL_FROM="me@example.com"
 .venv/bin/github-ai-daily model-check \
   --output-dir reports \
   --send-email \
+  --mail-backend gmail \
   --to "ops@example.com,reader@example.com"
 ```
 
-`--send-email` 会将 HTML 作为正文，并同时附加 HTML 和 Markdown 文件。也可省略 `--to`，改由 `REPORT_RECIPIENTS` 提供逗号分隔的收件人。
+也可省略 `--to`，改由 `REPORT_RECIPIENTS` 提供逗号分隔的收件人。
 
 ### GitHub Actions
 

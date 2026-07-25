@@ -29,10 +29,12 @@ from .gmail import authorize_gmail, parse_recipients, send_report_email
 from .github import GitHubClient
 from .mail import (
     SMTP_KEY,
+    agent_mail_available,
     create_message,
     management_key_from_env,
     provision_mail,
     remove_mail,
+    send_agent_message,
     send_message,
 )
 from .reasoning import ReasoningClient
@@ -90,6 +92,12 @@ def parser() -> argparse.ArgumentParser:
     model_check.add_argument("--bff-base-url", default=DEFAULT_BFF_BASE_URL)
     model_check.add_argument("--send-email", action="store_true")
     model_check.add_argument("--to", help="Comma-separated Gmail recipients")
+    model_check.add_argument(
+        "--mail-backend",
+        choices=("auto", "agent", "gmail"),
+        default=os.environ.get("MODEL_CHECK_MAIL_BACKEND", "auto"),
+        help="Report email backend: Agent Mail when available, Gmail OAuth otherwise",
+    )
     _wallet_args(
         model_check,
         money_id_help="Persistent money_id required for the reused Bitgo sub-wallet",
@@ -412,14 +420,44 @@ def cmd_model_check(args, settings: Settings) -> int:
         if not recipients:
             raise RuntimeError("Email recipients are required via --to or REPORT_RECIPIENTS")
         html_body = paths["html"].read_text(encoding="utf-8")
-        send_report_email(
+        backend = send_model_check_report(
+            settings,
             html_body,
             recipients,
             f"Bitgo 大模型连通性报告 {report.generated_at.date().isoformat()}",
             list(paths.values()),
+            getattr(args, "mail_backend", "auto"),
         )
-        print(f"Sent Gmail report to {', '.join(recipients)}")
+        print(f"Sent {backend} report to {', '.join(recipients)}")
     return 0
+
+
+def send_model_check_report(
+    settings: Settings,
+    html_body: str,
+    recipients: list[str],
+    subject: str,
+    attachments: list[Path],
+    backend: str = "auto",
+) -> str:
+    if backend not in {"auto", "agent", "gmail"}:
+        raise ValueError("model-check mail backend must be auto, agent, or gmail")
+    agent_available = agent_mail_available() if backend in {"auto", "agent"} else False
+    use_agent_mail = backend == "agent" or (backend == "auto" and agent_available)
+    if use_agent_mail:
+        if backend == "agent" and not agent_available:
+            raise RuntimeError("Agent Mail CLI is not available or not authorized")
+        message = create_message(
+            settings.mail_from,
+            ", ".join(recipients),
+            subject,
+            html_body,
+            attachments,
+        )
+        send_agent_message(message)
+        return "Agent Mail"
+    send_report_email(html_body, recipients, subject, attachments)
+    return "Gmail"
 
 
 def fetch_latest_sub_wallet_balance(auth: WalletAuth, base_url: str) -> WalletBalance:

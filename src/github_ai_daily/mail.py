@@ -8,6 +8,7 @@ import ssl
 import subprocess
 import tempfile
 from email.message import EmailMessage
+from email.utils import getaddresses
 from pathlib import Path
 
 import httpx
@@ -98,17 +99,20 @@ def send_agent_message(message: EmailMessage) -> None:
         body_path = tmp_path / ("body.html" if body.get_content_subtype() == "html" else "body.txt")
         body_path.write_text(body.get_content(), encoding="utf-8")
         attachments = _write_agent_attachments(message, tmp_path)
+        recipients = [address for _, address in getaddresses(message.get_all("To", [])) if address]
+        if not recipients:
+            raise RuntimeError("Agent Mail message has no recipients")
         command = [
             "agently-cli",
             "message",
             "+send",
-            "--to",
-            str(message["To"]),
             "--subject",
             str(message["Subject"]),
             "--body-file",
             _relative_to_cwd(body_path),
         ]
+        for recipient in recipients:
+            command.extend(["--to", recipient])
         for attachment in attachments:
             command.extend(["--attachment", _relative_to_cwd(attachment)])
         first = _run_agent_command(command)

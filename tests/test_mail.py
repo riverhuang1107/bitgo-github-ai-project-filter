@@ -110,6 +110,35 @@ def test_auto_backend_uses_agent_mail_when_available(monkeypatch, tmp_path: Path
     assert commands[2][-2:] == ["--confirmation-token", "ctk_test"]
 
 
+def test_agent_mail_uses_one_to_option_per_recipient(monkeypatch, tmp_path: Path):
+    commands = []
+
+    class Result:
+        returncode = 0
+        stdout = '{"ok": true, "data": {}}'
+        stderr = ""
+
+    monkeypatch.setattr(
+        "github_ai_daily.mail.subprocess.run",
+        lambda command, **kwargs: commands.append(command) or Result(),
+    )
+    from github_ai_daily.mail import send_agent_message
+
+    send_agent_message(
+        create_message(
+            Settings().mail_from,
+            "one@example.com, two@example.com",
+            "Daily",
+            "<h1>Daily</h1>",
+        )
+    )
+
+    command = commands[0]
+    assert command.count("--to") == 2
+    assert "one@example.com" in command
+    assert "two@example.com" in command
+
+
 def test_resend_backend_uses_smtp_secret(monkeypatch):
     sent = {}
 
