@@ -7,6 +7,7 @@ from github_ai_daily.reasoning import (
     ReasoningClient,
     TokenUsage,
     _extract_json,
+    _openai_chat_endpoint,
     _raise_for_status,
     _validate_selections,
 )
@@ -153,3 +154,31 @@ def test_reasoning_client_uses_x_params_headers(monkeypatch):
     assert captured["headers"]["X-Signature"] == "signature"
     assert captured["headers"]["X-Nonce"] == "nonce"
     assert captured["body"]["model"] == "model-a"
+
+
+def test_reasoning_client_uses_openai_chat_completions_protocol(monkeypatch):
+    captured = {}
+
+    class FakeClient:
+        def post(self, endpoint, headers, json):
+            captured["endpoint"] = endpoint
+            captured["body"] = json
+            request = httpx.Request("POST", endpoint)
+            return httpx.Response(200, request=request, json={"choices": [{"message": {"content": "ok"}}]})
+
+    monkeypatch.setattr("github_ai_daily.reasoning.wallet_signed_headers", lambda auth, key: {})
+    client = ReasoningClient(
+        "https://example.test/v1/messages",
+        "model-a",
+        WalletAuth("ltc", "wallet", "10", "id", "private"),
+        ec.generate_private_key(ec.SECP256R1()),
+    )
+    client.client = FakeClient()
+
+    response = client.test_model_openai("openai/test", "hello", 128)
+
+    assert response.data["choices"][0]["message"]["content"] == "ok"
+    assert captured["endpoint"] == "https://example.test/v1/chat/completions"
+    assert captured["body"]["max_completion_tokens"] == 128
+    assert "max_tokens" not in captured["body"]
+    assert _openai_chat_endpoint("https://example.test/v1/messages/") == "https://example.test/v1/chat/completions"

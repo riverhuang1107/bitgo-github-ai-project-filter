@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -119,8 +120,21 @@ class ReasoningClient:
             "max_tokens": max_tokens,
             "messages": [{"role": "user", "content": prompt}],
         }
+        return self._test_request(self.endpoint, body)
+
+    def test_model_openai(
+        self, model: str, prompt: str, max_tokens: int
+    ) -> ReasoningResponse:
+        body = {
+            "model": model,
+            "max_completion_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        return self._test_request(_openai_chat_endpoint(self.endpoint), body)
+
+    def _test_request(self, endpoint: str, body: dict) -> ReasoningResponse:
         headers = wallet_signed_headers(self.auth, self.interface_key)
-        response = self.client.post(self.endpoint, headers=headers, json=body)
+        response = self.client.post(endpoint, headers=headers, json=body)
         try:
             decoded = response.json()
         except ValueError:
@@ -225,3 +239,12 @@ def _raise_for_status_from_response(status_code: int, data: dict) -> None:
     raise RuntimeError(
         f"Reasoning API returned HTTP {status_code}{suffix}"
     )
+
+
+def _openai_chat_endpoint(endpoint: str) -> str:
+    parsed = urlsplit(endpoint)
+    suffix = "/messages"
+    if not parsed.path.rstrip("/").endswith(suffix):
+        raise ValueError("OpenAI compatibility requires an endpoint ending in /messages")
+    path = parsed.path.rstrip("/")[: -len(suffix)] + "/chat/completions"
+    return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, parsed.fragment))

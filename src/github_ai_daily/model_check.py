@@ -18,6 +18,8 @@ TEST_PROMPT = "你好。这个工具测试bitgo后端大模型的连通性。"
 MODEL_GUIDE_URL = "https://bitgo.enigmhaven.com/bitgo-product-guide-optimized-v1.html"
 LOCAL_MODEL_SOURCE = "本地内置模型列表"
 MODEL_CATALOG_FILENAME = "model_catalog.json"
+ANTHROPIC_PROTOCOL = "Anthropic Messages"
+OPENAI_PROTOCOL = "OpenAI Chat Completions"
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +90,7 @@ class ModelCheckResult:
     error_message: str = ""
     raw_error_json: dict[str, Any] | None = None
     raw_error_text: str = ""
+    protocol: str = "Anthropic Messages"
 
 
 @dataclass(slots=True)
@@ -115,6 +118,20 @@ class ModelCheckReport:
     @property
     def success_count(self) -> int:
         return sum(result.ok for result in self.results)
+
+    @property
+    def model_count(self) -> int:
+        return len({result.model.model_id for result in self.results})
+
+    @property
+    def fully_supported_model_count(self) -> int:
+        results_by_model: dict[str, list[ModelCheckResult]] = {}
+        for result in self.results:
+            results_by_model.setdefault(result.model.model_id, []).append(result)
+        return sum(
+            len(results) == 2 and all(result.ok for result in results)
+            for results in results_by_model.values()
+        )
 
     @property
     def failures(self) -> list[ModelCheckResult]:
@@ -156,70 +173,28 @@ def run_model_check(
     results: list[ModelCheckResult] = []
     if not models:
         raise ValueError("Model list is empty")
-    total = len(models)
-    for index, model in enumerate(models, start=1):
-        started_at = datetime.now().astimezone()
-        started = perf_counter()
-        print(f"[{index}/{total}] Calling model: {model.model_id}", flush=True)
-        try:
-            response = client.test_model(model.model_id, TEST_PROMPT, max_tokens)
-            usage = TokenUsage.from_response(response.data or {})
-            if response.status_code >= 400:
-                category, message = classify_error(response.status_code, response.data, response.text)
-                result = ModelCheckResult(
-                    model=model,
-                    started_at=started_at,
-                    duration_ms=_duration_ms(started),
-                    ok=False,
-                    status_code=response.status_code,
-                    usage=usage,
-                    error_category=category,
-                    error_message=message,
-                    raw_error_json=response.data,
-                    raw_error_text="" if response.data else response.text,
-                )
-            elif not response.data:
-                result = ModelCheckResult(
-                    model=model,
-                    started_at=started_at,
-                    duration_ms=_duration_ms(started),
-                    ok=False,
-                    status_code=response.status_code,
-                    usage=usage,
-                    error_category="响应格式异常",
-                    error_message="接口返回的成功响应不是 JSON 对象",
-                    raw_error_text=response.text,
-                )
-            elif not response.data.get("content"):
-                result = ModelCheckResult(
-                    model=model,
-                    started_at=started_at,
-                    duration_ms=_duration_ms(started),
-                    ok=False,
-                    status_code=response.status_code,
-                    usage=usage,
-                    error_category="响应格式异常",
-                    error_message="接口返回 JSON，但缺少 Anthropic 风格 content 字段",
-                    raw_error_json=response.data,
-                )
-            else:
-                result = ModelCheckResult(
-                    model=model,
-                    started_at=started_at,
-                    duration_ms=_duration_ms(started),
-                    ok=True,
-                    status_code=response.status_code,
-                    response_text=_content_text(response.data),
-                    usage=usage,
-                )
-        except httpx.TimeoutException as exc:
-            result = _transport_failure(model, started_at, started, "网络/超时", str(exc))
-        except httpx.HTTPError as exc:
-            result = _transport_failure(model, started_at, started, "网络/超时", str(exc))
-        except Exception as exc:
-            result = _transport_failure(model, started_at, started, "客户端错误", str(exc))
-        results.append(result)
-        print(_progress_line(index, total, result), flush=True)
+    attempts = (
+        (ANTHROPIC_PROTOCOL, client.test_model),
+        (OPENAI_PROTOCOL, client.test_model_openai),
+    )
+    total = len(models) * len(attempts)
+    for model_index, model in enumerate(models, start=1):
+        for protocol_index, (protocol, test_model) in enumerate(attempts, start=1):
+            index = (model_index - 1) * len(attempts) + protocol_index
+            started_at = datetime.now().astimezone()
+            started = perf_counter()
+            print(f"[{index}/{total}] Calling {protocol}: {model.model_id}", flush=True)
+            try:
+                response = test_model(model.model_id, TEST_PROMPT, max_tokens)
+                result = _result_from_response(model, protocol, response, started_at, started)
+            except httpx.TimeoutException as exc:
+                result = _transport_failure(model, protocol, started_at, started, "网络/超时", str(exc))
+            except httpx.HTTPError as exc:
+                result = _transport_failure(model, protocol, started_at, started, "网络/超时", str(exc))
+            except Exception as exc:
+                result = _transport_failure(model, protocol, started_at, started, "客户端错误", str(exc))
+            results.append(result)
+            print(_progress_line(index, total, result), flush=True)
     return ModelCheckReport(
         generated_at=now or datetime.now().astimezone(),
         prompt=TEST_PROMPT,
@@ -233,6 +208,39 @@ def fetch_models_from_web(url: str = MODEL_GUIDE_URL, timeout: float = 30) -> tu
     response = httpx.get(url, timeout=timeout, follow_redirects=True)
     response.raise_for_status()
     return parse_models_from_guide_html(response.text)
+
+
+def select_models(
+    models: tuple[ModelDefinition, ...], selectors: list[str] | tuple[str, ...]
+) -> tuple[ModelDefinition, ...]:
+    requested = [
+        item.strip()
+        for value in selectors
+        for item in value.split(",")
+        if item.strip()
+    ]
+    if not requested:
+        return models
+    selected: list[ModelDefinition] = []
+    selected_ids: set[str] = set()
+    unknown: list[str] = []
+    for selector in requested:
+        normalized = selector.casefold()
+        matches = [
+            model
+            for model in models
+            if model.model_id.casefold() == normalized or model.name.casefold() == normalized
+        ]
+        if not matches:
+            unknown.append(selector)
+            continue
+        for model in matches:
+            if model.model_id not in selected_ids:
+                selected.append(model)
+                selected_ids.add(model.model_id)
+    if unknown:
+        raise ValueError(f"Unknown model name or ID: {', '.join(unknown)}")
+    return tuple(selected)
 
 
 def model_catalog_path(config_path: Path) -> Path:
@@ -370,8 +378,60 @@ def classify_error(
     return f"HTTP {status_code}", detail
 
 
+def _result_from_response(
+    model: ModelDefinition, protocol: str, response, started_at: datetime, started: float
+) -> ModelCheckResult:
+    usage = TokenUsage.from_response(response.data or {})
+    common = {
+        "model": model,
+        "started_at": started_at,
+        "duration_ms": _duration_ms(started),
+        "status_code": response.status_code,
+        "usage": usage,
+        "protocol": protocol,
+    }
+    if response.status_code >= 400:
+        category, message = classify_error(response.status_code, response.data, response.text)
+        return ModelCheckResult(
+            **common,
+            ok=False,
+            error_category=category,
+            error_message=message,
+            raw_error_json=response.data,
+            raw_error_text="" if response.data else response.text,
+        )
+    if not response.data:
+        return ModelCheckResult(
+            **common,
+            ok=False,
+            error_category="响应格式异常",
+            error_message="接口返回的成功响应不是 JSON 对象",
+            raw_error_text=response.text,
+        )
+    if protocol == ANTHROPIC_PROTOCOL:
+        if response.data.get("content"):
+            return ModelCheckResult(**common, ok=True, response_text=_content_text(response.data))
+        message = "接口返回 JSON，但缺少 Anthropic 风格 content 字段"
+    elif _is_openai_response(response.data):
+        return ModelCheckResult(**common, ok=True, response_text=_openai_content_text(response.data))
+    else:
+        message = "接口返回 JSON，但缺少 OpenAI 风格 choices 字段"
+    return ModelCheckResult(
+        **common,
+        ok=False,
+        error_category="响应格式异常",
+        error_message=message,
+        raw_error_json=response.data,
+    )
+
+
 def _transport_failure(
-    model: ModelDefinition, started_at: datetime, started: float, category: str, message: str
+    model: ModelDefinition,
+    protocol: str,
+    started_at: datetime,
+    started: float,
+    category: str,
+    message: str,
 ) -> ModelCheckResult:
     return ModelCheckResult(
         model=model,
@@ -380,7 +440,25 @@ def _transport_failure(
         ok=False,
         error_category=category,
         error_message=message or category,
+        protocol=protocol,
     )
+
+
+def _is_openai_response(data: dict[str, Any]) -> bool:
+    return isinstance(data.get("choices"), list) and bool(data["choices"])
+
+
+def _openai_content_text(data: dict[str, Any]) -> str:
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return ""
+    choice = choices[0]
+    if not isinstance(choice, dict):
+        return ""
+    message = choice.get("message")
+    if isinstance(message, dict):
+        return str(message.get("content") or "").strip()
+    return str(choice.get("text") or "").strip()
 
 
 def _duration_ms(started: float) -> int:

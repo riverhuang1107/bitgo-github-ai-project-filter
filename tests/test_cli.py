@@ -488,6 +488,7 @@ def test_model_check_persists_its_generated_money_id(tmp_path):
 def test_parser_supports_model_check_and_gmail_auth():
     assert parser().parse_args(["model-check", "--send-email"]).command == "model-check"
     assert parser().parse_args(["model-check", "--read-web-models"]).read_web_models is True
+    assert parser().parse_args(["model-check", "--model", "claude-4.6-opus", "--model", "deepseek-v3"]).model == ["claude-4.6-opus", "deepseek-v3"]
     assert parser().parse_args(["model-check", "--mail-backend", "agent"]).mail_backend == "agent"
     assert parser().parse_args(["gmail-auth", "--console"]).command == "gmail-auth"
 
@@ -518,5 +519,7 @@ def test_model_check_email_auto_prefers_agent_mail(monkeypatch, tmp_path):
 
     assert backend == "Agent Mail"
     assert captured["message"]["To"] == "one@example.com, two@example.com"
-    assert captured["message"].get_body(preferencelist=("html",)).get_content().strip() == html
+    body = captured["message"].get_body(preferencelist=("html",)).get_content().strip()
+    assert "connectivity report is ready" in body
+    assert html not in body
     assert [part.get_filename() for part in captured["message"].iter_attachments()] == ["report.md"]

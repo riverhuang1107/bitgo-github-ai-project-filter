@@ -48,6 +48,7 @@ from .model_check import (
     model_catalog_path,
     run_model_check,
     save_model_catalog,
+    select_models,
     wallet_balance_from_response,
 )
 from .reports import build_items, write_model_check_reports, write_reports
@@ -84,6 +85,12 @@ def parser() -> argparse.ArgumentParser:
     )
     model_check.add_argument("--output-dir", type=Path)
     model_check.add_argument("--max-tokens", type=int, default=128)
+    model_check.add_argument(
+        "--model",
+        action="append",
+        default=[],
+        help="Model ID or displayed name to test; repeat or separate multiple values with commas",
+    )
     model_check.add_argument(
         "--read-web-models",
         action="store_true",
@@ -393,6 +400,11 @@ def cmd_model_check(args, settings: Settings) -> int:
                 f"（{len(models)} 个模型，更新于 {catalog.fetched_at.isoformat(timespec='seconds')}）"
             )
             print(f"Using local model catalog: {catalog_path} ({len(models)} models)", flush=True)
+    requested_models = getattr(args, "model", [])
+    if requested_models:
+        models = select_models(models, requested_models)
+        model_source += f"；筛选模型：{', '.join(model.model_id for model in models)}"
+        print(f"Testing selected models: {', '.join(model.model_id for model in models)}", flush=True)
     client = ReasoningClient(
         reasoning_endpoint(settings), settings.model or DEFAULT_MODEL, auth, reasoning_interface_key(settings, args)
     )
@@ -451,7 +463,7 @@ def send_model_check_report(
             settings.mail_from,
             ", ".join(recipients),
             subject,
-            html_body,
+            "<p>Bitgo model connectivity report is ready. The complete HTML and Markdown reports are attached.</p>",
             attachments,
         )
         send_agent_message(message)

@@ -236,6 +236,19 @@ REASONING_ETH_PRIVATE_KEY=... .venv/bin/github-ai-daily bff wallet --chain eth -
 
 `model-check` 默认优先使用本地模型缓存；首次尚未缓存时使用仓库内置的 34 个模型清单。默认运行时不会读取网页，因此适合定时任务和网络受限环境。每个模型都会收到固定提示词：`你好。这个工具测试bitgo后端大模型的连通性。`。调用串行执行，默认 `max_tokens=128`，避免并发请求影响钱包授权、限流或费用统计。
 
+默认会测试全部模型。使用 `--model` 可仅测试一个或多个模型，参数接受模型 ID 或产品指南中的显示名称，大小写不敏感；重复传入参数或以逗号分隔多个值即可：
+
+```bash
+.venv/bin/github-ai-daily model-check --model claude-4.6-opus
+.venv/bin/github-ai-daily model-check \
+  --model "Claude 4.6 Opus" \
+  --model "openai/gpt-5,deepseek-v3"
+```
+
+未匹配的名称或 ID 会在发起 API 调用前报错。筛选后的模型清单会写入报告来源字段。
+
+每个模型都会分别测试两种协议：Anthropic Messages（`/v1/messages`、`max_tokens`、`content`）和 OpenAI Chat Completions（`/v1/chat/completions`、`max_completion_tokens`、`choices[].message.content`）。报告会分别记录两次调用的输出内容、用量和失败原始响应；全量检测会产生两倍于模型数量的 API 调用，费用统计包含两种协议的实际消耗。
+
 先准备与普通推理调用相同的钱包参数及接口 ECDSA 私钥。接口私钥可继续通过配置文件的 `private_key_path` 指定，也可通过环境变量注入 PEM：
 
 ```bash
@@ -265,7 +278,7 @@ export REASONING_INTERFACE_PRIVATE_KEY_PEM="$(cat /secure/ecdsa-private.pem)"
 
 ### 报告邮件
 
-`model-check --send-email` 默认使用 `auto` 后端：已安装并授权 `agently-cli` 时优先通过 Agent Mail 发送；否则使用 Gmail OAuth。可用 `--mail-backend agent` 强制 Agent Mail，或用 `--mail-backend gmail` 强制 Gmail。两种方式都会将 HTML 作为正文，并附加 HTML 和 Markdown 报告。
+`model-check --send-email` 默认使用 `auto` 后端：已安装并授权 `agently-cli` 时优先通过 Agent Mail 发送；否则使用 Gmail OAuth。可用 `--mail-backend agent` 强制 Agent Mail，或用 `--mail-backend gmail` 强制 Gmail。Gmail 会将 HTML 作为正文；Agent Mail 使用简短通知正文，并附加完整 HTML 和 Markdown 报告，避免模型原始输出触发邮件正文安全过滤。
 
 Agent Mail 使用项目已有的 `agently-cli` 授权；先按本 README 的 [Agent Mail](#agent-%E7%8E%AF%E5%A2%83agent-mail) 步骤完成登录，然后执行：
 
