@@ -1135,11 +1135,12 @@ bitgo 是面向 agent 的虚拟资产账户与支付授权层，可将链上充�
 
       <section class="section" id="api-call">
         <h2>推理API调用</h2>
-        <p>agent 或软件将任务上下文写入 <code>messages</code>，选择模型后发送到推理 API。请求体采用 Anthropic Messages 风格。</p>
+        <p>agent 或软件将任务上下文写入 <code>messages</code>，选择模型后发送到推理 API。推理 API 同时支持 Anthropic Messages 和 OpenAI Chat Completions 两种协议；两种协议使用相同的签名认证请求头，但请求端点、最大输出 token 参数和响应内容字段不同。</p>
         <table>
           <thead><tr><th>项目</th><th>值</th><th>说明</th></tr></thead>
           <tbody>
-            <tr><td><code>endpoint</code></td><td><code>https://api-bitgo.enigmhaven.com/v1/messages</code></td><td>推理 API 请求地址</td></tr>
+            <tr><td><code>Anthropic Messages endpoint</code></td><td><code>https://api-bitgo.enigmhaven.com/v1/messages</code></td><td>使用 <code>max_tokens</code>，从响应的 <code>content</code> 字段读取模型输出</td></tr>
+            <tr><td><code>OpenAI Chat Completions endpoint</code></td><td><code>https://api-bitgo.enigmhaven.com/v1/chat/completions</code></td><td>使用 <code>max_completion_tokens</code>，从响应的 <code>choices[].message.content</code> 字段读取模型输出</td></tr>
             <tr><td><code>method</code></td><td><code>POST</code></td><td>发送 JSON 请求体</td></tr>
             <tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>固定使用 JSON</td></tr>
             <tr><td><code>X-Params</code></td><td><code>BASE64_ENCODED_WALLET_PARAMS</code></td><td>钱包业务签名认证参数</td></tr>
@@ -1148,7 +1149,7 @@ bitgo 是面向 agent 的虚拟资产账户与支付授权层，可将链上充�
             <tr><td><code>X-Public-Key</code></td><td><code>ECDSA_PUBLIC_KEY</code></td><td>本地 ECDSA 公钥，用于服务端验签</td></tr>
           </tbody>
         </table>
-        <h3>短请求示例</h3>
+        <h3>Anthropic Messages 请求示例</h3>
         <pre><code class="language-json">{
   &quot;model&quot;: &quot;claude-4.6-opus&quot;,
   &quot;max_tokens&quot;: 1024,
@@ -1160,7 +1161,7 @@ bitgo 是面向 agent 的虚拟资产账户与支付授权层，可将链上充�
     }
   ]
 }</code></pre>
-        <h3>短响应结构</h3>
+        <h3>Anthropic Messages 响应结构</h3>
         <pre><code class="language-json">{
   &quot;status&quot;: 200,
   &quot;body&quot;: {
@@ -1177,6 +1178,43 @@ bitgo 是面向 agent 的虚拟资产账户与支付授权层，可将链上充�
       &quot;balance&quot;: 493482537,
       &quot;hash&quot;: &quot;...&quot;
     }
+  }
+}</code></pre>
+        <h3>OpenAI Chat Completions 请求示例</h3>
+        <pre><code class="language-json">{
+  &quot;model&quot;: &quot;claude-4.6-opus&quot;,
+  &quot;max_completion_tokens&quot;: 1024,
+  &quot;stream&quot;: false,
+  &quot;messages&quot;: [
+    {
+      &quot;role&quot;: &quot;user&quot;,
+      &quot;content&quot;: &quot;根据软件当前业务上下文执行一次大模型推理任务。&quot;
+    }
+  ]
+}</code></pre>
+        <h3>OpenAI Chat Completions 响应结构</h3>
+        <pre><code class="language-json">{
+  &quot;choices&quot;: [
+    {
+      &quot;finish_reason&quot;: &quot;stop&quot;,
+      &quot;index&quot;: 0,
+      &quot;message&quot;: {
+        &quot;content&quot;: &quot;模型返回内容...&quot;,
+        &quot;role&quot;: &quot;assistant&quot;
+      }
+    }
+  ],
+  &quot;model&quot;: &quot;claude-4.6-opus&quot;,
+  &quot;object&quot;: &quot;chat.completion&quot;,
+  &quot;usage&quot;: {
+    &quot;prompt_tokens&quot;: 23,
+    &quot;completion_tokens&quot;: 956,
+    &quot;total_tokens&quot;: 979,
+    &quot;input_token_unit_price&quot;: 500,
+    &quot;output_token_unit_price&quot;: 2520,
+    &quot;consume_amount&quot;: 2420620,
+    &quot;balance&quot;: 493482537,
+    &quot;hash&quot;: &quot;...&quot;
   }
 }</code></pre>
         <h3>usage 字段说明</h3>

@@ -1153,12 +1153,13 @@ Security and authorization principles:
 
       <section class="section" id="api-call">
         <h2>Reasoning API Call</h2>
-        <p>The agent or software writes task context into <code>messages</code>, selects a model, and sends the request to the reasoning API. The request body follows the Anthropic Messages style.</p>
+        <p>The agent or software writes task context into <code>messages</code>, selects a model, and sends the request to the reasoning API. The reasoning API supports both the Anthropic Messages and OpenAI Chat Completions protocols. Both protocols use the same signature-authentication headers, but they use different request endpoints, maximum-output-token parameters, and response content fields.</p>
         <table class="api-auth-table">
           <colgroup><col><col><col></colgroup>
           <thead><tr><th>Item</th><th>Value</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td><code>endpoint</code></td><td><code class="endpoint-url">https://api-bitgo.enigmhaven.com/v1/messages</code></td><td>Reasoning API request URL</td></tr>
+            <tr><td><code>Anthropic Messages endpoint</code></td><td><code class="endpoint-url">https://api-bitgo.enigmhaven.com/v1/messages</code></td><td>Use <code>max_tokens</code> and read model output from the response <code>content</code> field</td></tr>
+            <tr><td><code>OpenAI Chat Completions endpoint</code></td><td><code class="endpoint-url">https://api-bitgo.enigmhaven.com/v1/chat/completions</code></td><td>Use <code>max_completion_tokens</code> and read model output from the response <code>choices[].message.content</code> field</td></tr>
             <tr><td><code>method</code></td><td><code>POST</code></td><td>Send a JSON request body</td></tr>
             <tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>Always use JSON</td></tr>
             <tr><td><code>X-Params</code></td><td><code>BASE64_ENCODED_WALLET_PARAMS</code></td><td>Wallet business-signature authentication parameter</td></tr>
@@ -1167,7 +1168,7 @@ Security and authorization principles:
             <tr><td><code>X-Public-Key</code></td><td><code>ECDSA_PUBLIC_KEY</code></td><td>Local ECDSA public key used by the server for verification</td></tr>
           </tbody>
         </table>
-        <h3>Short request example</h3>
+        <h3>Anthropic Messages request example</h3>
         <pre><code class="language-json">{
   &quot;model&quot;: &quot;claude-4.6-opus&quot;,
   &quot;max_tokens&quot;: 1024,
@@ -1179,7 +1180,7 @@ Security and authorization principles:
     }
   ]
 }</code></pre>
-        <h3>Short response structure</h3>
+        <h3>Anthropic Messages response structure</h3>
         <pre><code class="language-json">{
   &quot;status&quot;: 200,
   &quot;body&quot;: {
@@ -1196,6 +1197,43 @@ Security and authorization principles:
       &quot;balance&quot;: 493482537,
       &quot;hash&quot;: &quot;...&quot;
     }
+  }
+}</code></pre>
+        <h3>OpenAI Chat Completions request example</h3>
+        <pre><code class="language-json">{
+  &quot;model&quot;: &quot;claude-4.6-opus&quot;,
+  &quot;max_completion_tokens&quot;: 1024,
+  &quot;stream&quot;: false,
+  &quot;messages&quot;: [
+    {
+      &quot;role&quot;: &quot;user&quot;,
+      &quot;content&quot;: &quot;Run one large-model reasoning task based on the current application context.&quot;
+    }
+  ]
+}</code></pre>
+        <h3>OpenAI Chat Completions response structure</h3>
+        <pre><code class="language-json">{
+  &quot;choices&quot;: [
+    {
+      &quot;finish_reason&quot;: &quot;stop&quot;,
+      &quot;index&quot;: 0,
+      &quot;message&quot;: {
+        &quot;content&quot;: &quot;Model response content...&quot;,
+        &quot;role&quot;: &quot;assistant&quot;
+      }
+    }
+  ],
+  &quot;model&quot;: &quot;claude-4.6-opus&quot;,
+  &quot;object&quot;: &quot;chat.completion&quot;,
+  &quot;usage&quot;: {
+    &quot;prompt_tokens&quot;: 23,
+    &quot;completion_tokens&quot;: 956,
+    &quot;total_tokens&quot;: 979,
+    &quot;input_token_unit_price&quot;: 500,
+    &quot;output_token_unit_price&quot;: 2520,
+    &quot;consume_amount&quot;: 2420620,
+    &quot;balance&quot;: 493482537,
+    &quot;hash&quot;: &quot;...&quot;
   }
 }</code></pre>
         <h3>usage field notes</h3>
