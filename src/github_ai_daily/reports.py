@@ -159,6 +159,11 @@ def render_model_check_markdown(report: ModelCheckReport) -> str:
                 "```json",
                 _format_json(result.raw_request),
                 "```",
+                "- Raw response JSON：",
+                "",
+                "```json",
+                _format_json(result.raw_response_json),
+                "```",
             ]
         )
         lines.extend(["- usage：", "", "```json", _format_json(result.usage.raw if result.usage else None), "```"])
@@ -275,11 +280,13 @@ def _model_check_row(index: int, result: ModelCheckResult) -> str:
         detail += f"<details><summary>失败原始文本</summary><pre>{html.escape(result.raw_error_text)}</pre></details>"
     usage = _format_json(result.usage.raw if result.usage else None)
     raw_request = _format_json(result.raw_request)
+    raw_response = _format_json(result.raw_response_json)
     return (
         f"<tr><td>{index}</td><td><code>{html.escape(result.model.model_id)}</code><br>{html.escape(result.model.name)}<br><small>{html.escape(result.model.provider)}</small></td>"
         f"<td>{html.escape(result.protocol)}</td><td>{status}</td><td>{result.status_code if result.status_code is not None else '—'}</td><td>{result.duration_ms} ms</td>"
         f"<td>{detail}<details><summary>请求 URL</summary><pre>{html.escape(result.request_url or '未捕获')}</pre></details>"
-        f"<details><summary>Raw request body</summary><pre>{html.escape(raw_request)}</pre></details></td>"
+        f"<details><summary>Raw request body</summary><pre>{html.escape(raw_request)}</pre></details>"
+        f"<details><summary>Raw response JSON</summary><pre>{html.escape(raw_response)}</pre></details></td>"
         f"<td><details><summary>查看</summary><pre>{html.escape(usage)}</pre></details></td></tr>"
     )
 

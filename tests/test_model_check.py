@@ -115,6 +115,16 @@ def test_model_check_records_success_and_all_failure_shapes(monkeypatch, tmp_pat
         "max_completion_tokens": 128,
         "messages": [{"role": "user", "content": model_check.TEST_PROMPT}],
     }
+    assert report.results[0].raw_response_json == {
+        "content": [{"type": "text", "text": "hello"}],
+        "usage": {
+            "input_tokens": 10,
+            "output_tokens": 4,
+            "consume_amount": 123456789,
+        },
+    }
+    assert report.results[2].raw_response_json == {"error": {"message": "invalid model"}}
+    assert report.results[4].raw_response_json is None
     assert report.results[0].request_url == "https://api.example.test/v1/messages"
     assert report.results[1].request_url == "https://api.example.test/v1/chat/completions"
     assert report.results[6].error_category == "网络/超时"
@@ -137,6 +147,8 @@ def test_model_check_records_success_and_all_failure_shapes(monkeypatch, tmp_pat
     assert "失败 raw JSON" in markdown
     assert "Raw request body" in markdown
     assert "Raw request body" in html
+    assert "Raw response JSON" in markdown
+    assert "Raw response JSON" in html
     assert "请求 URL：https://api.example.test/v1/messages" in markdown
     assert "https://api.example.test/v1/chat/completions" in html
     assert "invalid model" in html

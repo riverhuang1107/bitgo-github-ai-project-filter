@@ -90,6 +90,7 @@ class ModelCheckResult:
     error_message: str = ""
     raw_error_json: dict[str, Any] | None = None
     raw_error_text: str = ""
+    raw_response_json: dict[str, Any] | None = None
     request_url: str = ""
     raw_request: dict[str, Any] | None = None
     protocol: str = "Anthropic Messages"
@@ -398,6 +399,7 @@ def _result_from_response(
         "status_code": response.status_code,
         "usage": usage,
         "protocol": protocol,
+        "raw_response_json": response.data,
     }
     if response.status_code >= 400:
         category, message = classify_error(response.status_code, response.data, response.text)
