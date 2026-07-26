@@ -26,6 +26,8 @@ class WalletAuth:
     money_id: str
     private_key: str
     signer_command: str = ""
+    wallet_profile: str = ""
+    money_id_created: bool = False
 
     def normalized_chain(self) -> str:
         return self.chain.strip().lower()

@@ -8,7 +8,7 @@ from pathlib import Path
 import tomllib
 
 
-DEFAULT_ENDPOINT = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
+DEFAULT_ENDPOINT = "https://api-bitgo.enigmhaven.com/v1/messages"
 DEFAULT_MODEL = "claude-4.6-opus"
 DEFAULT_MAIL_ADDRESS = "hhq4326@agent.qq.com"
 DEFAULT_MAIL_DISPLAY_NAME = "Agent Mail"
@@ -25,6 +25,7 @@ def user_config_dir() -> Path:
 
 @dataclass(slots=True)
 class WalletProfile:
+    chain: str = ""
     wallet_address: str = ""
     money: str = ""
     money_id: str = ""
@@ -60,15 +61,17 @@ class Settings:
         mail = data.get("mail", {})
         wallet_profiles = reasoning.get("wallets", {})
         wallets = {
-            str(chain)
+            str(name)
             .strip()
             .lower(): WalletProfile(
+                # Legacy profiles are named after their chain, e.g. [wallets.btc].
+                chain=str(profile.get("chain") or name).strip().lower(),
                 wallet_address=profile.get("wallet_address", ""),
                 money=str(profile.get("money", "")),
                 money_id=str(profile.get("money_id", "")),
                 signer_command=profile.get("signer_command", ""),
             )
-            for chain, profile in wallet_profiles.items()
+            for name, profile in wallet_profiles.items()
             if isinstance(profile, dict)
         }
         return cls(
@@ -106,10 +109,11 @@ class Settings:
             f'signer_command = "{_escape(self.signer_command)}"\n'
         )
         if self.wallets:
-            for chain, wallet in sorted(self.wallets.items()):
+            for name, wallet in sorted(self.wallets.items()):
                 text += (
                     "\n"
-                    f"[reasoning.wallets.{_escape_key(chain)}]\n"
+                    f"[reasoning.wallets.{_escape_key(name)}]\n"
+                    f'chain = "{_escape(wallet.chain or name)}"\n'
                     f'wallet_address = "{_escape(wallet.wallet_address)}"\n'
                     f'money = "{_escape(wallet.money)}"\n'
                     f'money_id = "{_escape(wallet.money_id)}"\n'

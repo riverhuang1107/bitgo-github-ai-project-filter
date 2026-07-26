@@ -108,6 +108,12 @@ def parser() -> argparse.ArgumentParser:
     _wallet_args(
         model_check,
         money_id_help="Persistent money_id required for the reused Bitgo sub-wallet",
+        allow_new_wallet=False,
+    )
+    model_check.add_argument(
+        "--new-money-id",
+        action="store_true",
+        help="Generate a new money_id for this run instead of reusing an existing one",
     )
     model_check.add_argument(
         "--key", type=Path, help="ECDSA interface signing key path"
@@ -148,6 +154,24 @@ def parser() -> argparse.ArgumentParser:
     bff_wallet.add_argument("--signer-command")
     bff_wallet.add_argument("--page", type=int, default=1)
     bff_wallet.add_argument("--page-size", type=int, default=20)
+    bff_sub_wallet = bff_sub.add_parser(
+        "sub-wallet", help="Fetch a Tier2 sub-wallet and its consumption orders"
+    )
+    bff_sub_wallet.add_argument("--base-url", default=DEFAULT_BFF_BASE_URL)
+    _wallet_args(
+        bff_sub_wallet,
+        money_id_help="Existing money_id identifying the Bitgo sub-wallet",
+        allow_new_wallet=False,
+    )
+    bff_sub_wallet.add_argument("--page", type=int, default=1)
+    bff_sub_wallet.add_argument("--page-size", type=int, default=20)
+    bff_sub_wallet.add_argument("--user-id", default="")
+    bff_sub_wallet.add_argument("--category", choices=["TOKEN", "VPS"])
+    bff_sub_wallet.add_argument(
+        "--type", dest="order_type", choices=["deduct", "refund"]
+    )
+    bff_sub_wallet.add_argument("--start-time", default="")
+    bff_sub_wallet.add_argument("--end-time", default="")
     return root
 
 
@@ -166,6 +190,8 @@ def _report_args(command: argparse.ArgumentParser) -> None:
 def _wallet_args(
     command: argparse.ArgumentParser,
     money_id_help: str = "Optional existing authorization money_id; generated automatically when omitted",
+    *,
+    allow_new_wallet: bool = True,
 ) -> None:
     command.add_argument("--chain", choices=["ltc", "btc", "eth"])
     command.add_argument("--wallet-address")
@@ -176,11 +202,12 @@ def _wallet_args(
     )
     command.add_argument("--private-key")
     command.add_argument("--signer-command")
-    command.add_argument(
-        "--new-wallet",
-        action="store_true",
-        help="Generate a fresh wallet for this request instead of reusing a configured wallet",
-    )
+    if allow_new_wallet:
+        command.add_argument(
+            "--new-wallet",
+            action="store_true",
+            help="Generate a fresh wallet for this request instead of reusing a configured wallet",
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -228,7 +255,7 @@ def dispatch(args) -> int:
     if args.command == "reasoning":
         return cmd_reasoning(args, settings)
     if args.command == "bff":
-        return cmd_bff(args)
+        return cmd_bff(args, settings)
     raise RuntimeError("Unknown command")
 
 
@@ -375,10 +402,16 @@ def cmd_reasoning(args, settings: Settings) -> int:
 
 
 def cmd_model_check(args, settings: Settings) -> int:
-    if getattr(args, "new_wallet", False):
-        raise ValueError("model-check must reuse an existing wallet and money_id")
-    auth = reasoning_auth(settings, args)
-    if _persist_generated_model_check_money_id(settings, args, auth):
+    new_money_id = getattr(args, "new_money_id", False)
+    if new_money_id and getattr(args, "money_id", None):
+        raise ValueError("--new-money-id cannot be combined with --money-id")
+    if new_money_id:
+        args.money_id = generate_money_id()
+    auth = reasoning_auth(settings, args, use_wallet_profiles=False)
+    if new_money_id:
+        auth.money_id_created = True
+    if auth.money_id_created:
+        _persist_model_check_money_id(settings, args, auth)
         print(f"Money ID: {auth.money_id} (generated and saved for reuse)", flush=True)
     else:
         print(f"Money ID: {auth.money_id} (reused for every model-check run and call)", flush=True)
@@ -418,6 +451,7 @@ def cmd_model_check(args, settings: Settings) -> int:
     finally:
         client.close()
     report.money_id = auth.money_id
+    report.money_id_created_for_run = auth.money_id_created
     report.wallet_balance = fetch_latest_sub_wallet_balance(auth, args.bff_base_url)
     output_dir = args.output_dir or Path(settings.output_dir)
     paths = write_model_check_reports(report, output_dir)
@@ -442,6 +476,16 @@ def cmd_model_check(args, settings: Settings) -> int:
         )
         print(f"Sent {backend} report to {', '.join(recipients)}")
     return 0
+
+
+def _persist_model_check_money_id(settings: Settings, args, auth: WalletAuth) -> None:
+    settings.wallet_chain = auth.normalized_chain()
+    settings.wallet_address = auth.wallet_address
+    settings.money = auth.money
+    settings.money_id = auth.money_id
+    settings.signer_command = auth.signer_command
+    config_path = getattr(args, "config", None) or default_config_path()
+    settings.save(config_path)
 
 
 def send_model_check_report(
@@ -502,18 +546,46 @@ def cmd_gmail_auth(args) -> int:
     return 0
 
 
-def cmd_bff(args) -> int:
-    if args.bff_command != "wallet":
-        raise RuntimeError("Unknown BFF command")
+def cmd_bff(args, settings: Settings) -> int:
     if args.page < 1:
         raise ValueError("--page must be greater than zero")
     if args.page_size < 1:
         raise ValueError("--page-size must be greater than zero")
+    if args.page_size > 100:
+        raise ValueError("--page-size must not exceed 100")
+    if args.bff_command == "sub-wallet":
+        auth = reasoning_auth(settings, args, allow_new_wallet=False)
+        x_params = build_x_params(auth)
+        client = BFFClient(args.base_url)
+        try:
+            wallet = client.get_sub_wallet(x_params)
+            orders = client.get_sub_wallet_orders(
+                x_params,
+                page=args.page,
+                page_size=args.page_size,
+                user_id=args.user_id,
+                category=args.category or "",
+                order_type=args.order_type or "",
+                start_time=args.start_time,
+                end_time=args.end_time,
+            )
+        finally:
+            client.close()
+        print(
+            json.dumps(
+                {"wallet": wallet, "orders": orders},
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
+    if args.bff_command != "wallet":
+        raise RuntimeError("Unknown BFF command")
     private_key = (
         args.private_key
+        or os.environ.get("REASONING_PRIVATE_KEY")
         or os.environ.get(_chain_env_name(args.chain, "PRIVATE_KEY"))
         or os.environ.get("BFF_PRIVATE_KEY")
-        or os.environ.get("REASONING_PRIVATE_KEY")
     )
     auth = BFFTier1Auth(
         chain=args.chain,
@@ -543,10 +615,23 @@ def cmd_bff(args) -> int:
     return 0
 
 
-def reasoning_auth(settings: Settings, args=None) -> WalletAuth:
+def reasoning_auth(
+    settings: Settings,
+    args=None,
+    *,
+    allow_new_wallet: bool = True,
+    generate_missing_money_id: bool = True,
+    use_wallet_profiles: bool = True,
+) -> WalletAuth:
     explicit_chain = _arg_or_env(args, "chain", "REASONING_WALLET_CHAIN", "")
-    chain = explicit_chain or settings.wallet_chain
-    profile = _wallet_profile(settings, chain)
+    requested_money_id = _arg_or_env(args, "money_id", "REASONING_MONEY_ID", "")
+    chain = explicit_chain or _chain_for_money_id(settings, requested_money_id)
+    chain = chain or settings.wallet_chain or _single_configured_chain(settings)
+    profile_name, profile = (
+        _wallet_profile(settings, chain, requested_money_id)
+        if use_wallet_profiles
+        else ("", None)
+    )
     signer_command = _wallet_value(
         args,
         settings,
@@ -555,7 +640,9 @@ def reasoning_auth(settings: Settings, args=None) -> WalletAuth:
         "signer_command",
         "REASONING_SIGNER_COMMAND",
     )
-    use_new_wallet = _arg_bool_or_env(args, "new_wallet", "REASONING_NEW_WALLET")
+    use_new_wallet = allow_new_wallet and _arg_bool_or_env(
+        args, "new_wallet", "REASONING_NEW_WALLET"
+    )
     generated = generate_wallet(chain, signer_command) if use_new_wallet else None
     private_key = (
         generated.private_key if generated else _private_key_for_chain(args, chain)
@@ -563,9 +650,16 @@ def reasoning_auth(settings: Settings, args=None) -> WalletAuth:
     configured_money_id = _wallet_value(
         args, settings, profile, chain, "money_id", "REASONING_MONEY_ID"
     )
+    money_id_created = use_new_wallet
     money_id = generate_money_id() if use_new_wallet else configured_money_id
     if not money_id:
+        if not generate_missing_money_id:
+            raise ValueError(
+                "An existing money_id is required; provide --money-id or use "
+                "--new-money-id"
+            )
         money_id = generate_money_id()
+        money_id_created = True
     auth = WalletAuth(
         chain=chain,
         wallet_address=(
@@ -584,29 +678,11 @@ def reasoning_auth(settings: Settings, args=None) -> WalletAuth:
         money_id=money_id,
         private_key=private_key,
         signer_command=signer_command,
+        wallet_profile=profile_name,
+        money_id_created=money_id_created,
     )
     auth.validate()
     return auth
-
-
-def _persist_generated_model_check_money_id(
-    settings: Settings, args, auth: WalletAuth
-) -> bool:
-    profile = _wallet_profile(settings, auth.chain)
-    configured_money_id = _wallet_value(
-        args, settings, profile, auth.chain, "money_id", "REASONING_MONEY_ID"
-    )
-    if configured_money_id:
-        return False
-    settings.wallets[auth.normalized_chain()] = WalletProfile(
-        wallet_address=auth.wallet_address,
-        money=auth.money,
-        money_id=auth.money_id,
-        signer_command=auth.signer_command,
-    )
-    config_path = getattr(args, "config", None) or default_config_path()
-    settings.save(config_path)
-    return True
 
 
 def reasoning_interface_key(settings: Settings, args=None):
@@ -651,19 +727,77 @@ def _private_key_for_chain(args, chain: str) -> str:
     value = getattr(args, "private_key", None) if args is not None else None
     if value:
         return str(value)
+    generic_value = os.environ.get("REASONING_PRIVATE_KEY")
+    if generic_value:
+        return generic_value
     chain_env = _chain_env_name(chain, "PRIVATE_KEY")
     if chain_env:
         chain_value = os.environ.get(chain_env)
         if chain_value:
             return chain_value
-    return os.environ.get("REASONING_PRIVATE_KEY", "")
+    return ""
 
 
-def _wallet_profile(settings: Settings, chain: str) -> WalletProfile | None:
+def _chain_for_money_id(settings: Settings, money_id: str) -> str:
+    normalized_id = money_id.strip()
+    if not normalized_id:
+        return ""
+    matches = [
+        _profile_chain(name, profile)
+        for name, profile in settings.wallets.items()
+        if profile.money_id.strip() == normalized_id
+    ]
+    if settings.money_id.strip() == normalized_id and settings.wallet_chain.strip():
+        matches.append(settings.wallet_chain.strip().lower())
+    unique_matches = sorted(set(matches))
+    if len(unique_matches) > 1:
+        raise ValueError(
+            f"money_id matches multiple wallet chains: {', '.join(unique_matches)}; "
+            "specify --chain"
+        )
+    return unique_matches[0] if unique_matches else ""
+
+
+def _single_configured_chain(settings: Settings) -> str:
+    chains = sorted(
+        _profile_chain(name, profile)
+        for name, profile in settings.wallets.items()
+        if profile.wallet_address and _profile_chain(name, profile)
+    )
+    unique_chains = sorted(set(chains))
+    return unique_chains[0] if len(unique_chains) == 1 else ""
+
+
+def _wallet_profile(
+    settings: Settings,
+    chain: str,
+    requested_money_id: str = "",
+) -> tuple[str, WalletProfile | None]:
     normalized = chain.strip().lower()
     if not normalized:
-        return None
-    return settings.wallets.get(normalized)
+        return "", None
+    matches = [
+        (name, profile)
+        for name, profile in settings.wallets.items()
+        if _profile_chain(name, profile) == normalized
+    ]
+    if len(matches) > 1 and requested_money_id:
+        money_matches = [
+            (name, profile)
+            for name, profile in matches
+            if profile.money_id.strip() == requested_money_id.strip()
+        ]
+        if len(money_matches) == 1:
+            return money_matches[0]
+    if len(matches) > 1:
+        # The current single-wallet configuration is authoritative. Legacy
+        # per-chain profiles are not selected implicitly when ambiguous.
+        return "", None
+    return matches[0] if matches else ("", None)
+
+
+def _profile_chain(name: str, profile: WalletProfile) -> str:
+    return (profile.chain or name).strip().lower()
 
 
 def _wallet_value(
@@ -680,11 +814,23 @@ def _wallet_value(
     env_value = os.environ.get(env_name)
     if env_value:
         return env_value
-    if profile is not None:
+    requested_address = (
+        getattr(args, "wallet_address", None) if args is not None else None
+    )
+    profile_matches_address = (
+        not requested_address
+        or profile is None
+        or str(requested_address).strip() == profile.wallet_address.strip()
+    )
+    if profile is not None and profile_matches_address:
         profile_value = getattr(profile, attr)
         if profile_value:
             return str(profile_value)
-    if _matches_legacy_wallet(settings, chain):
+    legacy_matches_address = (
+        not requested_address
+        or str(requested_address).strip() == settings.wallet_address.strip()
+    )
+    if _matches_legacy_wallet(settings, chain) and legacy_matches_address:
         return str(getattr(settings, attr))
     return ""
 

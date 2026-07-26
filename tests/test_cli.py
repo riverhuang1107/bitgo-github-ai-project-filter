@@ -4,7 +4,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from github_ai_daily.cli import (
-    _persist_generated_model_check_money_id,
+    _persist_model_check_money_id,
     cmd_init,
     cmd_model_check,
     parser,
@@ -136,6 +136,127 @@ def test_reasoning_auth_uses_matching_wallet_profile(monkeypatch):
     assert auth.money_id == "eth-id"
     assert auth.private_key == "eth-private"
     assert auth.signer_command == "eth-signer"
+
+
+def test_reasoning_auth_finds_wallet_chain_by_money_id(monkeypatch):
+    monkeypatch.setenv("REASONING_PRIVATE_KEY", "generic-private")
+    settings = Settings(
+        wallets={
+            "btc": WalletProfile(
+                wallet_address="btc-wallet",
+                money="5",
+                money_id="btc-money-id",
+            ),
+            "eth": WalletProfile(
+                wallet_address="0xwallet",
+                money="10",
+                money_id="eth-money-id",
+            ),
+        }
+    )
+    args = Namespace(
+        private_key=None,
+        chain=None,
+        wallet_address=None,
+        money=None,
+        money_id="btc-money-id",
+        signer_command=None,
+    )
+
+    auth = reasoning_auth(settings, args, allow_new_wallet=False)
+
+    assert auth.chain == "btc"
+    assert auth.wallet_address == "btc-wallet"
+    assert auth.money == "5"
+    assert auth.money_id == "btc-money-id"
+    assert auth.private_key == "generic-private"
+
+
+def test_reasoning_private_key_generic_env_takes_precedence(monkeypatch):
+    monkeypatch.setenv("REASONING_PRIVATE_KEY", "generic-private")
+    monkeypatch.setenv("REASONING_BTC_PRIVATE_KEY", "chain-private")
+    settings = Settings(
+        wallets={
+            "btc": WalletProfile(
+                wallet_address="btc-wallet",
+                money="5",
+                money_id="btc-money-id",
+            )
+        }
+    )
+    args = Namespace(
+        private_key=None,
+        chain="btc",
+        wallet_address=None,
+        money=None,
+        money_id=None,
+        signer_command=None,
+    )
+
+    auth = reasoning_auth(settings, args, allow_new_wallet=False)
+
+    assert auth.private_key == "generic-private"
+
+
+def test_model_check_missing_money_id_is_generated_and_saved_to_single_config(monkeypatch, tmp_path):
+    monkeypatch.setenv("REASONING_PRIVATE_KEY", "private")
+    monkeypatch.delenv("REASONING_MONEY_ID", raising=False)
+    monkeypatch.setattr("github_ai_daily.cli.generate_money_id", lambda: "new-id")
+    config_path = tmp_path / "config.toml"
+    settings = Settings(
+        wallet_chain="btc", wallet_address="wallet-a", money="5", money_id=""
+    )
+    args = Namespace(
+        private_key=None,
+        chain="btc",
+        wallet_address=None,
+        money=None,
+        money_id=None,
+        signer_command=None,
+        config=config_path,
+    )
+
+    auth = reasoning_auth(settings, args)
+
+    assert auth.money_id == "new-id"
+    assert auth.money_id_created is True
+    _persist_model_check_money_id(settings, args, auth)
+
+    saved = Settings.load(config_path)
+    assert saved.money_id == "new-id"
+    assert saved.wallet_chain == "btc"
+    assert saved.wallet_address == "wallet-a"
+
+
+def test_model_check_uses_single_config_instead_of_legacy_wallet_profile(monkeypatch):
+    monkeypatch.setenv("REASONING_PRIVATE_KEY", "private")
+    settings = Settings(
+        wallet_chain="btc",
+        wallet_address="current-wallet",
+        money="5",
+        money_id="current-id",
+        wallets={
+            "btc": WalletProfile(
+                chain="btc",
+                wallet_address="legacy-wallet",
+                money="5",
+                money_id="legacy-id",
+            )
+        },
+    )
+    args = Namespace(
+        private_key=None,
+        chain=None,
+        wallet_address=None,
+        money=None,
+        money_id=None,
+        signer_command=None,
+    )
+
+    auth = reasoning_auth(settings, args, use_wallet_profiles=False)
+
+    assert auth.wallet_address == "current-wallet"
+    assert auth.money_id == "current-id"
 
 
 def test_reasoning_auth_generates_money_id_when_missing(monkeypatch):
@@ -474,22 +595,12 @@ def test_model_check_uses_existing_local_catalog_without_fetching(monkeypatch, t
     assert "本地模型缓存" in captured["model_source"]
 
 
-def test_model_check_persists_its_generated_money_id(tmp_path):
-    settings = Settings()
-    auth = WalletAuth("eth", "0xwallet", "10", "generated-id", "private")
-    args = Namespace(money_id=None, config=tmp_path / "config.toml")
-
-    assert _persist_generated_model_check_money_id(settings, args, auth) is True
-    saved = Settings.load(args.config)
-    assert saved.wallets["eth"].money_id == "generated-id"
-    assert _persist_generated_model_check_money_id(saved, args, auth) is False
-
-
 def test_parser_supports_model_check_and_gmail_auth():
     assert parser().parse_args(["model-check", "--send-email"]).command == "model-check"
     assert parser().parse_args(["model-check", "--read-web-models"]).read_web_models is True
     assert parser().parse_args(["model-check", "--model", "claude-4.6-opus", "--model", "deepseek-v3"]).model == ["claude-4.6-opus", "deepseek-v3"]
     assert parser().parse_args(["model-check", "--mail-backend", "agent"]).mail_backend == "agent"
+    assert parser().parse_args(["model-check", "--new-money-id"]).new_money_id is True
     assert parser().parse_args(["gmail-auth", "--console"]).command == "gmail-auth"
 
 

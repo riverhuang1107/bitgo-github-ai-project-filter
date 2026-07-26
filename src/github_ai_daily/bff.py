@@ -56,6 +56,33 @@ class BFFClient:
     def get_sub_wallet(self, x_params: str) -> dict[str, Any]:
         return self._get_json("/api/bff/v1/sub-wallet", x_params=x_params)
 
+    def get_sub_wallet_orders(
+        self,
+        x_params: str,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        user_id: str = "",
+        category: str = "",
+        order_type: str = "",
+        start_time: str = "",
+        end_time: str = "",
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"page": page, "page_size": page_size}
+        optional = {
+            "user_id": user_id,
+            "category": category,
+            "type": order_type,
+            "start_time": start_time,
+            "end_time": end_time,
+        }
+        params.update({key: value for key, value in optional.items() if value})
+        return self._get_json(
+            "/api/bff/v1/sub-wallet/orders",
+            x_params=x_params,
+            params=params,
+        )
+
     def get_transactions(
         self, x_params: str, *, page: int = 1, page_size: int = 20
     ) -> dict[str, Any]:

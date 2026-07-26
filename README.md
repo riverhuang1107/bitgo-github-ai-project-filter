@@ -50,7 +50,7 @@ cat > "$CONFIG_DIR/config.toml" <<EOF
 output_dir = "output"
 
 [reasoning]
-endpoint = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
+endpoint = "https://api-bitgo.enigmhaven.com/v1/messages"
 model = "claude-4.6-opus"
 wallet_chain = "YOUR_WALLET_CHAIN"
 wallet_address = "YOUR_WALLET_ADDRESS"
@@ -228,7 +228,16 @@ REASONING_PRIVATE_KEY=... .venv/bin/github-ai-daily reasoning test --chain YOUR_
 REASONING_NEW_WALLET=true .venv/bin/github-ai-daily reasoning test --chain eth --money YOUR_WALLET_MONEY
 
 REASONING_ETH_PRIVATE_KEY=... .venv/bin/github-ai-daily bff wallet --chain eth --wallet-address YOUR_ETH_WALLET_ADDRESS
+export REASONING_PRIVATE_KEY="..."
+.venv/bin/github-ai-daily bff sub-wallet \
+  --money-id money_20260725083914708124_b8df79b5fb56
 ```
+
+`bff sub-wallet` 使用 Tier2 钱包签名，返回配置中 `money_id` 对应的零钱包余额与消费/退款订单。
+当配置包含 BTC、LTC、ETH 等多个币种时，命令会按 `money_id` 自动识别币种；同一个 ID
+匹配多个币种时必须显式传入 `--chain`。可用
+`--page`、`--page-size`、`--category TOKEN|VPS`、`--type deduct|refund`、
+`--start-time` 和 `--end-time` 筛选记录；命令行提供的钱包参数会覆盖同币种配置。
 
 `generate` 只生成报告文件，不发送邮件。通过 agent 执行邮件命令时使用 Agent Mail；在非 agent 环境中，`run --to ...`、`send ... --to ...`、`mail test` 会通过 Resend SMTP 发送邮件。
 
@@ -270,9 +279,45 @@ export REASONING_INTERFACE_PRIVATE_KEY_PEM="$(cat /secure/ecdsa-private.pem)"
 
 该选项会下载并解析附录模型表中的模型 ID、名称、发行商和输入/输出价格，并在完整解析成功后更新本地缓存。默认缓存路径为 `${XDG_CONFIG_HOME:-$HOME/.config}/github-ai-daily/model_catalog.json`；使用全局 `--config PATH` 时，缓存写入 `PATH` 同目录。后续不带该参数的 `model-check` 会直接使用这份缓存，不会再次访问网页。网页读取或解析失败时命令会报错，既有缓存不会被覆盖；报告会注明本次模型列表来源。
 
-该命令总会生成同一批次的 HTML 和 Markdown 报告。报告包含每个模型的状态、响应、耗时、完整 `usage`、失败的 raw JSON 或原始文本，以及按错误类型归类的失败模型列表。总费用只汇总接口返回的 `usage.consume_amount * 10^-8`；服务端没有返回费用时会明确标记，不会根据文档价格表估算。完成全部模型调用后，工具还会使用 Tier2 BFF `GET /api/bff/v1/sub-wallet` 查询该 `money_id` 对应零钱包的最新余额和总授权金额（均按 USD 展示）、充值币种和更新时间；余额查询失败也会在报告中注明。
+该命令总会生成同一批次的 HTML 和 Markdown 报告。报告包含每个模型的状态、响应、耗时、原始 HTTP 请求体（不含认证请求头）、完整 `usage`、失败的 raw JSON 或原始文本，以及按错误类型归类的失败模型列表。总费用只汇总接口返回的 `usage.consume_amount * 10^-8`；服务端没有返回费用时会明确标记，不会根据文档价格表估算。完成全部模型调用后，工具还会使用 Tier2 BFF `GET /api/bff/v1/sub-wallet` 查询该 `money_id` 对应零钱包的最新余额和总授权金额（均按 USD 展示）、充值币种和更新时间；余额查询失败也会在报告中注明。
 
-首次本地运行 `model-check` 时，工具会生成一个随机 `money_id`，保存到用户配置中当前链的钱包 profile；后续每次执行及该次内部的全部模型调用都会复用该 ID，报告会完整打印它。也可以通过 `--money-id`、`REASONING_MONEY_ID` 或配置文件中的 `reasoning.money_id` 指定既有值。GitHub Actions 的 runner 不保留本地配置，必须把稳定值配置为 `REASONING_MONEY_ID` Secret。
+`model-check` 的 `money_id` 策略由执行参数决定：
+
+- 传入 `--new-money-id`：执行时生成新的随机 ID，写回当前钱包配置，供后续执行复用。
+- 不传 `--new-money-id`：复用 `--money-id`、`REASONING_MONEY_ID` 或当前配置中的已有 ID；没有可复用 ID 时自动创建一个并写回当前配置。
+
+例如：
+
+```bash
+# 新建 money_id
+.venv/bin/github-ai-daily model-check --chain btc --new-money-id
+
+# 复用已有 money_id
+.venv/bin/github-ai-daily model-check --chain btc --money-id money_20260726_example
+```
+
+只需要维护一组当前钱包配置。切换同币种的不同主钱包或切换币种时，在执行时传入新的 `--chain`、`--wallet-address` 和 `--money`；新建的 `money_id` 会连同这些字段一起写回该组配置。
+
+```toml
+[reasoning]
+wallet_chain = "eth"
+wallet_address = "0x..."
+money = "20"
+money_id = ""
+```
+
+```bash
+.venv/bin/github-ai-daily model-check \
+  --chain btc \
+  --wallet-address bc1... \
+  --money 10 \
+  --new-money-id
+
+.venv/bin/github-ai-daily model-check \
+  --chain eth \
+  --wallet-address 0x... \
+  --money 20
+```
 
 部分模型失败被视为检测结果，命令仍会生成完整报告并以成功状态结束。钱包配置、报告写入或邮件发送失败则会以非零状态退出。
 
@@ -341,7 +386,7 @@ Actions 使用产品指南中的 `https://api-bitgo.enigmhaven.com/v1/messages`�
 示例：
 
 ```bash
-export REASONING_ETH_PRIVATE_KEY="eth-hex-private-key"
+export REASONING_PRIVATE_KEY="wallet-private-key"
 .venv/bin/github-ai-daily bff wallet \
   --chain eth \
   --wallet-address 0x49e4f15e31fade852bbd0eb9f5d07bbc68b01a16 \
@@ -352,7 +397,7 @@ export REASONING_ETH_PRIVATE_KEY="eth-hex-private-key"
 PowerShell：
 
 ```powershell
-$env:REASONING_ETH_PRIVATE_KEY = "eth-hex-private-key"
+$env:REASONING_PRIVATE_KEY = "wallet-private-key"
 python -m github_ai_daily bff wallet `
   --chain eth `
   --wallet-address 0x49e4f15e31fade852bbd0eb9f5d07bbc68b01a16 `
@@ -360,7 +405,7 @@ python -m github_ai_daily bff wallet `
   --page-size 20
 ```
 
-私钥也可用 `BFF_PRIVATE_KEY` 或 `REASONING_PRIVATE_KEY` 注入；不建议把真实私钥写入配置文件、README 或 shell 历史。
+钱包私钥统一通过 `REASONING_PRIVATE_KEY` 注入；不建议把真实私钥写入配置文件、README 或 shell 历史。
 
 ## 推理 API 签名
 
@@ -370,9 +415,9 @@ python -m github_ai_daily bff wallet `
 
 调用外部推理 API 前，agent 或人工操作方必须先确认本次使用的加密货币钱包类型和业务参数，不能默认复用某个已存在的钱包、示例 `X-Params` 或上一次请求的链类型。确认项至少包括 `wallet_chain`（`ltc`、`btc` 或 `eth`）、`wallet_address`、`money`，以及是使用已签名的 `X-Params` 还是用对应私钥重新生成钱包业务签名；缺少确认时应先询问用户，不应发起请求。`money_id` 由工具自动生成，必须唯一、不可预测，并适合服务端识别本次授权资金。
 
-如果用户已经明确指定某一种加密货币钱包，工具可以查找配置中是否存在同币种钱包 profile；存在时可直接使用该币种的 `wallet_address`、`money`、已有 `money_id` 和 `signer_command`。不存在同币种 profile 时，工具不能把其他币种的旧配置混用到本次请求，必须由用户补充对应币种的钱包参数；如果没有已有 `money_id`，工具会自动生成新的授权资金 ID。
+每次执行使用当前这一组 `wallet_chain`、`wallet_address`、`money` 和 `money_id` 配置。需要切换同币种的另一主钱包或切换币种时，在命令中显式传入新的 `--chain`、`--wallet-address` 和 `--money`；不能把旧钱包的 `money_id` 与新钱包地址混用。
 
-如果用户明确要求“使用一个新的钱包”发起请求，工具应使用 `--new-wallet` 或 `REASONING_NEW_WALLET=true` 为本次请求临时生成指定币种钱包，并用新钱包地址和新私钥生成 `X-Params`。新钱包私钥只用于本次进程内签名，不写入配置、README、日志或响应正文；`money` 必须由用户提供，或来自同币种 profile，不能从其他币种配置中继承；`money_id` 必须由工具为本次授权自动生成，格式类似 `money_<timestamp>_<random>`。
+如果用户明确要求“使用一个新的钱包”发起请求，工具应使用 `--new-wallet` 或 `REASONING_NEW_WALLET=true` 为本次请求临时生成指定币种钱包，并用新钱包地址和新私钥生成 `X-Params`。新钱包私钥只用于本次进程内签名，不写入配置、README、日志或响应正文；`money` 必须由用户提供；`money_id` 必须由工具为本次授权自动生成，格式类似 `money_<timestamp>_<random>`。
 
 签名消息为：
 
@@ -411,26 +456,12 @@ X-Public-Key: <ecdsa-public-key-der-hex>
 
 ```toml
 [reasoning]
-endpoint = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
+endpoint = "https://api-bitgo.enigmhaven.com/v1/messages"
 model = "claude-4.6-opus"
 wallet_chain = "YOUR_WALLET_CHAIN"
 wallet_address = "YOUR_WALLET_ADDRESS"
 money = "YOUR_WALLET_MONEY"
-# Optional existing record override; omit to auto-generate money_<timestamp>_<random>.
-money_id = ""
-signer_command = ""
-
-[reasoning.wallets.ltc]
-wallet_address = "YOUR_LTC_WALLET_ADDRESS"
-money = "YOUR_LTC_WALLET_MONEY"
-# Optional existing record override.
-money_id = ""
-signer_command = ""
-
-[reasoning.wallets.btc]
-wallet_address = "YOUR_BTC_WALLET_ADDRESS"
-money = "YOUR_BTC_WALLET_MONEY"
-# Optional existing record override.
+# Reused by default; model-check creates and saves one when empty.
 money_id = ""
 signer_command = ""
 ```
@@ -438,7 +469,7 @@ signer_command = ""
 环境变量可覆盖配置：
 
 - `REASONING_PRIVATE_KEY`：通用钱包私钥；未提供币种专用私钥时需要。`ltc/btc` 为 WIF，`eth` 为 hex 私钥。
-- `REASONING_LTC_PRIVATE_KEY`、`REASONING_BTC_PRIVATE_KEY`、`REASONING_ETH_PRIVATE_KEY`：可选；当显式指定对应币种时优先于通用 `REASONING_PRIVATE_KEY` 使用，便于多钱包环境按币种隔离私钥。
+- `REASONING_PRIVATE_KEY`：当前查询所用的钱包私钥；优先于兼容保留的币种专用环境变量。
 - `REASONING_NEW_WALLET`：可选；设置为 `true`、`1`、`yes` 或 `on` 时，为本次请求生成新的 `ltc/btc/eth` 钱包，不复用配置中的钱包地址或私钥。
 - `REASONING_WALLET_CHAIN`：必需；`ltc`、`btc` 或 `eth`，必须由人提供，不能默认假设为固定链。
 - `REASONING_WALLET_ADDRESS`

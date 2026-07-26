@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_ENDPOINT = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
+DEFAULT_ENDPOINT = "https://api-bitgo.enigmhaven.com/v1/messages"
 DEFAULT_WALLET_ADDRESS = "MTymcTbieD5u3K8Vfsa7eHN3NZuKQzwTpk"
 DEFAULT_MODEL = "deepseek-v3"
 

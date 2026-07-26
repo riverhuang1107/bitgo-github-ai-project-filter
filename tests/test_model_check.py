@@ -32,6 +32,8 @@ def _models():
 
 def test_model_check_records_success_and_all_failure_shapes(monkeypatch, tmp_path, capsys):
     class FakeClient:
+        endpoint = "https://api.example.test/v1/messages"
+
         def test_model(self, name, prompt, max_tokens):
             assert prompt == model_check.TEST_PROMPT
             assert max_tokens == 128
@@ -103,6 +105,18 @@ def test_model_check_records_success_and_all_failure_shapes(monkeypatch, tmp_pat
     assert report.results[2].raw_error_json == {"error": {"message": "invalid model"}}
     assert report.results[4].error_category == "响应格式异常"
     assert report.results[4].raw_error_text == "upstream unavailable"
+    assert report.results[0].raw_request == {
+        "model": "ok",
+        "max_tokens": 128,
+        "messages": [{"role": "user", "content": model_check.TEST_PROMPT}],
+    }
+    assert report.results[1].raw_request == {
+        "model": "ok",
+        "max_completion_tokens": 128,
+        "messages": [{"role": "user", "content": model_check.TEST_PROMPT}],
+    }
+    assert report.results[0].request_url == "https://api.example.test/v1/messages"
+    assert report.results[1].request_url == "https://api.example.test/v1/chat/completions"
     assert report.results[6].error_category == "网络/超时"
     assert "[1/8] Calling Anthropic Messages: ok" in terminal
     assert "[2/8] Calling OpenAI Chat Completions: ok" in terminal
@@ -121,6 +135,10 @@ def test_model_check_records_success_and_all_failure_shapes(monkeypatch, tmp_pat
     markdown = render_model_check_markdown(report)
     html = render_model_check_html(report)
     assert "失败 raw JSON" in markdown
+    assert "Raw request body" in markdown
+    assert "Raw request body" in html
+    assert "请求 URL：https://api.example.test/v1/messages" in markdown
+    assert "https://api.example.test/v1/chat/completions" in html
     assert "invalid model" in html
     assert "2.46913578" in markdown
     assert "OpenAI Chat Completions" in markdown

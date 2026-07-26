@@ -20,7 +20,7 @@
 
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `endpoint` | `https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages` | 外部推理 API 请求地址 |
+| `endpoint` | `https://api-bitgo.enigmhaven.com/v1/messages` | 外部推理 API 请求地址 |
 | `model` | `claude-4.6-opus` | 默认推理模型 |
 | `wallet_chain` | `YOUR_WALLET_CHAIN` | 新版钱包签名链，可选 `ltc`、`btc`、`eth`，必须由人提供 |
 | `wallet_address` | 空 | 钱包地址 |
@@ -33,7 +33,7 @@
 
 ```toml
 [reasoning]
-endpoint = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
+endpoint = "https://api-bitgo.enigmhaven.com/v1/messages"
 model = "claude-4.6-opus"
 wallet_chain = "YOUR_WALLET_CHAIN"
 wallet_address = "YOUR_WALLET_ADDRESS"
@@ -172,7 +172,7 @@ ${wallet_address}${money}${money_id}
 请求示例：
 
 ```bash
-curl --location --request POST "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages" \
+curl --location --request POST "https://api-bitgo.enigmhaven.com/v1/messages" \
   --header "Content-Type: application/json" \
   --header "X-Params: BASE64_WALLET_PARAMS_JSON" \
   --header "X-Nonce: RANDOM_NONCE" \

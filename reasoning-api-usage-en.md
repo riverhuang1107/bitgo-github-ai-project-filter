@@ -20,7 +20,7 @@ The default project configuration is defined in `src/github_ai_daily/config.py`:
 
 | Setting | Default value | Description |
 | --- | --- | --- |
-| `endpoint` | `https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages` | External reasoning API endpoint |
+| `endpoint` | `https://api-bitgo.enigmhaven.com/v1/messages` | External reasoning API endpoint |
 | `model` | `claude-4.6-opus` | Default reasoning model |
 | `wallet_chain` | `YOUR_WALLET_CHAIN` | New wallet signing chain: `ltc`, `btc`, or `eth`; must be provided by a person |
 | `wallet_address` | Empty | Wallet address |
@@ -33,7 +33,7 @@ Example `[reasoning]` configuration:
 
 ```toml
 [reasoning]
-endpoint = "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages"
+endpoint = "https://api-bitgo.enigmhaven.com/v1/messages"
 model = "claude-4.6-opus"
 wallet_chain = "YOUR_WALLET_CHAIN"
 wallet_address = "YOUR_WALLET_ADDRESS"
@@ -172,7 +172,7 @@ Request headers:
 Request example:
 
 ```bash
-curl --location --request POST "https://api-token-enigmhaven.expvent.com.cn:1111/v1/messages" \
+curl --location --request POST "https://api-bitgo.enigmhaven.com/v1/messages" \
   --header "Content-Type: application/json" \
   --header "X-Params: BASE64_WALLET_PARAMS_JSON" \
   --header "X-Nonce: RANDOM_NONCE" \

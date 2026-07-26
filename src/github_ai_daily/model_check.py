@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 from bs4 import BeautifulSoup
 
-from .reasoning import ReasoningClient, TokenUsage
+from .reasoning import ReasoningClient, TokenUsage, _openai_chat_endpoint
 
 
 TEST_PROMPT = "你好。这个工具测试bitgo后端大模型的连通性。"
@@ -90,6 +90,8 @@ class ModelCheckResult:
     error_message: str = ""
     raw_error_json: dict[str, Any] | None = None
     raw_error_text: str = ""
+    request_url: str = ""
+    raw_request: dict[str, Any] | None = None
     protocol: str = "Anthropic Messages"
 
 
@@ -112,6 +114,7 @@ class ModelCheckReport:
     results: list[ModelCheckResult]
     model_source: str = LOCAL_MODEL_SOURCE
     money_id: str = ""
+    money_id_created_for_run: bool = False
     money_id_reused_within_run: bool = True
     wallet_balance: WalletBalance | None = None
 
@@ -183,6 +186,10 @@ def run_model_check(
             index = (model_index - 1) * len(attempts) + protocol_index
             started_at = datetime.now().astimezone()
             started = perf_counter()
+            raw_request = _model_request_body(
+                protocol, model.model_id, TEST_PROMPT, max_tokens
+            )
+            request_url = _model_request_url(client, protocol)
             print(f"[{index}/{total}] Calling {protocol}: {model.model_id}", flush=True)
             try:
                 response = test_model(model.model_id, TEST_PROMPT, max_tokens)
@@ -193,6 +200,8 @@ def run_model_check(
                 result = _transport_failure(model, protocol, started_at, started, "网络/超时", str(exc))
             except Exception as exc:
                 result = _transport_failure(model, protocol, started_at, started, "客户端错误", str(exc))
+            result.raw_request = raw_request
+            result.request_url = request_url
             results.append(result)
             print(_progress_line(index, total, result), flush=True)
     return ModelCheckReport(
@@ -446,6 +455,30 @@ def _transport_failure(
 
 def _is_openai_response(data: dict[str, Any]) -> bool:
     return isinstance(data.get("choices"), list) and bool(data["choices"])
+
+
+def _model_request_body(
+    protocol: str, model_id: str, prompt: str, max_tokens: int
+) -> dict[str, Any]:
+    token_field = (
+        "max_completion_tokens"
+        if protocol == OPENAI_PROTOCOL
+        else "max_tokens"
+    )
+    return {
+        "model": model_id,
+        token_field: max_tokens,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+
+
+def _model_request_url(client: ReasoningClient, protocol: str) -> str:
+    endpoint = str(getattr(client, "endpoint", ""))
+    if not endpoint:
+        return ""
+    if protocol == OPENAI_PROTOCOL:
+        return _openai_chat_endpoint(endpoint)
+    return endpoint
 
 
 def _openai_content_text(data: dict[str, Any]) -> str:

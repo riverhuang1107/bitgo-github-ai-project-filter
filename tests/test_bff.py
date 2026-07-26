@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import httpx
 
 from github_ai_daily.bff import BFFClient, BFFTier1Auth, build_tier1_x_params
+from github_ai_daily.cli import parser
 
 
 def test_build_tier1_x_params_omits_money_fields(monkeypatch):
@@ -48,6 +49,8 @@ def test_bff_client_fetches_wallet_transactions_and_sub_wallet_with_x_params():
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen_requests.append(request)
+        if request.url.path.endswith("/sub-wallet/orders"):
+            return httpx.Response(200, json={"orders": [], "total": 0})
         if request.url.path.endswith("/sub-wallet"):
             return httpx.Response(200, json={"wallet": {"subBalance": "0.23"}})
         if request.url.path.endswith("/wallet"):
@@ -61,14 +64,48 @@ def test_bff_client_fetches_wallet_transactions_and_sub_wallet_with_x_params():
         wallet = client.get_wallet("xparams")
         transactions = client.get_transactions("xparams", page=2, page_size=50)
         sub_wallet = client.get_sub_wallet("xparams")
+        orders = client.get_sub_wallet_orders(
+            "xparams",
+            page=3,
+            page_size=25,
+            category="TOKEN",
+            order_type="refund",
+        )
     finally:
         client.close()
 
     assert wallet == {"wallet": {"balance": "1.23"}}
     assert transactions == {"transactions": [], "total": 0}
     assert sub_wallet == {"wallet": {"subBalance": "0.23"}}
+    assert orders == {"orders": [], "total": 0}
     assert seen_requests[0].headers["X-Params"] == "xparams"
     assert seen_requests[1].headers["X-Params"] == "xparams"
     assert seen_requests[1].url.params["page"] == "2"
     assert seen_requests[1].url.params["page_size"] == "50"
     assert seen_requests[2].url.path.endswith("/sub-wallet")
+    assert seen_requests[3].url.path.endswith("/sub-wallet/orders")
+    assert seen_requests[3].url.params["page"] == "3"
+    assert seen_requests[3].url.params["page_size"] == "25"
+    assert seen_requests[3].url.params["category"] == "TOKEN"
+    assert seen_requests[3].url.params["type"] == "refund"
+
+
+def test_sub_wallet_cli_reuses_existing_wallet_and_has_no_new_wallet_option():
+    args = parser().parse_args(
+        [
+            "bff",
+            "sub-wallet",
+            "--chain",
+            "btc",
+            "--page",
+            "2",
+            "--type",
+            "deduct",
+        ]
+    )
+
+    assert args.bff_command == "sub-wallet"
+    assert args.chain == "btc"
+    assert args.page == 2
+    assert args.order_type == "deduct"
+    assert not hasattr(args, "new_wallet")

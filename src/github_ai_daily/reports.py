@@ -115,7 +115,11 @@ def render_model_check_markdown(report: ModelCheckReport) -> str:
         f"- 总费用（服务端 consume_amount，已报部分）：{_format_decimal(report.reported_cost)}",
         f"- 未提供费用的成功模型：{report.missing_cost_count}",
         f"- 未提供 usage 的模型：{report.missing_usage_count}",
-        f"- money_id：`{report.money_id}`（每次执行及全部模型调用均复用）。"
+        (
+            f"- money_id：`{report.money_id}`（本次执行新建，本次全部模型调用均复用）。"
+            if report.money_id_created_for_run
+            else f"- money_id：`{report.money_id}`（复用已有 ID，本次全部模型调用均复用）。"
+        )
         if report.money_id_reused_within_run
         else "- money_id：未复用。",
         "",
@@ -132,6 +136,7 @@ def render_model_check_markdown(report: ModelCheckReport) -> str:
                 f"- 发行商：{result.model.provider}",
                 f"- 状态：{'成功' if result.ok else '失败'}",
                 f"- 测试协议：{result.protocol}",
+                f"- 请求 URL：{result.request_url or '未捕获'}",
                 f"- HTTP 状态：{result.status_code if result.status_code is not None else '未收到响应'}",
                 f"- 开始时间：{result.started_at.isoformat(timespec='seconds')}",
                 f"- 耗时：{result.duration_ms} ms",
@@ -147,6 +152,15 @@ def render_model_check_markdown(report: ModelCheckReport) -> str:
                     f"- 错误信息：{result.error_message}",
                 ]
             )
+        lines.extend(
+            [
+                "- Raw request body：",
+                "",
+                "```json",
+                _format_json(result.raw_request),
+                "```",
+            ]
+        )
         lines.extend(["- usage：", "", "```json", _format_json(result.usage.raw if result.usage else None), "```"])
         if not result.ok and result.raw_error_json is not None:
             lines.extend(["", "- 失败 raw JSON：", "", "```json", _format_json(result.raw_error_json), "```"])
@@ -176,7 +190,7 @@ details{{margin-top:8px}}summary{{cursor:pointer;color:#175cd3}}ul{{margin:8px 0
 </style></head><body><main class="wrap"><h1>Bitgo 大模型连通性报告</h1>
 <p class="meta">生成时间：{generated_at}<br>测试提示词：{html.escape(report.prompt)}<br>max_tokens：{report.max_tokens}<br>模型列表来源：{html.escape(report.model_source)}</p>
 <section class="metrics"><div class="metric"><span>模型总数</span><b>{report.model_count}</b></div><div class="metric"><span>协议测试次数</span><b>{len(report.results)}</b></div><div class="metric"><span>双协议均成功</span><b>{report.fully_supported_model_count}</b></div><div class="metric"><span>成功协议测试</span><b>{report.success_count}</b></div><div class="metric"><span>失败协议测试</span><b>{len(report.failures)}</b></div><div class="metric"><span>总 input token</span><b>{report.input_tokens}</b></div><div class="metric"><span>总 output token</span><b>{report.output_tokens}</b></div><div class="metric"><span>总费用（服务端已报）</span><b>{_format_decimal(report.reported_cost)}</b></div></section>
-<section class="panel"><h2>零钱包与授权</h2><p>money_id：<code>{html.escape(report.money_id)}</code>（每次执行及全部模型调用均复用）。</p>{wallet_balance}</section>
+<section class="panel"><h2>零钱包与授权</h2><p>money_id：<code>{html.escape(report.money_id)}</code>（{"本次执行新建" if report.money_id_created_for_run else "复用已有 ID"}，本次全部模型调用均复用）。</p>{wallet_balance}</section>
 <section class="panel"><h2>失败总结</h2>{failure_summary}<p>未提供费用的成功模型：{report.missing_cost_count}；未提供 usage 的模型：{report.missing_usage_count}。</p></section>
 <h2>调用明细</h2><div class="table-wrap"><table><thead><tr><th>#</th><th>模型</th><th>协议</th><th>状态</th><th>HTTP</th><th>耗时</th><th>响应 / 错误</th><th>usage</th></tr></thead><tbody>{rows}</tbody></table></div>
 </main></body></html>"""
@@ -260,10 +274,13 @@ def _model_check_row(index: int, result: ModelCheckResult) -> str:
     elif not result.ok and result.raw_error_text:
         detail += f"<details><summary>失败原始文本</summary><pre>{html.escape(result.raw_error_text)}</pre></details>"
     usage = _format_json(result.usage.raw if result.usage else None)
+    raw_request = _format_json(result.raw_request)
     return (
         f"<tr><td>{index}</td><td><code>{html.escape(result.model.model_id)}</code><br>{html.escape(result.model.name)}<br><small>{html.escape(result.model.provider)}</small></td>"
         f"<td>{html.escape(result.protocol)}</td><td>{status}</td><td>{result.status_code if result.status_code is not None else '—'}</td><td>{result.duration_ms} ms</td>"
-        f"<td>{detail}</td><td><details><summary>查看</summary><pre>{html.escape(usage)}</pre></details></td></tr>"
+        f"<td>{detail}<details><summary>请求 URL</summary><pre>{html.escape(result.request_url or '未捕获')}</pre></details>"
+        f"<details><summary>Raw request body</summary><pre>{html.escape(raw_request)}</pre></details></td>"
+        f"<td><details><summary>查看</summary><pre>{html.escape(usage)}</pre></details></td></tr>"
     )
 
 

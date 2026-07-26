@@ -20,6 +20,7 @@ def test_config_round_trip(tmp_path: Path):
         signer_command="custom-signer",
         wallets={
             "eth": WalletProfile(
+                chain="eth",
                 wallet_address="0xwallet",
                 money="30",
                 money_id="eth-id",
