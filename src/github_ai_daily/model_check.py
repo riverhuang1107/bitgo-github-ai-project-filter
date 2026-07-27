@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 from bs4 import BeautifulSoup
 
-from .reasoning import ReasoningClient, TokenUsage, _openai_chat_endpoint
+from .reasoning import ReasoningClient, TokenUsage, _openai_chat_endpoint, _openai_responses_endpoint
 
 
 TEST_PROMPT = "你好。这个工具测试bitgo后端大模型的连通性。"
@@ -20,6 +20,7 @@ LOCAL_MODEL_SOURCE = "本地内置模型列表"
 MODEL_CATALOG_FILENAME = "model_catalog.json"
 ANTHROPIC_PROTOCOL = "Anthropic Messages"
 OPENAI_PROTOCOL = "OpenAI Chat Completions"
+OPENAI_RESPONSES_PROTOCOL = "OpenAI Responses"
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,7 +134,7 @@ class ModelCheckReport:
         for result in self.results:
             results_by_model.setdefault(result.model.model_id, []).append(result)
         return sum(
-            len(results) == 2 and all(result.ok for result in results)
+            len(results) == 3 and all(result.ok for result in results)
             for results in results_by_model.values()
         )
 
@@ -180,6 +181,7 @@ def run_model_check(
     attempts = (
         (ANTHROPIC_PROTOCOL, client.test_model),
         (OPENAI_PROTOCOL, client.test_model_openai),
+        (OPENAI_RESPONSES_PROTOCOL, client.test_model_openai_responses),
     )
     total = len(models) * len(attempts)
     for model_index, model in enumerate(models, start=1):
@@ -423,10 +425,12 @@ def _result_from_response(
         if response.data.get("content"):
             return ModelCheckResult(**common, ok=True, response_text=_content_text(response.data))
         message = "接口返回 JSON，但缺少 Anthropic 风格 content 字段"
+    elif protocol == OPENAI_RESPONSES_PROTOCOL and _is_openai_responses_response(response.data):
+        return ModelCheckResult(**common, ok=True, response_text=_openai_responses_content_text(response.data))
     elif _is_openai_response(response.data):
         return ModelCheckResult(**common, ok=True, response_text=_openai_content_text(response.data))
     else:
-        message = "接口返回 JSON，但缺少 OpenAI 风格 choices 字段"
+        message = "接口返回 JSON，但缺少对应协议的响应字段"
     return ModelCheckResult(
         **common,
         ok=False,
@@ -465,12 +469,12 @@ def _model_request_body(
     token_field = (
         "max_completion_tokens"
         if protocol == OPENAI_PROTOCOL
-        else "max_tokens"
+        else "max_output_tokens" if protocol == OPENAI_RESPONSES_PROTOCOL else "max_tokens"
     )
     return {
         "model": model_id,
         token_field: max_tokens,
-        "messages": [{"role": "user", "content": prompt}],
+        **({"input": prompt} if protocol == OPENAI_RESPONSES_PROTOCOL else {"messages": [{"role": "user", "content": prompt}]}),
     }
 
 
@@ -480,6 +484,8 @@ def _model_request_url(client: ReasoningClient, protocol: str) -> str:
         return ""
     if protocol == OPENAI_PROTOCOL:
         return _openai_chat_endpoint(endpoint)
+    if protocol == OPENAI_RESPONSES_PROTOCOL:
+        return _openai_responses_endpoint(endpoint)
     return endpoint
 
 
@@ -494,6 +500,23 @@ def _openai_content_text(data: dict[str, Any]) -> str:
     if isinstance(message, dict):
         return str(message.get("content") or "").strip()
     return str(choice.get("text") or "").strip()
+
+
+def _is_openai_responses_response(data: dict[str, Any]) -> bool:
+    return isinstance(data.get("output"), list) and bool(data["output"])
+
+
+def _openai_responses_content_text(data: dict[str, Any]) -> str:
+    if isinstance(data.get("output_text"), str):
+        return data["output_text"].strip()
+    parts: list[str] = []
+    for item in data.get("output", []):
+        if not isinstance(item, dict):
+            continue
+        for content in item.get("content", []):
+            if isinstance(content, dict) and content.get("type") == "output_text":
+                parts.append(str(content.get("text") or ""))
+    return "".join(parts).strip()
 
 
 def _duration_ms(started: float) -> int:

@@ -86,6 +86,15 @@ def test_model_check_records_success_and_all_failure_shapes(monkeypatch, tmp_pat
                 return SimpleNamespace(status_code=200, data=None, text="upstream unavailable")
             raise httpx.ReadTimeout("slow")
 
+        def test_model_openai_responses(self, name, prompt, max_tokens):
+            if name == "ok":
+                return SimpleNamespace(status_code=200, data={"output": [{"content": [{"type": "output_text", "text": "responses hello"}]}], "usage": {"input_tokens": 10, "output_tokens": 4, "consume_amount": 123456789}}, text="{}")
+            if name == "bad":
+                return SimpleNamespace(status_code=400, data={"error": {"message": "invalid model"}}, text="{}")
+            if name == "plain":
+                return SimpleNamespace(status_code=200, data=None, text="upstream unavailable")
+            raise httpx.ReadTimeout("slow")
+
     report = run_model_check(
         FakeClient(),
         now=datetime(2026, 7, 25, 9, 17, tzinfo=timezone.utc),
@@ -94,17 +103,18 @@ def test_model_check_records_success_and_all_failure_shapes(monkeypatch, tmp_pat
     terminal = capsys.readouterr().out
 
     assert report.model_count == 4
-    assert report.success_count == 2
+    assert report.success_count == 3
     assert report.fully_supported_model_count == 1
-    assert report.input_tokens == 20
-    assert report.output_tokens == 8
-    assert report.reported_cost == Decimal("2.46913578")
+    assert report.input_tokens == 30
+    assert report.output_tokens == 12
+    assert report.reported_cost == Decimal("3.70370367")
     assert report.results[0].response_text == "hello"
     assert report.results[1].response_text == "openai hello"
-    assert report.results[2].error_category == "模型不可用"
-    assert report.results[2].raw_error_json == {"error": {"message": "invalid model"}}
-    assert report.results[4].error_category == "响应格式异常"
-    assert report.results[4].raw_error_text == "upstream unavailable"
+    assert report.results[2].response_text == "responses hello"
+    assert report.results[3].error_category == "模型不可用"
+    assert report.results[3].raw_error_json == {"error": {"message": "invalid model"}}
+    assert report.results[6].error_category == "响应格式异常"
+    assert report.results[6].raw_error_text == "upstream unavailable"
     assert report.results[0].raw_request == {
         "model": "ok",
         "max_tokens": 128,
@@ -115,6 +125,8 @@ def test_model_check_records_success_and_all_failure_shapes(monkeypatch, tmp_pat
         "max_completion_tokens": 128,
         "messages": [{"role": "user", "content": model_check.TEST_PROMPT}],
     }
+    assert report.results[2].raw_request == {"model": "ok", "max_output_tokens": 128, "input": model_check.TEST_PROMPT}
+    assert report.results[2].request_url == "https://api.example.test/bypass/openai/v1/responses"
     assert report.results[0].raw_response_json == {
         "content": [{"type": "text", "text": "hello"}],
         "usage": {
@@ -123,14 +135,14 @@ def test_model_check_records_success_and_all_failure_shapes(monkeypatch, tmp_pat
             "consume_amount": 123456789,
         },
     }
-    assert report.results[2].raw_response_json == {"error": {"message": "invalid model"}}
-    assert report.results[4].raw_response_json is None
+    assert report.results[3].raw_response_json == {"error": {"message": "invalid model"}}
+    assert report.results[6].raw_response_json is None
     assert report.results[0].request_url == "https://api.example.test/v1/messages"
     assert report.results[1].request_url == "https://api.example.test/v1/chat/completions"
-    assert report.results[6].error_category == "网络/超时"
-    assert "[1/8] Calling Anthropic Messages: ok" in terminal
-    assert "[2/8] Calling OpenAI Chat Completions: ok" in terminal
-    assert "[3/8] FAILED bad HTTP 400" in terminal
+    assert report.results[9].error_category == "网络/超时"
+    assert "[1/12] Calling Anthropic Messages: ok" in terminal
+    assert "[2/12] Calling OpenAI Chat Completions: ok" in terminal
+    assert "[4/12] FAILED bad HTTP 400" in terminal
     assert "category=模型不可用" in terminal
 
     report.wallet_balance = WalletBalance(
@@ -152,7 +164,7 @@ def test_model_check_records_success_and_all_failure_shapes(monkeypatch, tmp_pat
     assert "请求 URL：https://api.example.test/v1/messages" in markdown
     assert "https://api.example.test/v1/chat/completions" in html
     assert "invalid model" in html
-    assert "2.46913578" in markdown
+    assert "3.70370367" in markdown
     assert "OpenAI Chat Completions" in markdown
     assert "最新零钱包余额（USD）：12.34560000" in markdown
     assert "充值币种：ETH" in markdown
@@ -265,13 +277,18 @@ def test_model_check_tests_both_protocols_for_every_model(capsys):
                 text="{}",
             )
 
+        def test_model_openai_responses(self, name, prompt, max_tokens):
+            assert name == "openai/test"
+            return SimpleNamespace(status_code=200, data={"output": [{"content": [{"type": "output_text", "text": "hello"}]}], "usage": {}}, text="{}")
+
     report = run_model_check(FakeClient(), models=(model,))
 
-    assert report.success_count == 1
+    assert report.success_count == 2
     assert report.results[0].protocol == "Anthropic Messages"
     assert report.results[0].ok is False
     assert report.results[1].protocol == "OpenAI Chat Completions"
     assert report.results[1].response_text == "hello"
+    assert report.results[2].protocol == "OpenAI Responses"
     assert "Calling Anthropic Messages: openai/test" in capsys.readouterr().out
 
 

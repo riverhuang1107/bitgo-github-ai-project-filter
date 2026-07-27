@@ -132,6 +132,16 @@ class ReasoningClient:
         }
         return self._test_request(_openai_chat_endpoint(self.endpoint), body)
 
+    def test_model_openai_responses(
+        self, model: str, prompt: str, max_tokens: int
+    ) -> ReasoningResponse:
+        body = {
+            "model": model,
+            "max_output_tokens": max_tokens,
+            "input": prompt,
+        }
+        return self._test_request(_openai_responses_endpoint(self.endpoint), body)
+
     def _test_request(self, endpoint: str, body: dict) -> ReasoningResponse:
         headers = wallet_signed_headers(self.auth, self.interface_key)
         response = self.client.post(endpoint, headers=headers, json=body)
@@ -247,4 +257,13 @@ def _openai_chat_endpoint(endpoint: str) -> str:
     if not parsed.path.rstrip("/").endswith(suffix):
         raise ValueError("OpenAI compatibility requires an endpoint ending in /messages")
     path = parsed.path.rstrip("/")[: -len(suffix)] + "/chat/completions"
+    return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, parsed.fragment))
+
+
+def _openai_responses_endpoint(endpoint: str) -> str:
+    parsed = urlsplit(endpoint)
+    suffix = "/messages"
+    if not parsed.path.rstrip("/").endswith(suffix):
+        raise ValueError("OpenAI compatibility requires an endpoint ending in /messages")
+    path = "/bypass/openai/v1/responses"
     return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, parsed.fragment))
