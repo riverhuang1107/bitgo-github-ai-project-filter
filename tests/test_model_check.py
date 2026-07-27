@@ -6,6 +6,8 @@ import httpx
 
 from github_ai_daily import model_check
 from github_ai_daily.model_check import (
+    ALL_PROTOCOLS,
+    DEFAULT_PROTOCOLS,
     ModelDefinition,
     WalletBalance,
     classify_error,
@@ -16,6 +18,7 @@ from github_ai_daily.model_check import (
     run_model_check,
     save_model_catalog,
     select_models,
+    select_protocols,
     wallet_balance_from_response,
 )
 from github_ai_daily.reports import render_model_check_html, render_model_check_markdown, write_model_check_reports
@@ -99,6 +102,7 @@ def test_model_check_records_success_and_all_failure_shapes(monkeypatch, tmp_pat
         FakeClient(),
         now=datetime(2026, 7, 25, 9, 17, tzinfo=timezone.utc),
         models=_models(),
+        protocols=ALL_PROTOCOLS,
     )
     terminal = capsys.readouterr().out
 
@@ -262,7 +266,23 @@ def test_select_models_rejects_unknown_values_before_requesting_models():
         raise AssertionError("Expected an unknown model selector error")
 
 
-def test_model_check_tests_both_protocols_for_every_model(capsys):
+def test_select_protocols_defaults_to_messages_and_chat_and_supports_combinations():
+    assert select_protocols(None) == DEFAULT_PROTOCOLS
+    assert select_protocols(["responses,messages", "chat"]) == ALL_PROTOCOLS
+    assert select_protocols(["all"]) == ALL_PROTOCOLS
+    assert select_protocols(["responses", "responses"]) == ("OpenAI Responses",)
+
+
+def test_select_protocols_rejects_unknown_values():
+    try:
+        select_protocols(["messages,unknown"])
+    except ValueError as exc:
+        assert "unknown" in str(exc)
+    else:
+        raise AssertionError("Expected an unknown protocol error")
+
+
+def test_model_check_defaults_to_messages_and_chat_protocols(capsys):
     model = ModelDefinition("openai/test", "OpenAI Test", "OpenAI", Decimal("1"), Decimal("2"))
 
     class FakeClient:
@@ -277,18 +297,14 @@ def test_model_check_tests_both_protocols_for_every_model(capsys):
                 text="{}",
             )
 
-        def test_model_openai_responses(self, name, prompt, max_tokens):
-            assert name == "openai/test"
-            return SimpleNamespace(status_code=200, data={"output": [{"content": [{"type": "output_text", "text": "hello"}]}], "usage": {}}, text="{}")
-
     report = run_model_check(FakeClient(), models=(model,))
 
-    assert report.success_count == 2
+    assert report.success_count == 1
     assert report.results[0].protocol == "Anthropic Messages"
     assert report.results[0].ok is False
     assert report.results[1].protocol == "OpenAI Chat Completions"
     assert report.results[1].response_text == "hello"
-    assert report.results[2].protocol == "OpenAI Responses"
+    assert len(report.results) == 2
     assert "Calling Anthropic Messages: openai/test" in capsys.readouterr().out
 
 

@@ -49,6 +49,7 @@ from .model_check import (
     run_model_check,
     save_model_catalog,
     select_models,
+    select_protocols,
     wallet_balance_from_response,
 )
 from .reports import build_items, write_model_check_reports, write_reports
@@ -81,10 +82,28 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("--to")
 
     model_check = sub.add_parser(
-        "model-check", help="Test every Bitgo model listed in the product guide appendix"
+        "model-check",
+        help="Test Bitgo model connectivity with selected API protocols",
+        description="Test one or more Bitgo models with the selected API protocols. "
+        "By default, Anthropic Messages and OpenAI Chat Completions are tested.",
+        epilog=(
+            "Examples:\n"
+            "  github-ai-daily model-check --model openai/gpt-5-mini\n"
+            "  github-ai-daily model-check --protocol responses --model openai/gpt-5-mini\n"
+            "  github-ai-daily model-check --protocol all\n"
+            "  github-ai-daily model-check --protocol messages,responses"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    model_check.add_argument("--output-dir", type=Path)
-    model_check.add_argument("--max-tokens", type=int, default=128)
+    model_check.add_argument("--output-dir", type=Path, help="Directory for the HTML and Markdown reports")
+    model_check.add_argument("--max-tokens", type=int, default=128, help="Maximum output tokens per model request (default: 128)")
+    model_check.add_argument(
+        "--protocol",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="Protocol to test: messages, chat, responses, or all; repeat or separate multiple values with commas (default: messages,chat)",
+    )
     model_check.add_argument(
         "--model",
         action="append",
@@ -96,8 +115,8 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Fetch the latest model list from the Bitgo product guide instead of using the local list",
     )
-    model_check.add_argument("--bff-base-url", default=DEFAULT_BFF_BASE_URL)
-    model_check.add_argument("--send-email", action="store_true")
+    model_check.add_argument("--bff-base-url", default=DEFAULT_BFF_BASE_URL, help="Bitgo BFF base URL used to read the final sub-wallet balance")
+    model_check.add_argument("--send-email", action="store_true", help="Email the completed report")
     model_check.add_argument("--to", help="Comma-separated Gmail recipients")
     model_check.add_argument(
         "--mail-backend",
@@ -115,9 +134,7 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Generate a new money_id for this run instead of reusing an existing one",
     )
-    model_check.add_argument(
-        "--key", type=Path, help="ECDSA interface signing key path"
-    )
+    model_check.add_argument("--key", type=Path, help="Path to the interface ECDSA signing key")
 
     gmail_auth = sub.add_parser("gmail-auth", help="Authorize Gmail API report delivery")
     gmail_auth.add_argument("--force", action="store_true")
@@ -193,15 +210,15 @@ def _wallet_args(
     *,
     allow_new_wallet: bool = True,
 ) -> None:
-    command.add_argument("--chain", choices=["ltc", "btc", "eth"])
-    command.add_argument("--wallet-address")
-    command.add_argument("--money")
+    command.add_argument("--chain", choices=["ltc", "btc", "eth"], help="Self-custody wallet chain")
+    command.add_argument("--wallet-address", help="Self-custody wallet address used for authorization")
+    command.add_argument("--money", help="Authorized sub-wallet amount; must match the money_id record")
     command.add_argument(
         "--money-id",
         help=money_id_help,
     )
-    command.add_argument("--private-key")
-    command.add_argument("--signer-command")
+    command.add_argument("--private-key", help="Wallet private key supplied only at runtime; prefer a secure environment variable")
+    command.add_argument("--signer-command", help="Optional command that performs wallet signatures")
     if allow_new_wallet:
         command.add_argument(
             "--new-wallet",
@@ -438,6 +455,8 @@ def cmd_model_check(args, settings: Settings) -> int:
         models = select_models(models, requested_models)
         model_source += f"；筛选模型：{', '.join(model.model_id for model in models)}"
         print(f"Testing selected models: {', '.join(model.model_id for model in models)}", flush=True)
+    protocols = select_protocols(getattr(args, "protocol", []))
+    print(f"Testing protocols: {', '.join(protocols)}", flush=True)
     client = ReasoningClient(
         reasoning_endpoint(settings), settings.model or DEFAULT_MODEL, auth, reasoning_interface_key(settings, args)
     )
@@ -447,6 +466,7 @@ def cmd_model_check(args, settings: Settings) -> int:
             max_tokens=args.max_tokens,
             models=models,
             model_source=model_source,
+            protocols=protocols,
         )
     finally:
         client.close()

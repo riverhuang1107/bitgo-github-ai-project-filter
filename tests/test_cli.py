@@ -601,6 +601,9 @@ def test_parser_supports_model_check_and_gmail_auth():
     assert parser().parse_args(["model-check", "--model", "claude-4.6-opus", "--model", "deepseek-v3"]).model == ["claude-4.6-opus", "deepseek-v3"]
     assert parser().parse_args(["model-check", "--mail-backend", "agent"]).mail_backend == "agent"
     assert parser().parse_args(["model-check", "--new-money-id"]).new_money_id is True
+    assert parser().parse_args(["model-check"]).protocol == []
+    assert parser().parse_args(["model-check", "--protocol", "all"]).protocol == ["all"]
+    assert parser().parse_args(["model-check", "--protocol", "messages,responses", "--protocol", "chat"]).protocol == ["messages,responses", "chat"]
     assert parser().parse_args(["gmail-auth", "--console"]).command == "gmail-auth"
 
 

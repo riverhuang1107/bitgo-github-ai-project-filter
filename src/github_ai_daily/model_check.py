@@ -21,6 +21,14 @@ MODEL_CATALOG_FILENAME = "model_catalog.json"
 ANTHROPIC_PROTOCOL = "Anthropic Messages"
 OPENAI_PROTOCOL = "OpenAI Chat Completions"
 OPENAI_RESPONSES_PROTOCOL = "OpenAI Responses"
+DEFAULT_PROTOCOLS = (ANTHROPIC_PROTOCOL, OPENAI_PROTOCOL)
+ALL_PROTOCOLS = (*DEFAULT_PROTOCOLS, OPENAI_RESPONSES_PROTOCOL)
+PROTOCOL_NAMES = {
+    "all": None,
+    "messages": ANTHROPIC_PROTOCOL,
+    "chat": OPENAI_PROTOCOL,
+    "responses": OPENAI_RESPONSES_PROTOCOL,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +127,7 @@ class ModelCheckReport:
     money_id_created_for_run: bool = False
     money_id_reused_within_run: bool = True
     wallet_balance: WalletBalance | None = None
+    protocols: tuple[str, ...] = DEFAULT_PROTOCOLS
 
     @property
     def success_count(self) -> int:
@@ -134,7 +143,9 @@ class ModelCheckReport:
         for result in self.results:
             results_by_model.setdefault(result.model.model_id, []).append(result)
         return sum(
-            len(results) == 3 and all(result.ok for result in results)
+            len(results) == len(self.protocols)
+            and {result.protocol for result in results} == set(self.protocols)
+            and all(result.ok for result in results)
             for results in results_by_model.values()
         )
 
@@ -172,17 +183,14 @@ def run_model_check(
     now: datetime | None = None,
     models: tuple[ModelDefinition, ...] = MODELS,
     model_source: str = LOCAL_MODEL_SOURCE,
+    protocols: tuple[str, ...] = DEFAULT_PROTOCOLS,
 ) -> ModelCheckReport:
     if max_tokens < 1:
         raise ValueError("--max-tokens must be greater than zero")
     results: list[ModelCheckResult] = []
     if not models:
         raise ValueError("Model list is empty")
-    attempts = (
-        (ANTHROPIC_PROTOCOL, client.test_model),
-        (OPENAI_PROTOCOL, client.test_model_openai),
-        (OPENAI_RESPONSES_PROTOCOL, client.test_model_openai_responses),
-    )
+    attempts = _protocol_attempts(client, protocols)
     total = len(models) * len(attempts)
     for model_index, model in enumerate(models, start=1):
         for protocol_index, (protocol, test_model) in enumerate(attempts, start=1):
@@ -213,7 +221,47 @@ def run_model_check(
         max_tokens=max_tokens,
         results=results,
         model_source=model_source,
+        protocols=protocols,
     )
+
+
+def select_protocols(selectors: list[str] | tuple[str, ...] | None) -> tuple[str, ...]:
+    if not selectors:
+        return DEFAULT_PROTOCOLS
+    requested = [
+        item.strip().casefold()
+        for value in selectors
+        for item in value.split(",")
+        if item.strip()
+    ]
+    if not requested:
+        raise ValueError("--protocol must include at least one protocol")
+    unknown = [name for name in requested if name not in PROTOCOL_NAMES]
+    if unknown:
+        raise ValueError(
+            f"Unknown protocol: {', '.join(unknown)}. Choose from: {', '.join(PROTOCOL_NAMES)}"
+        )
+    if "all" in requested:
+        return ALL_PROTOCOLS
+    selected = {PROTOCOL_NAMES[name] for name in requested}
+    return tuple(protocol for protocol in ALL_PROTOCOLS if protocol in selected)
+
+
+def _protocol_attempts(client: ReasoningClient, protocols: tuple[str, ...]):
+    if not protocols:
+        raise ValueError("At least one protocol is required")
+    attempts = []
+    for protocol in protocols:
+        if protocol == ANTHROPIC_PROTOCOL:
+            handler = client.test_model
+        elif protocol == OPENAI_PROTOCOL:
+            handler = client.test_model_openai
+        elif protocol == OPENAI_RESPONSES_PROTOCOL:
+            handler = client.test_model_openai_responses
+        else:
+            raise ValueError(f"Unknown protocol: {protocol}")
+        attempts.append((protocol, handler))
+    return tuple(attempts)
 
 
 def fetch_models_from_web(url: str = MODEL_GUIDE_URL, timeout: float = 30) -> tuple[ModelDefinition, ...]:

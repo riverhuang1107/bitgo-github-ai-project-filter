@@ -256,7 +256,23 @@ export REASONING_PRIVATE_KEY="..."
 
 未匹配的名称或 ID 会在发起 API 调用前报错。筛选后的模型清单会写入报告来源字段。
 
-每个模型都会分别测试两种协议：Anthropic Messages（`/v1/messages`、`max_tokens`、`content`）和 OpenAI Chat Completions（`/v1/chat/completions`、`max_completion_tokens`、`choices[].message.content`）。报告会分别记录两次调用的输出内容、用量和失败原始响应；全量检测会产生两倍于模型数量的 API 调用，费用统计包含两种协议的实际消耗。
+默认每个模型测试两种协议：Anthropic Messages（`/v1/messages`、`max_tokens`、`content`）和 OpenAI Chat Completions（`/v1/chat/completions`、`max_completion_tokens`、`choices[].message.content`）。使用 `--protocol` 可改为任意组合的 Messages、Chat Completions 与 OpenAI Responses；Responses 请求发送到 `/bypass/openai/v1/responses`，使用 `max_output_tokens` 和 `input`，并从 `output[].content[].text` 读取文本。参数可重复传入或用逗号分隔：
+
+```bash
+# 默认：messages,chat
+.venv/bin/github-ai-daily model-check
+
+# 仅测试 Responses
+.venv/bin/github-ai-daily model-check --protocol responses
+
+# 测试任意组合
+.venv/bin/github-ai-daily model-check --protocol messages,responses
+
+# 测试全部三种协议
+.venv/bin/github-ai-daily model-check --protocol all
+```
+
+报告会分别记录每次调用的输出内容、用量和失败原始响应；API 调用次数等于模型数量乘以所选协议数量，费用统计只汇总所选协议的实际消耗。
 
 先准备与普通推理调用相同的钱包参数及接口 ECDSA 私钥。接口私钥可继续通过配置文件的 `private_key_path` 指定，也可通过环境变量注入 PEM：
 
