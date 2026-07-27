@@ -1106,7 +1106,7 @@ bitgo 是面向 agent 的虚拟资产账户与支付授权层，可将链上充�
   &quot;total&quot;: 20
 }</code></pre>
 
-        <h3>bitgo 零钱包信息查询</h3>
+        <h3>查询 bitgo 零钱包信息</h3>
         <p>可以用 BFF bitgo 零钱包接口查询指定 <code>money_id</code> 对应的零钱包余额、授权总额和币种信息。查询前必须确认同一币种、同一 <code>wallet_address</code>、授权金额 <code>money</code> 和 <code>money_id</code>；<code>money_id</code> 在 BFF 响应中对应 <code>subId</code>。</p>
         <table>
           <thead><tr><th>项目</th><th>值</th><th>说明</th></tr></thead>
@@ -1139,7 +1139,7 @@ bitgo 是面向 agent 的虚拟资产账户与支付授权层，可将链上充�
   }
 }</code></pre>
         <p class="callout"><code>subBalance</code> 是当前可用余额，<code>subTotalAmount</code> 是创建该 bitgo 零钱包时的授权总额。日志和文档只能展示脱敏后的 <code>wallet_address</code>、<code>money</code>、<code>money_id</code>、接口 URL 和必要的余额字段；<code>accountId</code>、<code>subId</code>、签名字段和其他身份标识应按场景脱敏。不要记录私钥、完整签名、完整 <code>X-Params</code>、<code>X-Signature</code> 或 <code>X-Public-Key</code>。</p>
-        <h3>bitgo 零钱包消费记录查询</h3>
+        <h3>查询 bitgo 零钱包消费记录</h3>
         <p>大模型或 VPS 消费后，可以用 BFF bitgo 零钱包接口查询指定 <code>money_id</code> 的消费订单。查询前必须确认同一币种、同一 <code>wallet_address</code>、授权金额 <code>money</code> 和 <code>money_id</code>；<code>money_id</code> 在 BFF 响应中对应 <code>subId</code>。</p>
         <table>
           <thead><tr><th>项目</th><th>值</th><th>说明</th></tr></thead>
@@ -1220,7 +1220,7 @@ bitgo 是面向 agent 的虚拟资产账户与支付授权层，可将链上充�
 
       <section class="section" id="api-call">
         <h2>推理API调用</h2>
-        <p>agent 或软件将任务上下文写入 <code>messages</code>，选择模型后发送到推理 API。推理 API 同时支持 Anthropic Messages 和 OpenAI Chat Completions 两种协议；两种协议使用相同的签名认证请求头，但请求端点、最大输出 token 参数和响应内容字段不同。</p>
+        <p>agent 或软件将任务上下文写入 <code>messages</code>，选择模型后发送到推理 API。推理 API 同时支持 Anthropic Messages 和 OpenAI Chat Completions 两种协议；两种协议使用相同的签名认证请求头，但请求端点、最大输出 token 参数和响应内容字段不同。推理 API 调用产生消费后，可通过查询 bitgo 零钱包信息和查询 bitgo 零钱包消费记录接口，获取最新的 bitgo 零钱包余额及消费明细。</p>
         <table>
           <thead><tr><th>项目</th><th>值</th><th>说明</th></tr></thead>
           <tbody>

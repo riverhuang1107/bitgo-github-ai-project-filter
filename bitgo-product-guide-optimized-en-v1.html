@@ -1124,7 +1124,7 @@ Security and authorization principles:
   &quot;total&quot;: 20
 }</code></pre>
 
-        <h3>bitgo Wallet Information</h3>
+        <h3>Query bitgo Wallet Information</h3>
         <p>Query the BFF bitgo wallet endpoint for the wallet balance, total authorized amount, and coin type associated with a specific <code>money_id</code>. Before querying, confirm the same chain, <code>wallet_address</code>, authorized amount <code>money</code>, and <code>money_id</code>; the BFF response exposes <code>money_id</code> as <code>subId</code>.</p>
         <table class="api-auth-table">
           <colgroup><col><col><col></colgroup>
@@ -1158,7 +1158,7 @@ Security and authorization principles:
   }
 }</code></pre>
         <p class="callout"><code>subBalance</code> is the currently available balance, and <code>subTotalAmount</code> is the total amount authorized when the bitgo wallet was created. Logs and documentation may include the redacted <code>wallet_address</code>, <code>money</code>, <code>money_id</code>, endpoint URL, and required balance fields; redact <code>accountId</code>, <code>subId</code>, signature fields, and other identifiers as appropriate. Never record private keys, complete signatures, complete <code>X-Params</code>, <code>X-Signature</code>, or <code>X-Public-Key</code>.</p>
-        <h3>bitgo wallet Consumption Records</h3>
+        <h3>Query bitgo Wallet Consumption Records</h3>
         <p>After a model or VPS consumption, query the BFF bitgo wallet endpoint for consumption orders associated with a specific <code>money_id</code>. Before querying, confirm the same chain, <code>wallet_address</code>, authorized amount <code>money</code>, and <code>money_id</code>; the BFF response exposes <code>money_id</code> as <code>subId</code>.</p>
         <table class="api-auth-table">
           <colgroup><col><col><col></colgroup>
@@ -1238,7 +1238,7 @@ Security and authorization principles:
 
       <section class="section" id="api-call">
         <h2>Reasoning API Call</h2>
-        <p>The agent or software writes task context into <code>messages</code>, selects a model, and sends the request to the reasoning API. The reasoning API supports both the Anthropic Messages and OpenAI Chat Completions protocols. Both protocols use the same signature-authentication headers, but they use different request endpoints, maximum-output-token parameters, and response content fields.</p>
+        <p>The agent or software writes task context into <code>messages</code>, selects a model, and sends the request to the reasoning API. The reasoning API supports both the Anthropic Messages and OpenAI Chat Completions protocols. Both protocols use the same signature-authentication headers, but they use different request endpoints, maximum-output-token parameters, and response content fields. After an inference API call incurs consumption, use the bitgo wallet information and wallet consumption-records query endpoints to retrieve the latest bitgo wallet balance and consumption details.</p>
         <table class="api-auth-table">
           <colgroup><col><col><col></colgroup>
           <thead><tr><th>Item</th><th>Value</th><th>Description</th></tr></thead>
