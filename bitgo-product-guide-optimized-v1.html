@@ -1107,7 +1107,7 @@ bitgo 是面向 agent 的虚拟资产账户与支付授权层，可将链上充�
 }</code></pre>
 
         <h3>bitgo 零钱包信息查询</h3>
-        <p>调用推理 API 前后，可以用 BFF bitgo 零钱包接口查询指定 <code>money_id</code> 对应的零钱包余额、授权总额和币种信息。查询前必须确认同一币种、同一 <code>wallet_address</code>、授权金额 <code>money</code> 和 <code>money_id</code>；<code>money_id</code> 在 BFF 响应中对应 <code>subId</code>。</p>
+        <p>可以用 BFF bitgo 零钱包接口查询指定 <code>money_id</code> 对应的零钱包余额、授权总额和币种信息。查询前必须确认同一币种、同一 <code>wallet_address</code>、授权金额 <code>money</code> 和 <code>money_id</code>；<code>money_id</code> 在 BFF 响应中对应 <code>subId</code>。</p>
         <table>
           <thead><tr><th>项目</th><th>值</th><th>说明</th></tr></thead>
           <tbody>
@@ -1131,16 +1131,16 @@ bitgo 是面向 agent 的虚拟资产账户与支付授权层，可将链上充�
   &quot;wallet&quot;: {
     &quot;accountId&quot;: &quot;ACCOUNT_ID_REDACTED&quot;,
     &quot;subId&quot;: &quot;money_YYYYMMDD_REDACTED&quot;,
-    &quot;subBalance&quot;: &quot;4.97259320&quot;,
-    &quot;subTotalAmount&quot;: &quot;5.00000000&quot;,
-    &quot;coinType&quot;: &quot;BTC&quot;,
-    &quot;createdAt&quot;: &quot;2026-07-25T00:39:14.000Z&quot;,
-    &quot;updatedAt&quot;: &quot;2026-07-26T00:00:00.000Z&quot;
+    &quot;subBalance&quot;: &quot;SUB_BALANCE_DECIMAL&quot;,
+    &quot;subTotalAmount&quot;: &quot;SUB_TOTAL_AMOUNT_DECIMAL&quot;,
+    &quot;coinType&quot;: &quot;COIN_TYPE&quot;,
+    &quot;createdAt&quot;: &quot;CREATED_AT_RFC3339&quot;,
+    &quot;updatedAt&quot;: &quot;UPDATED_AT_RFC3339&quot;
   }
 }</code></pre>
         <p class="callout"><code>subBalance</code> 是当前可用余额，<code>subTotalAmount</code> 是创建该 bitgo 零钱包时的授权总额。日志和文档只能展示脱敏后的 <code>wallet_address</code>、<code>money</code>、<code>money_id</code>、接口 URL 和必要的余额字段；<code>accountId</code>、<code>subId</code>、签名字段和其他身份标识应按场景脱敏。不要记录私钥、完整签名、完整 <code>X-Params</code>、<code>X-Signature</code> 或 <code>X-Public-Key</code>。</p>
         <h3>bitgo 零钱包消费记录查询</h3>
-        <p>模型或 API 消费完成后，可以用 BFF bitgo 零钱包接口查询指定 <code>money_id</code> 的消费订单。查询前必须确认同一币种、同一 <code>wallet_address</code>、授权金额 <code>money</code> 和 <code>money_id</code>；<code>money_id</code> 在 BFF 响应中对应 <code>subId</code>。</p>
+        <p>大模型或 VPS 消费后，可以用 BFF bitgo 零钱包接口查询指定 <code>money_id</code> 的消费订单。查询前必须确认同一币种、同一 <code>wallet_address</code>、授权金额 <code>money</code> 和 <code>money_id</code>；<code>money_id</code> 在 BFF 响应中对应 <code>subId</code>。</p>
         <table>
           <thead><tr><th>项目</th><th>值</th><th>说明</th></tr></thead>
           <tbody>
@@ -1163,28 +1163,28 @@ bitgo 是面向 agent 的虚拟资产账户与支付授权层，可将链上充�
         <pre><code class="language-json">{
   &quot;orders&quot;: [
     {
-      &quot;orderId&quot;: &quot;[REDACTED]&quot;,
-      &quot;accountId&quot;: &quot;[REDACTED]&quot;,
-      &quot;subId&quot;: &quot;money_20260726_0188a22887801d2e&quot;,
+      &quot;orderId&quot;: &quot;ORDER_ID_REDACTED&quot;,
+      &quot;accountId&quot;: &quot;ACCOUNT_ID_REDACTED&quot;,
+      &quot;subId&quot;: &quot;money_YYYYMMDD_REDACTED&quot;,
       &quot;category&quot;: &quot;VPS&quot;,
       &quot;type&quot;: &quot;deduct&quot;,
-      &quot;amount&quot;: &quot;0.05952000&quot;,
-      &quot;refOrderId&quot;: &quot;&quot;,
-      &quot;description&quot;: &quot;instance-id: 1738135287701313685; instance-name: ai-trending&quot;,
-      &quot;createdAt&quot;: &quot;2026-07-26T04:04:36.966Z&quot;,
-      &quot;userId&quot;: &quot;[REDACTED]&quot;
+      &quot;amount&quot;: &quot;AMOUNT_DECIMAL&quot;,
+      &quot;refOrderId&quot;: &quot;REF_ORDER_ID_REDACTED&quot;,
+      &quot;description&quot;: &quot;instance-id: INSTANCE_ID_REDACTED; instance-name: INSTANCE_NAME_REDACTED&quot;,
+      &quot;createdAt&quot;: &quot;CREATED_AT_RFC3339&quot;,
+      &quot;userId&quot;: &quot;USER_ID_REDACTED&quot;
     },
     {
-      &quot;orderId&quot;: &quot;ORDER_ID_REDACTED_2&quot;,
+      &quot;orderId&quot;: &quot;ORDER_ID_REDACTED&quot;,
       &quot;accountId&quot;: &quot;ACCOUNT_ID_REDACTED&quot;,
-      &quot;subId&quot;: &quot;money_20260710_REDACTED&quot;,
+      &quot;subId&quot;: &quot;money_YYYYMMDD_REDACTED&quot;,
       &quot;category&quot;: &quot;TOKEN&quot;,
       &quot;type&quot;: &quot;deduct&quot;,
-      &quot;amount&quot;: &quot;0.01362780&quot;,
-      &quot;refOrderId&quot;: &quot;&quot;,
-      &quot;description&quot;: &quot;model: claude-4.6-opus; input_token: 1017; output_token: 339&quot;,
-      &quot;createdAt&quot;: &quot;2026-07-10T03:31:21.512Z&quot;,
-      &quot;userId&quot;: &quot;USER_ID_REDACTED_2&quot;
+      &quot;amount&quot;: &quot;AMOUNT_DECIMAL&quot;,
+      &quot;refOrderId&quot;: &quot;REF_ORDER_ID_REDACTED&quot;,
+      &quot;description&quot;: &quot;model: MODEL_NAME; input_token: INPUT_TOKEN_COUNT; output_token: OUTPUT_TOKEN_COUNT&quot;,
+      &quot;createdAt&quot;: &quot;CREATED_AT_RFC3339&quot;,
+      &quot;userId&quot;: &quot;USER_ID_REDACTED&quot;
     }
   ],
   &quot;total&quot;: 2
@@ -1315,7 +1315,7 @@ bitgo 是面向 agent 的虚拟资产账户与支付授权层，可将链上充�
         <h2>模型价格</h2>
         <p>通过请求体中的 <code>model</code> 字段选择模型。主流程建议按质量、速度和成本选择常用模型；完整模型价格表见附录。</p>
         <div class="grid">
-          <div class="tile"><strong>低成本</strong><span><code>openai/gpt-5-nano</code>、<code>deepseek/deepseek-v4-flash</code>，适合批量分类、摘要和轻量判断。</span></div>
+          <div class="tile"><strong>低成本</strong><span><code>openai/gpt-5.4-nano</code>、<code>deepseek/deepseek-v4-flash</code>，适合批量分类、摘要和轻量判断。</span></div>
           <div class="tile"><strong>高质量</strong><span><code>claude-4.6-opus</code>、<code>anthropic/claude-4.8-opus</code>，适合复杂推理、长文分析和高质量生成。</span></div>
           <div class="tile"><strong>代码 / 复杂推理</strong><span><code>openai/gpt-5.2-codex</code>、<code>openai/gpt-5.3-codex</code>，适合软件开发、代码审查和工程任务。</span></div>
           <div class="tile"><strong>快速响应</strong><span><code>claude-4.5-haiku</code>、<code>minimax/minimax-m2.5-highspeed</code>，适合交互式 agent 和低延迟业务流程。</span></div>
@@ -1362,10 +1362,7 @@ bitgo 是面向 agent 的虚拟资产账户与支付授权层，可将链上充�
               <tr><td><code>minimax/minimax-m2.7</code></td><td>Minimax/Minimax-M2.7</td><td>Minimax</td><td>0.29</td><td>1.17</td></tr>
               <tr><td><code>minimax/minimax-m3</code></td><td>Minimax/Minimax-M3</td><td>Minimax</td><td>0.29</td><td>11.67</td></tr>
               <tr><td><code>openai/gpt-5</code></td><td>OpenAI/GPT-5</td><td>OpenAI</td><td>1.26</td><td>10.08</td></tr>
-              <tr><td><code>openai/gpt-5-nano</code></td><td>OpenAI/GPT-5 Nano</td><td>OpenAI</td><td>0.0504</td><td>0.4032</td></tr>
               <tr><td><code>openai/gpt-5.2</code></td><td>OpenAI/GPT-5.2</td><td>OpenAI</td><td>1.764</td><td>14.112</td></tr>
-              <tr><td><code>openai/gpt-5-mini</code></td><td>Openai/GPT-5 Mini</td><td>OpenAI</td><td>0.252</td><td>2.016</td></tr>
-              <tr><td><code>openai/gpt-5-pro</code></td><td>Openai/GPT-5 Pro</td><td>OpenAI</td><td>15.12</td><td>120.96</td></tr>
               <tr><td><code>openai/gpt-5.2-codex</code></td><td>Openai/GPT-5.2 Codex</td><td>OpenAI</td><td>1.764</td><td>14.112</td></tr>
               <tr><td><code>openai/gpt-5.3-codex</code></td><td>Openai/GPT-5.3 Codex</td><td>OpenAI</td><td>1.764</td><td>14.112</td></tr>
               <tr><td><code>openai/gpt-5.4</code></td><td>Openai/GPT-5.4</td><td>OpenAI</td><td>2.52</td><td>15.12</td></tr>
