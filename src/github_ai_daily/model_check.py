@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from uuid import uuid4
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -15,6 +16,11 @@ from .reasoning import ReasoningClient, TokenUsage, _openai_chat_endpoint, _open
 
 
 TEST_PROMPT = "你好。这个工具测试bitgo后端大模型的连通性。"
+CACHE_WARMUP_PROMPT = "Reply with exactly: cache-warmup"
+CACHE_READ_PROMPT = "Reply with exactly: cache-hit"
+# 2,048 repeated ASCII tokens provides margin above common prompt-cache minimums while
+# keeping the cache scenario to exactly two Messages requests.
+INPUT_CACHE_PREFIX = "cache " * 2048
 MODEL_GUIDE_URL = "https://bitgo.enigmhaven.com/bitgo-product-guide-optimized-v1.html"
 LOCAL_MODEL_SOURCE = "本地内置模型列表"
 MODEL_CATALOG_FILENAME = "model_catalog.json"
@@ -103,6 +109,8 @@ class ModelCheckResult:
     request_url: str = ""
     raw_request: dict[str, Any] | None = None
     protocol: str = "Anthropic Messages"
+    cache_stage: str = ""
+    input_cache_hit: bool | None = None
 
 
 @dataclass(slots=True)
@@ -128,6 +136,7 @@ class ModelCheckReport:
     money_id_reused_within_run: bool = True
     wallet_balance: WalletBalance | None = None
     protocols: tuple[str, ...] = DEFAULT_PROTOCOLS
+    input_cache_check: bool = False
 
     @property
     def success_count(self) -> int:
@@ -139,9 +148,13 @@ class ModelCheckReport:
 
     @property
     def fully_supported_model_count(self) -> int:
-        results_by_model: dict[str, list[ModelCheckResult]] = {}
-        for result in self.results:
-            results_by_model.setdefault(result.model.model_id, []).append(result)
+        if self.input_cache_check:
+            return sum(
+                all(result.ok for result in results)
+                and any(result.input_cache_hit is True for result in results)
+                for results in _results_by_model(self.results).values()
+            )
+        results_by_model = _results_by_model(self.results)
         return sum(
             len(results) == len(self.protocols)
             and {result.protocol for result in results} == set(self.protocols)
@@ -184,12 +197,21 @@ def run_model_check(
     models: tuple[ModelDefinition, ...] = MODELS,
     model_source: str = LOCAL_MODEL_SOURCE,
     protocols: tuple[str, ...] = DEFAULT_PROTOCOLS,
+    input_cache_check: bool = False,
 ) -> ModelCheckReport:
     if max_tokens < 1:
         raise ValueError("--max-tokens must be greater than zero")
     results: list[ModelCheckResult] = []
     if not models:
         raise ValueError("Model list is empty")
+    if input_cache_check:
+        if protocols != (ANTHROPIC_PROTOCOL,):
+            raise ValueError("--check-input-cache only supports --protocol messages")
+        if len(models) != 1:
+            raise ValueError("--check-input-cache requires exactly one --model")
+        return _run_input_cache_check(
+            client, models[0], max_tokens, now=now, model_source=model_source
+        )
     attempts = _protocol_attempts(client, protocols)
     total = len(models) * len(attempts)
     for model_index, model in enumerate(models, start=1):
@@ -222,6 +244,73 @@ def run_model_check(
         results=results,
         model_source=model_source,
         protocols=protocols,
+    )
+
+
+def _run_input_cache_check(
+    client: ReasoningClient,
+    model: ModelDefinition,
+    max_tokens: int,
+    *,
+    now: datetime | None,
+    model_source: str,
+) -> ModelCheckReport:
+    results: list[ModelCheckResult] = []
+    scenarios = (("warmup", CACHE_WARMUP_PROMPT), ("read", CACHE_READ_PROMPT))
+    # A unique prefix prevents a cache entry made by another run from satisfying
+    # this check; only this run's warm-up request can seed the read request.
+    cache_prefix = f"cache-check:{uuid4().hex}\n{INPUT_CACHE_PREFIX}"
+    for index, (stage, prompt) in enumerate(scenarios, start=1):
+        started_at = datetime.now().astimezone()
+        started = perf_counter()
+        print(
+            f"[{index}/2] Calling {ANTHROPIC_PROTOCOL} input-cache {stage}: {model.model_id}",
+            flush=True,
+        )
+        try:
+            response = client.test_model_with_cached_prefix(
+                model.model_id, prompt, max_tokens, cache_prefix
+            )
+            result = _result_from_response(
+                model, ANTHROPIC_PROTOCOL, response, started_at, started
+            )
+        except httpx.TimeoutException as exc:
+            result = _transport_failure(
+                model, ANTHROPIC_PROTOCOL, started_at, started, "网络/超时", str(exc)
+            )
+        except httpx.HTTPError as exc:
+            result = _transport_failure(
+                model, ANTHROPIC_PROTOCOL, started_at, started, "网络/超时", str(exc)
+            )
+        except Exception as exc:
+            result = _transport_failure(
+                model, ANTHROPIC_PROTOCOL, started_at, started, "客户端错误", str(exc)
+            )
+        result.cache_stage = stage
+        result.raw_request = _cached_messages_request_body(
+            model.model_id, prompt, max_tokens, cache_prefix
+        )
+        result.request_url = _model_request_url(client, ANTHROPIC_PROTOCOL)
+        if stage == "read":
+            result.input_cache_hit = bool(
+                result.usage and (result.usage.cache_read_input_tokens or 0) > 0
+            )
+            if result.ok and not result.input_cache_hit:
+                result.ok = False
+                result.error_category = "输入缓存未命中"
+                result.error_message = (
+                    "服务端未返回正数 usage.cache_read_input_tokens；无法确认输入缓存命中"
+                )
+        results.append(result)
+        print(_progress_line(index, len(scenarios), result), flush=True)
+    return ModelCheckReport(
+        generated_at=now or datetime.now().astimezone(),
+        prompt="Two-request Anthropic Messages input-cache verification",
+        max_tokens=max_tokens,
+        results=results,
+        model_source=model_source,
+        protocols=(ANTHROPIC_PROTOCOL,),
+        input_cache_check=True,
     )
 
 
@@ -262,6 +351,15 @@ def _protocol_attempts(client: ReasoningClient, protocols: tuple[str, ...]):
             raise ValueError(f"Unknown protocol: {protocol}")
         attempts.append((protocol, handler))
     return tuple(attempts)
+
+
+def _results_by_model(
+    results: list[ModelCheckResult],
+) -> dict[str, list[ModelCheckResult]]:
+    grouped: dict[str, list[ModelCheckResult]] = {}
+    for result in results:
+        grouped.setdefault(result.model.model_id, []).append(result)
+    return grouped
 
 
 def fetch_models_from_web(url: str = MODEL_GUIDE_URL, timeout: float = 30) -> tuple[ModelDefinition, ...]:
@@ -526,6 +624,23 @@ def _model_request_body(
     }
 
 
+def _cached_messages_request_body(
+    model_id: str, prompt: str, max_tokens: int, cache_prefix: str
+) -> dict[str, Any]:
+    return {
+        "model": model_id,
+        "max_tokens": max_tokens,
+        "system": [
+            {
+                "type": "text",
+                "text": cache_prefix,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        "messages": [{"role": "user", "content": prompt}],
+    }
+
+
 def _model_request_url(client: ReasoningClient, protocol: str) -> str:
     endpoint = str(getattr(client, "endpoint", ""))
     if not endpoint:
@@ -573,12 +688,17 @@ def _duration_ms(started: float) -> int:
 
 def _progress_line(index: int, total: int, result: ModelCheckResult) -> str:
     usage = result.usage or TokenUsage()
+    cache_suffix = (
+        f" cache_read={_display_usage(usage.cache_read_input_tokens)}"
+        if result.cache_stage == "read"
+        else ""
+    )
     if result.ok:
         return (
             f"[{index}/{total}] OK {result.model.model_id} "
             f"HTTP {result.status_code} {result.duration_ms}ms "
             f"input={_display_usage(usage.input_tokens)} "
-            f"output={_display_usage(usage.output_tokens)}"
+            f"output={_display_usage(usage.output_tokens)}{cache_suffix}"
         )
     return (
         f"[{index}/{total}] FAILED {result.model.model_id} "

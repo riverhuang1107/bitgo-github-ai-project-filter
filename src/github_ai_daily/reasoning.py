@@ -24,6 +24,8 @@ class TokenUsage:
     output_tokens: int | None = None
     total_tokens: int | None = None
     raw: dict | None = None
+    cache_creation_input_tokens: int | None = None
+    cache_read_input_tokens: int | None = None
 
     @classmethod
     def from_response(cls, response: dict) -> "TokenUsage":
@@ -37,7 +39,14 @@ class TokenUsage:
         total_tokens = _integer(usage.get("total_tokens"))
         if total_tokens is None and input_tokens is not None and output_tokens is not None:
             total_tokens = input_tokens + output_tokens
-        return cls(input_tokens, output_tokens, total_tokens, dict(usage))
+        return cls(
+            input_tokens,
+            output_tokens,
+            total_tokens,
+            dict(usage),
+            _integer(usage.get("cache_creation_input_tokens")),
+            _integer(usage.get("cache_read_input_tokens")),
+        )
 
     def format(self) -> str:
         return (
@@ -118,6 +127,24 @@ class ReasoningClient:
         body = {
             "model": model,
             "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        return self._test_request(self.endpoint, body)
+
+    def test_model_with_cached_prefix(
+        self, model: str, prompt: str, max_tokens: int, cache_prefix: str
+    ) -> ReasoningResponse:
+        """Call the Messages API with an Anthropic ephemeral cache breakpoint."""
+        body = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": [
+                {
+                    "type": "text",
+                    "text": cache_prefix,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             "messages": [{"role": "user", "content": prompt}],
         }
         return self._test_request(self.endpoint, body)

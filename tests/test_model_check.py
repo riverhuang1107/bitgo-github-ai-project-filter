@@ -187,6 +187,82 @@ def test_error_classifier_covers_supported_categories():
     assert classify_error(404, {"error": "model not found"}, "")[0] == "模型不可用"
 
 
+def test_input_cache_check_uses_two_messages_requests_and_requires_a_cache_read():
+    model = ModelDefinition("cache-model", "Cache Model", "Test", Decimal("1"), Decimal("2"))
+
+    class FakeClient:
+        endpoint = "https://api.example.test/v1/messages"
+
+        def __init__(self):
+            self.calls = []
+
+        def test_model_with_cached_prefix(self, name, prompt, max_tokens, cache_prefix):
+            self.calls.append((name, prompt, max_tokens, cache_prefix))
+            usage = {
+                "input_tokens": 1028,
+                "output_tokens": 1,
+                "cache_creation_input_tokens": 1024 if len(self.calls) == 1 else 0,
+                "cache_read_input_tokens": 0 if len(self.calls) == 1 else 1024,
+            }
+            return SimpleNamespace(
+                status_code=200,
+                data={"content": [{"type": "text", "text": "ok"}], "usage": usage},
+                text="{}",
+            )
+
+    client = FakeClient()
+    report = run_model_check(
+        client,
+        models=(model,),
+        protocols=(model_check.ANTHROPIC_PROTOCOL,),
+        input_cache_check=True,
+    )
+
+    assert [call[1] for call in client.calls] == [
+        model_check.CACHE_WARMUP_PROMPT,
+        model_check.CACHE_READ_PROMPT,
+    ]
+    assert client.calls[0][3] == client.calls[1][3]
+    assert client.calls[0][3].endswith(model_check.INPUT_CACHE_PREFIX)
+    assert report.input_cache_check is True
+    assert report.protocols == (model_check.ANTHROPIC_PROTOCOL,)
+    assert report.success_count == 2
+    assert report.fully_supported_model_count == 1
+    assert report.results[0].cache_stage == "warmup"
+    assert report.results[1].cache_stage == "read"
+    assert report.results[1].input_cache_hit is True
+    assert report.results[1].usage.cache_read_input_tokens == 1024
+    assert report.results[1].raw_request["system"][0]["cache_control"] == {"type": "ephemeral"}
+
+
+def test_input_cache_check_marks_a_missing_cache_read_as_failure():
+    model = ModelDefinition("cache-model", "Cache Model", "Test", Decimal("1"), Decimal("2"))
+
+    class FakeClient:
+        endpoint = "https://api.example.test/v1/messages"
+
+        def test_model_with_cached_prefix(self, name, prompt, max_tokens, cache_prefix):
+            return SimpleNamespace(
+                status_code=200,
+                data={
+                    "content": [{"type": "text", "text": "ok"}],
+                    "usage": {"input_tokens": 1028, "output_tokens": 1, "cache_read_input_tokens": 0},
+                },
+                text="{}",
+            )
+
+    report = run_model_check(
+        FakeClient(),
+        models=(model,),
+        protocols=(model_check.ANTHROPIC_PROTOCOL,),
+        input_cache_check=True,
+    )
+
+    assert report.results[1].ok is False
+    assert report.results[1].input_cache_hit is False
+    assert report.results[1].error_category == "输入缓存未命中"
+
+
 def test_product_guide_catalog_has_all_34_models():
     assert len(model_check.MODELS) == 34
     assert model_check.MODELS[0].model_id == "deepseek-v3"

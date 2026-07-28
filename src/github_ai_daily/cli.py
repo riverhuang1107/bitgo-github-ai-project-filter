@@ -115,6 +115,14 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Fetch the latest model list from the Bitgo product guide instead of using the local list",
     )
+    model_check.add_argument(
+        "--check-input-cache",
+        action="store_true",
+        help=(
+            "Run the minimal two-request input-cache verification for exactly one "
+            "model using only the Anthropic Messages protocol"
+        ),
+    )
     model_check.add_argument("--bff-base-url", default=DEFAULT_BFF_BASE_URL, help="Bitgo BFF base URL used to read the final sub-wallet balance")
     model_check.add_argument("--send-email", action="store_true", help="Email the completed report")
     model_check.add_argument("--to", help="Comma-separated Gmail recipients")
@@ -456,6 +464,13 @@ def cmd_model_check(args, settings: Settings) -> int:
         model_source += f"；筛选模型：{', '.join(model.model_id for model in models)}"
         print(f"Testing selected models: {', '.join(model.model_id for model in models)}", flush=True)
     protocols = select_protocols(getattr(args, "protocol", []))
+    input_cache_check = getattr(args, "check_input_cache", False)
+    if input_cache_check:
+        if len(models) != 1:
+            raise ValueError("--check-input-cache requires exactly one --model")
+        if getattr(args, "protocol", []) and protocols != ("Anthropic Messages",):
+            raise ValueError("--check-input-cache only supports --protocol messages")
+        protocols = ("Anthropic Messages",)
     print(f"Testing protocols: {', '.join(protocols)}", flush=True)
     client = ReasoningClient(
         reasoning_endpoint(settings), settings.model or DEFAULT_MODEL, auth, reasoning_interface_key(settings, args)
@@ -467,6 +482,7 @@ def cmd_model_check(args, settings: Settings) -> int:
             models=models,
             model_source=model_source,
             protocols=protocols,
+            input_cache_check=input_cache_check,
         )
     finally:
         client.close()
