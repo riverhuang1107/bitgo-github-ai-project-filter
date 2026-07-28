@@ -150,8 +150,18 @@ class ModelCheckReport:
     def fully_supported_model_count(self) -> int:
         if self.input_cache_check:
             return sum(
-                all(result.ok for result in results)
-                and any(result.input_cache_hit is True for result in results)
+                len(results) == len(self.protocols) * 2
+                and {result.protocol for result in results} == set(self.protocols)
+                and all(result.ok for result in results)
+                and all(
+                    any(
+                        result.protocol == protocol
+                        and result.cache_stage == "read"
+                        and result.input_cache_hit is True
+                        for result in results
+                    )
+                    for protocol in self.protocols
+                )
                 for results in _results_by_model(self.results).values()
             )
         results_by_model = _results_by_model(self.results)
@@ -205,12 +215,15 @@ def run_model_check(
     if not models:
         raise ValueError("Model list is empty")
     if input_cache_check:
-        if protocols != (ANTHROPIC_PROTOCOL,):
-            raise ValueError("--check-input-cache only supports --protocol messages")
         if len(models) != 1:
             raise ValueError("--check-input-cache requires exactly one --model")
         return _run_input_cache_check(
-            client, models[0], max_tokens, now=now, model_source=model_source
+            client,
+            models[0],
+            max_tokens,
+            protocols,
+            now=now,
+            model_source=model_source,
         )
     attempts = _protocol_attempts(client, protocols)
     total = len(models) * len(attempts)
@@ -251,67 +264,84 @@ def _run_input_cache_check(
     client: ReasoningClient,
     model: ModelDefinition,
     max_tokens: int,
+    protocols: tuple[str, ...],
     *,
     now: datetime | None,
     model_source: str,
 ) -> ModelCheckReport:
+    if not protocols:
+        raise ValueError("At least one protocol is required")
     results: list[ModelCheckResult] = []
     scenarios = (("warmup", CACHE_WARMUP_PROMPT), ("read", CACHE_READ_PROMPT))
-    # A unique prefix prevents a cache entry made by another run from satisfying
-    # this check; only this run's warm-up request can seed the read request.
-    cache_prefix = f"cache-check:{uuid4().hex}\n{INPUT_CACHE_PREFIX}"
-    for index, (stage, prompt) in enumerate(scenarios, start=1):
-        started_at = datetime.now().astimezone()
-        started = perf_counter()
-        print(
-            f"[{index}/2] Calling {ANTHROPIC_PROTOCOL} input-cache {stage}: {model.model_id}",
-            flush=True,
-        )
-        try:
-            response = client.test_model_with_cached_prefix(
-                model.model_id, prompt, max_tokens, cache_prefix
+    total = len(protocols) * len(scenarios)
+    for protocol_index, protocol in enumerate(protocols):
+        # A unique, protocol-specific prefix prevents a cache entry made by
+        # another run or another endpoint from satisfying this check.
+        cache_prefix = f"cache-check:{protocol}:{uuid4().hex}\n{INPUT_CACHE_PREFIX}"
+        test_model = _cached_protocol_attempt(client, protocol)
+        for stage_index, (stage, prompt) in enumerate(scenarios):
+            index = protocol_index * len(scenarios) + stage_index + 1
+            started_at = datetime.now().astimezone()
+            started = perf_counter()
+            print(
+                f"[{index}/{total}] Calling {protocol} input-cache {stage}: {model.model_id}",
+                flush=True,
             )
-            result = _result_from_response(
-                model, ANTHROPIC_PROTOCOL, response, started_at, started
+            try:
+                response = test_model(model.model_id, prompt, max_tokens, cache_prefix)
+                result = _result_from_response(model, protocol, response, started_at, started)
+            except httpx.TimeoutException as exc:
+                result = _transport_failure(model, protocol, started_at, started, "网络/超时", str(exc))
+            except httpx.HTTPError as exc:
+                result = _transport_failure(model, protocol, started_at, started, "网络/超时", str(exc))
+            except Exception as exc:
+                result = _transport_failure(model, protocol, started_at, started, "客户端错误", str(exc))
+            result.cache_stage = stage
+            result.raw_request = _cached_request_body(
+                protocol, model.model_id, prompt, max_tokens, cache_prefix
             )
-        except httpx.TimeoutException as exc:
-            result = _transport_failure(
-                model, ANTHROPIC_PROTOCOL, started_at, started, "网络/超时", str(exc)
-            )
-        except httpx.HTTPError as exc:
-            result = _transport_failure(
-                model, ANTHROPIC_PROTOCOL, started_at, started, "网络/超时", str(exc)
-            )
-        except Exception as exc:
-            result = _transport_failure(
-                model, ANTHROPIC_PROTOCOL, started_at, started, "客户端错误", str(exc)
-            )
-        result.cache_stage = stage
-        result.raw_request = _cached_messages_request_body(
-            model.model_id, prompt, max_tokens, cache_prefix
-        )
-        result.request_url = _model_request_url(client, ANTHROPIC_PROTOCOL)
-        if stage == "read":
-            result.input_cache_hit = bool(
-                result.usage and (result.usage.cache_read_input_tokens or 0) > 0
-            )
-            if result.ok and not result.input_cache_hit:
-                result.ok = False
-                result.error_category = "输入缓存未命中"
-                result.error_message = (
-                    "服务端未返回正数 usage.cache_read_input_tokens；无法确认输入缓存命中"
+            result.request_url = _model_request_url(client, protocol)
+            if stage == "read":
+                result.input_cache_hit = bool(
+                    result.usage and (result.usage.cache_read_input_tokens or 0) > 0
                 )
-        results.append(result)
-        print(_progress_line(index, len(scenarios), result), flush=True)
+                if result.ok and not result.input_cache_hit:
+                    result.ok = False
+                    result.error_category = "输入缓存未命中"
+                    result.error_message = (
+                        "服务端未返回正数 "
+                        f"{cache_hit_usage_field(protocol)}；无法确认输入缓存命中"
+                    )
+            results.append(result)
+            print(_progress_line(index, total, result), flush=True)
     return ModelCheckReport(
         generated_at=now or datetime.now().astimezone(),
-        prompt="Two-request Anthropic Messages input-cache verification",
+        prompt=(
+            "Two-request input-cache verification: "
+            + ", ".join(protocols)
+        ),
         max_tokens=max_tokens,
         results=results,
         model_source=model_source,
-        protocols=(ANTHROPIC_PROTOCOL,),
+        protocols=protocols,
         input_cache_check=True,
     )
+
+
+def _cached_protocol_attempt(client: ReasoningClient, protocol: str):
+    if protocol == ANTHROPIC_PROTOCOL:
+        return client.test_model_with_cached_prefix
+    if protocol == OPENAI_PROTOCOL:
+        return client.test_model_openai_with_cached_prefix
+    if protocol == OPENAI_RESPONSES_PROTOCOL:
+        return client.test_model_openai_responses_with_cached_prefix
+    raise ValueError(f"Unknown protocol: {protocol}")
+
+
+def cache_hit_usage_field(protocol: str) -> str:
+    if protocol == OPENAI_PROTOCOL:
+        return "usage.prompt_tokens_details.cached_tokens"
+    return "usage.cache_read_input_tokens"
 
 
 def select_protocols(selectors: list[str] | tuple[str, ...] | None) -> tuple[str, ...]:
@@ -624,21 +654,65 @@ def _model_request_body(
     }
 
 
+def _cached_request_body(
+    protocol: str, model_id: str, prompt: str, max_tokens: int, cache_prefix: str
+) -> dict[str, Any]:
+    if protocol == ANTHROPIC_PROTOCOL:
+        return {
+            "model": model_id,
+            "max_tokens": max_tokens,
+            "system": [
+                {
+                    "type": "text",
+                    "text": cache_prefix,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            "messages": [{"role": "user", "content": prompt}],
+        }
+    if protocol == OPENAI_PROTOCOL:
+        return {
+            "model": model_id,
+            "max_tokens": max_tokens,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": cache_prefix,
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                    ],
+                },
+                {"role": "user", "content": prompt},
+            ],
+        }
+    if protocol == OPENAI_RESPONSES_PROTOCOL:
+        return {
+            "model": model_id,
+            "max_output_tokens": max_tokens,
+            "input": [
+                {
+                    "role": "system",
+                    "content": [{"type": "input_text", "text": cache_prefix}],
+                },
+                {
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": prompt}],
+                },
+            ],
+        }
+    raise ValueError(f"Unknown protocol: {protocol}")
+
+
 def _cached_messages_request_body(
     model_id: str, prompt: str, max_tokens: int, cache_prefix: str
 ) -> dict[str, Any]:
-    return {
-        "model": model_id,
-        "max_tokens": max_tokens,
-        "system": [
-            {
-                "type": "text",
-                "text": cache_prefix,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        "messages": [{"role": "user", "content": prompt}],
-    }
+    """Keep the previous private helper available for Messages callers."""
+    return _cached_request_body(
+        ANTHROPIC_PROTOCOL, model_id, prompt, max_tokens, cache_prefix
+    )
 
 
 def _model_request_url(client: ReasoningClient, protocol: str) -> str:

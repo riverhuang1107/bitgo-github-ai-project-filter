@@ -263,6 +263,125 @@ def test_input_cache_check_marks_a_missing_cache_read_as_failure():
     assert report.results[1].error_category == "输入缓存未命中"
 
 
+def test_input_cache_check_runs_the_selected_protocols_with_native_request_shapes():
+    model = ModelDefinition("cache-model", "Cache Model", "Test", Decimal("1"), Decimal("2"))
+    calls = []
+
+    class FakeClient:
+        endpoint = "https://api.example.test/v1/messages"
+
+        def _response(self, protocol, prompt):
+            calls.append((protocol, prompt))
+            stage_is_read = prompt == model_check.CACHE_READ_PROMPT
+            return SimpleNamespace(
+                status_code=200,
+                data={
+                    "content": [{"type": "text", "text": "messages ok"}]
+                    if protocol == model_check.ANTHROPIC_PROTOCOL
+                    else None,
+                    "choices": [{"message": {"content": "chat ok"}}]
+                    if protocol == model_check.OPENAI_PROTOCOL
+                    else None,
+                    "output": [{"content": [{"type": "output_text", "text": "responses ok"}]}]
+                    if protocol == model_check.OPENAI_RESPONSES_PROTOCOL
+                    else None,
+                    "usage": {
+                        "input_tokens": 2050,
+                        "output_tokens": 1,
+                        "cache_read_input_tokens": 1024 if stage_is_read else 0,
+                    }
+                    if protocol != model_check.OPENAI_PROTOCOL
+                    else {
+                        "prompt_tokens": 2050,
+                        "completion_tokens": 1,
+                        "prompt_tokens_details": {
+                            "cache_creation_tokens": 1024 if not stage_is_read else 0,
+                            "cached_tokens": 0 if not stage_is_read else 1024,
+                        },
+                    },
+                },
+                text="{}",
+            )
+
+        def test_model_with_cached_prefix(self, name, prompt, max_tokens, cache_prefix):
+            return self._response(model_check.ANTHROPIC_PROTOCOL, prompt)
+
+        def test_model_openai_with_cached_prefix(self, name, prompt, max_tokens, cache_prefix):
+            return self._response(model_check.OPENAI_PROTOCOL, prompt)
+
+        def test_model_openai_responses_with_cached_prefix(self, name, prompt, max_tokens, cache_prefix):
+            return self._response(model_check.OPENAI_RESPONSES_PROTOCOL, prompt)
+
+    report = run_model_check(
+        FakeClient(),
+        models=(model,),
+        protocols=model_check.ALL_PROTOCOLS,
+        input_cache_check=True,
+    )
+
+    assert len(calls) == 6
+    assert [result.protocol for result in report.results] == [
+        model_check.ANTHROPIC_PROTOCOL,
+        model_check.ANTHROPIC_PROTOCOL,
+        model_check.OPENAI_PROTOCOL,
+        model_check.OPENAI_PROTOCOL,
+        model_check.OPENAI_RESPONSES_PROTOCOL,
+        model_check.OPENAI_RESPONSES_PROTOCOL,
+    ]
+    assert [result.cache_stage for result in report.results] == [
+        "warmup", "read", "warmup", "read", "warmup", "read"
+    ]
+    assert report.protocols == model_check.ALL_PROTOCOLS
+    assert report.success_count == 6
+    assert report.fully_supported_model_count == 1
+    assert report.results[0].raw_request["system"][0]["cache_control"] == {"type": "ephemeral"}
+    assert report.results[2].raw_request["max_tokens"] == 128
+    assert report.results[2].raw_request["messages"][0]["content"][0]["cache_control"] == {
+        "type": "ephemeral"
+    }
+    assert report.results[4].raw_request["input"][0]["content"][0]["type"] == "input_text"
+    assert (
+        report.results[2].raw_request["messages"][0]["content"]
+        == report.results[3].raw_request["messages"][0]["content"]
+    )
+    assert report.results[3].usage.cache_read_input_tokens == 1024
+    assert report.results[4].raw_request["input"][0] == report.results[5].raw_request["input"][0]
+    assert "usage.prompt_tokens_details.cached_tokens=1024" in render_model_check_markdown(report)
+
+
+def test_input_cache_check_requires_each_selected_protocol_to_hit():
+    model = ModelDefinition("cache-model", "Cache Model", "Test", Decimal("1"), Decimal("2"))
+
+    class FakeClient:
+        endpoint = "https://api.example.test/v1/messages"
+
+        def test_model_with_cached_prefix(self, name, prompt, max_tokens, cache_prefix):
+            return SimpleNamespace(status_code=200, data={"content": [{"type": "text", "text": "ok"}], "usage": {"cache_read_input_tokens": 1024 if prompt == model_check.CACHE_READ_PROMPT else 0}}, text="{}")
+
+        def test_model_openai_with_cached_prefix(self, name, prompt, max_tokens, cache_prefix):
+            return SimpleNamespace(
+                status_code=200,
+                data={
+                    "choices": [{"message": {"content": "ok"}}],
+                    "usage": {"prompt_tokens_details": {"cached_tokens": 0}},
+                },
+                text="{}",
+            )
+
+    report = run_model_check(
+        FakeClient(),
+        models=(model,),
+        protocols=(model_check.ANTHROPIC_PROTOCOL, model_check.OPENAI_PROTOCOL),
+        input_cache_check=True,
+    )
+
+    assert report.success_count == 3
+    assert report.results[1].input_cache_hit is True
+    assert report.results[3].input_cache_hit is False
+    assert report.results[3].ok is False
+    assert report.fully_supported_model_count == 0
+
+
 def test_product_guide_catalog_has_all_34_models():
     assert len(model_check.MODELS) == 34
     assert model_check.MODELS[0].model_id == "deepseek-v3"

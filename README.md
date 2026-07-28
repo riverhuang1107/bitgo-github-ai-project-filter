@@ -274,20 +274,40 @@ export REASONING_PRIVATE_KEY="..."
 
 ### Input-cache verification
 
-Use `--check-input-cache` to run the smallest cache test: it sends exactly two
-Anthropic Messages requests for one selected model. The first request seeds a
-unique ephemeral cache prefix; the second request succeeds only when the API
-returns a positive `usage.cache_read_input_tokens`. This mode is Messages-only,
-and intentionally requires one `--model` to avoid unintended multi-model spend.
+Use `--check-input-cache` to run the smallest cache test for one selected model.
+Each selected protocol sends exactly two requests with the same unique long
+input prefix: a `warmup` request followed by a `read` request. The read request
+is successful only when the API returns a positive
+`usage.cache_read_input_tokens`. Messages uses an Anthropic ephemeral cache
+breakpoint. Chat Completions uses the Modelink-compatible OpenAI message content
+block with `cache_control: {"type":"ephemeral"}` and verifies
+`usage.prompt_tokens_details.cached_tokens`; Responses uses its native repeated
+input message format. The option intentionally requires one `--model` to avoid
+unintended multi-model spend. `--protocol` controls which cache scenarios run,
+so `chat`, `chat,messages`, and `all` test one, two, and three protocols. See
+[Modelink Claude Prompt Caching](https://docs.modelink.ai/models-capabilities/claude-prompt-caching#openai-%E5%8D%8F%E8%AE%AE%E8%B0%83%E7%94%A8%E6%96%B9%E5%BC%8F)
+for the OpenAI-compatible request and usage fields.
 
 ```bash
 .venv/bin/github-ai-daily model-check \
   --model claude-4.6-opus \
   --check-input-cache \
   --output-dir reports
+
+# Only Chat Completions
+.venv/bin/github-ai-daily model-check \
+  --model openai/gpt-5-mini \
+  --check-input-cache \
+  --protocol chat
+
+# All three protocols, six requests total
+.venv/bin/github-ai-daily model-check \
+  --model openai/gpt-5-mini \
+  --check-input-cache \
+  --protocol all
 ```
 
-报告会分别记录每次调用的输出内容、用量和失败原始响应；API 调用次数等于模型数量乘以所选协议数量，费用统计只汇总所选协议的实际消耗。
+报告会分别记录每次调用的输出内容、用量和失败原始响应；普通连通性测试的 API 调用次数等于模型数量乘以所选协议数量，输入缓存测试则为所选协议数量乘以 2，费用统计只汇总实际消耗。
 
 先准备与普通推理调用相同的钱包参数及接口 ECDSA 私钥。接口私钥可继续通过配置文件的 `private_key_path` 指定，也可通过环境变量注入 PEM：
 

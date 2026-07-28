@@ -32,6 +32,9 @@ class TokenUsage:
         usage = response.get("usage")
         if not isinstance(usage, dict):
             return cls()
+        prompt_token_details = usage.get("prompt_tokens_details")
+        if not isinstance(prompt_token_details, dict):
+            prompt_token_details = {}
         input_tokens = _integer(usage.get("input_tokens", usage.get("prompt_tokens")))
         output_tokens = _integer(
             usage.get("output_tokens", usage.get("completion_tokens"))
@@ -44,8 +47,17 @@ class TokenUsage:
             output_tokens,
             total_tokens,
             dict(usage),
-            _integer(usage.get("cache_creation_input_tokens")),
-            _integer(usage.get("cache_read_input_tokens")),
+            _integer(
+                usage.get(
+                    "cache_creation_input_tokens",
+                    prompt_token_details.get("cache_creation_tokens"),
+                )
+            ),
+            _integer(
+                usage.get(
+                    "cache_read_input_tokens", prompt_token_details.get("cached_tokens")
+                )
+            ),
         )
 
     def format(self) -> str:
@@ -148,6 +160,49 @@ class ReasoningClient:
             "messages": [{"role": "user", "content": prompt}],
         }
         return self._test_request(self.endpoint, body)
+
+    def test_model_openai_with_cached_prefix(
+        self, model: str, prompt: str, max_tokens: int, cache_prefix: str
+    ) -> ReasoningResponse:
+        """Call Chat Completions with Modelink's Anthropic cache-control extension."""
+        body = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": cache_prefix,
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                    ],
+                },
+                {"role": "user", "content": prompt},
+            ],
+        }
+        return self._test_request(_openai_chat_endpoint(self.endpoint), body)
+
+    def test_model_openai_responses_with_cached_prefix(
+        self, model: str, prompt: str, max_tokens: int, cache_prefix: str
+    ) -> ReasoningResponse:
+        """Call Responses twice with the same long system-message prefix."""
+        body = {
+            "model": model,
+            "max_output_tokens": max_tokens,
+            "input": [
+                {
+                    "role": "system",
+                    "content": [{"type": "input_text", "text": cache_prefix}],
+                },
+                {
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": prompt}],
+                },
+            ],
+        }
+        return self._test_request(_openai_responses_endpoint(self.endpoint), body)
 
     def test_model_openai(
         self, model: str, prompt: str, max_tokens: int

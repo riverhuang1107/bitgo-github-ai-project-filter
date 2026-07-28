@@ -120,7 +120,7 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Run the minimal two-request input-cache verification for exactly one "
-            "model using only the Anthropic Messages protocol"
+            "model on every selected protocol"
         ),
     )
     model_check.add_argument("--bff-base-url", default=DEFAULT_BFF_BASE_URL, help="Bitgo BFF base URL used to read the final sub-wallet balance")
@@ -468,9 +468,6 @@ def cmd_model_check(args, settings: Settings) -> int:
     if input_cache_check:
         if len(models) != 1:
             raise ValueError("--check-input-cache requires exactly one --model")
-        if getattr(args, "protocol", []) and protocols != ("Anthropic Messages",):
-            raise ValueError("--check-input-cache only supports --protocol messages")
-        protocols = ("Anthropic Messages",)
     print(f"Testing protocols: {', '.join(protocols)}", flush=True)
     client = ReasoningClient(
         reasoning_endpoint(settings), settings.model or DEFAULT_MODEL, auth, reasoning_interface_key(settings, args)

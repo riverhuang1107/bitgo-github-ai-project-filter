@@ -107,6 +107,26 @@ def test_token_usage_supports_anthropic_and_reports_missing():
     assert "服务端未提供" in TokenUsage().format()
 
 
+def test_token_usage_supports_modelink_openai_cache_fields():
+    usage = TokenUsage.from_response(
+        {
+            "usage": {
+                "prompt_tokens": 2048,
+                "completion_tokens": 8,
+                "prompt_tokens_details": {
+                    "cache_creation_tokens": 2000,
+                    "cached_tokens": 2000,
+                },
+            }
+        }
+    )
+
+    assert usage.input_tokens == 2048
+    assert usage.output_tokens == 8
+    assert usage.cache_creation_input_tokens == 2000
+    assert usage.cache_read_input_tokens == 2000
+
+
 def test_http_error_includes_safe_server_detail():
     request = httpx.Request("POST", "https://example.test/v1/messages")
     response = httpx.Response(400, request=request)
@@ -182,3 +202,44 @@ def test_reasoning_client_uses_openai_chat_completions_protocol(monkeypatch):
     assert captured["body"]["max_completion_tokens"] == 128
     assert "max_tokens" not in captured["body"]
     assert _openai_chat_endpoint("https://example.test/v1/messages/") == "https://example.test/v1/chat/completions"
+
+
+def test_reasoning_client_uses_modelink_openai_cache_extension(monkeypatch):
+    captured = {}
+
+    class FakeClient:
+        def post(self, endpoint, headers, json):
+            captured["endpoint"] = endpoint
+            captured["body"] = json
+            request = httpx.Request("POST", endpoint)
+            return httpx.Response(200, request=request, json={"choices": [{"message": {"content": "ok"}}]})
+
+    monkeypatch.setattr("github_ai_daily.reasoning.wallet_signed_headers", lambda auth, key: {})
+    client = ReasoningClient(
+        "https://example.test/v1/messages",
+        "model-a",
+        WalletAuth("ltc", "wallet", "10", "id", "private"),
+        ec.generate_private_key(ec.SECP256R1()),
+    )
+    client.client = FakeClient()
+
+    client.test_model_openai_with_cached_prefix("anthropic/claude", "hello", 128, "cached prefix")
+
+    assert captured["endpoint"] == "https://example.test/v1/chat/completions"
+    assert captured["body"] == {
+        "model": "anthropic/claude",
+        "max_tokens": 128,
+        "messages": [
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "cached prefix",
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
+            },
+            {"role": "user", "content": "hello"},
+        ],
+    }
