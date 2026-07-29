@@ -35,6 +35,9 @@ class TokenUsage:
         prompt_token_details = usage.get("prompt_tokens_details")
         if not isinstance(prompt_token_details, dict):
             prompt_token_details = {}
+        input_token_details = usage.get("input_tokens_details")
+        if not isinstance(input_token_details, dict):
+            input_token_details = {}
         input_tokens = _integer(usage.get("input_tokens", usage.get("prompt_tokens")))
         output_tokens = _integer(
             usage.get("output_tokens", usage.get("completion_tokens"))
@@ -54,8 +57,10 @@ class TokenUsage:
                 )
             ),
             _integer(
-                usage.get(
-                    "cache_read_input_tokens", prompt_token_details.get("cached_tokens")
+                usage.get("cache_read_input_tokens")
+                if usage.get("cache_read_input_tokens") is not None
+                else input_token_details.get(
+                    "cached_tokens", prompt_token_details.get("cached_tokens")
                 )
             ),
         )
@@ -185,12 +190,19 @@ class ReasoningClient:
         return self._test_request(_openai_chat_endpoint(self.endpoint), body)
 
     def test_model_openai_responses_with_cached_prefix(
-        self, model: str, prompt: str, max_tokens: int, cache_prefix: str
+        self,
+        model: str,
+        prompt: str,
+        max_tokens: int,
+        cache_prefix: str,
+        prompt_cache_key: str,
     ) -> ReasoningResponse:
-        """Call Responses twice with the same long system-message prefix."""
+        """Call Responses with its native cache key and a repeated input prefix."""
         body = {
             "model": model,
             "max_output_tokens": max_tokens,
+            "prompt_cache_key": prompt_cache_key,
+            "prompt_cache_retention": "in_memory",
             "input": [
                 {
                     "role": "system",

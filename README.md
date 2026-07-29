@@ -277,12 +277,13 @@ export REASONING_PRIVATE_KEY="..."
 Use `--check-input-cache` to run the smallest cache test for one selected model.
 Each selected protocol sends exactly two requests with the same unique long
 input prefix: a `warmup` request followed by a `read` request. The read request
-is successful only when the API returns a positive
-`usage.cache_read_input_tokens`. Messages uses an Anthropic ephemeral cache
+is successful only when the selected protocol returns a positive cache-read
+token count. Messages uses an Anthropic ephemeral cache
 breakpoint. Chat Completions uses the Modelink-compatible OpenAI message content
 block with `cache_control: {"type":"ephemeral"}` and verifies
-`usage.prompt_tokens_details.cached_tokens`; Responses uses its native repeated
-input message format. The option intentionally requires one `--model` to avoid
+`usage.prompt_tokens_details.cached_tokens`; Responses uses its native
+`prompt_cache_key` plus `prompt_cache_retention: "in_memory"`, a repeated input
+prefix, and verifies `usage.input_tokens_details.cached_tokens`. The option intentionally requires one `--model` to avoid
 unintended multi-model spend. `--protocol` controls which cache scenarios run,
 so `chat`, `chat,messages`, and `all` test one, two, and three protocols. See
 [Modelink Claude Prompt Caching](https://docs.modelink.ai/models-capabilities/claude-prompt-caching#openai-%E5%8D%8F%E8%AE%AE%E8%B0%83%E7%94%A8%E6%96%B9%E5%BC%8F)

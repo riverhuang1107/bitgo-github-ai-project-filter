@@ -278,6 +278,7 @@ def _run_input_cache_check(
         # A unique, protocol-specific prefix prevents a cache entry made by
         # another run or another endpoint from satisfying this check.
         cache_prefix = f"cache-check:{protocol}:{uuid4().hex}\n{INPUT_CACHE_PREFIX}"
+        prompt_cache_key = f"model-check:{uuid4().hex}"
         test_model = _cached_protocol_attempt(client, protocol)
         for stage_index, (stage, prompt) in enumerate(scenarios):
             index = protocol_index * len(scenarios) + stage_index + 1
@@ -288,7 +289,16 @@ def _run_input_cache_check(
                 flush=True,
             )
             try:
-                response = test_model(model.model_id, prompt, max_tokens, cache_prefix)
+                if protocol == OPENAI_RESPONSES_PROTOCOL:
+                    response = test_model(
+                        model.model_id,
+                        prompt,
+                        max_tokens,
+                        cache_prefix,
+                        prompt_cache_key,
+                    )
+                else:
+                    response = test_model(model.model_id, prompt, max_tokens, cache_prefix)
                 result = _result_from_response(model, protocol, response, started_at, started)
             except httpx.TimeoutException as exc:
                 result = _transport_failure(model, protocol, started_at, started, "网络/超时", str(exc))
@@ -298,7 +308,12 @@ def _run_input_cache_check(
                 result = _transport_failure(model, protocol, started_at, started, "客户端错误", str(exc))
             result.cache_stage = stage
             result.raw_request = _cached_request_body(
-                protocol, model.model_id, prompt, max_tokens, cache_prefix
+                protocol,
+                model.model_id,
+                prompt,
+                max_tokens,
+                cache_prefix,
+                prompt_cache_key,
             )
             result.request_url = _model_request_url(client, protocol)
             if stage == "read":
@@ -339,6 +354,8 @@ def _cached_protocol_attempt(client: ReasoningClient, protocol: str):
 
 
 def cache_hit_usage_field(protocol: str) -> str:
+    if protocol == OPENAI_RESPONSES_PROTOCOL:
+        return "usage.input_tokens_details.cached_tokens"
     if protocol == OPENAI_PROTOCOL:
         return "usage.prompt_tokens_details.cached_tokens"
     return "usage.cache_read_input_tokens"
@@ -655,7 +672,12 @@ def _model_request_body(
 
 
 def _cached_request_body(
-    protocol: str, model_id: str, prompt: str, max_tokens: int, cache_prefix: str
+    protocol: str,
+    model_id: str,
+    prompt: str,
+    max_tokens: int,
+    cache_prefix: str,
+    prompt_cache_key: str = "",
 ) -> dict[str, Any]:
     if protocol == ANTHROPIC_PROTOCOL:
         return {
@@ -692,6 +714,8 @@ def _cached_request_body(
         return {
             "model": model_id,
             "max_output_tokens": max_tokens,
+            "prompt_cache_key": prompt_cache_key,
+            "prompt_cache_retention": "in_memory",
             "input": [
                 {
                     "role": "system",

@@ -290,12 +290,20 @@ def test_input_cache_check_runs_the_selected_protocols_with_native_request_shape
                         "output_tokens": 1,
                         "cache_read_input_tokens": 1024 if stage_is_read else 0,
                     }
-                    if protocol != model_check.OPENAI_PROTOCOL
+                    if protocol == model_check.ANTHROPIC_PROTOCOL
                     else {
                         "prompt_tokens": 2050,
                         "completion_tokens": 1,
                         "prompt_tokens_details": {
                             "cache_creation_tokens": 1024 if not stage_is_read else 0,
+                            "cached_tokens": 0 if not stage_is_read else 1024,
+                        },
+                    }
+                    if protocol == model_check.OPENAI_PROTOCOL
+                    else {
+                        "input_tokens": 2050,
+                        "output_tokens": 1,
+                        "input_tokens_details": {
                             "cached_tokens": 0 if not stage_is_read else 1024,
                         },
                     },
@@ -309,7 +317,7 @@ def test_input_cache_check_runs_the_selected_protocols_with_native_request_shape
         def test_model_openai_with_cached_prefix(self, name, prompt, max_tokens, cache_prefix):
             return self._response(model_check.OPENAI_PROTOCOL, prompt)
 
-        def test_model_openai_responses_with_cached_prefix(self, name, prompt, max_tokens, cache_prefix):
+        def test_model_openai_responses_with_cached_prefix(self, name, prompt, max_tokens, cache_prefix, prompt_cache_key):
             return self._response(model_check.OPENAI_RESPONSES_PROTOCOL, prompt)
 
     report = run_model_check(
@@ -346,6 +354,10 @@ def test_input_cache_check_runs_the_selected_protocols_with_native_request_shape
     )
     assert report.results[3].usage.cache_read_input_tokens == 1024
     assert report.results[4].raw_request["input"][0] == report.results[5].raw_request["input"][0]
+    assert report.results[4].raw_request["prompt_cache_key"] == report.results[5].raw_request["prompt_cache_key"]
+    assert report.results[4].raw_request["prompt_cache_retention"] == "in_memory"
+    assert report.results[5].usage.cache_read_input_tokens == 1024
+    assert "usage.input_tokens_details.cached_tokens=1024" in render_model_check_markdown(report)
     assert "usage.prompt_tokens_details.cached_tokens=1024" in render_model_check_markdown(report)
 
 
