@@ -42,6 +42,8 @@ class Settings:
     money: str = ""
     money_id: str = ""
     signer_command: str = ""
+    vps_ssh_key_id: str = ""
+    vps_ssh_private_key_path: str = ""
     wallets: dict[str, WalletProfile] = field(default_factory=dict)
     output_dir: str = "output"
     mail_from: str = DEFAULT_MAIL_FROM
@@ -58,6 +60,7 @@ class Settings:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
         app = data.get("app", {})
         reasoning = data.get("reasoning", {})
+        vps_check = data.get("vps_check", {})
         mail = data.get("mail", {})
         wallet_profiles = reasoning.get("wallets", {})
         wallets = {
@@ -83,6 +86,8 @@ class Settings:
             money=str(reasoning.get("money", "")),
             money_id=str(reasoning.get("money_id", "")),
             signer_command=reasoning.get("signer_command", ""),
+            vps_ssh_key_id=str(vps_check.get("ssh_key_id", "")),
+            vps_ssh_private_key_path=str(vps_check.get("ssh_private_key_path", "")),
             wallets=wallets,
             output_dir=app.get("output_dir", "output"),
             mail_from=mail.get("from") or DEFAULT_MAIL_FROM,
@@ -119,6 +124,11 @@ class Settings:
                     f'money_id = "{_escape(wallet.money_id)}"\n'
                     f'signer_command = "{_escape(wallet.signer_command)}"\n'
                 )
+        text += (
+            "\n[vps_check]\n"
+            f'ssh_key_id = "{_escape(self.vps_ssh_key_id)}"\n'
+            f'ssh_private_key_path = "{_escape(self.vps_ssh_private_key_path)}"\n'
+        )
         text += (
             "\n[mail]\n"
             f'from = "{_escape(self.mail_from)}"\n'

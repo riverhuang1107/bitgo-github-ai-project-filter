@@ -1,0 +1,60 @@
+name: Bitgo VPS Connectivity Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      send_email:
+        description: Send the completed report to REPORT_RECIPIENTS
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bitgo-vps-check
+  cancel-in-progress: false
+
+jobs:
+  check-vps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      REASONING_WALLET_CHAIN: ${{ secrets.REASONING_WALLET_CHAIN }}
+      REASONING_WALLET_ADDRESS: ${{ secrets.REASONING_WALLET_ADDRESS }}
+      REASONING_MONEY: ${{ secrets.REASONING_MONEY }}
+      REASONING_MONEY_ID: ${{ secrets.REASONING_MONEY_ID }}
+      REASONING_PRIVATE_KEY: ${{ secrets.REASONING_PRIVATE_KEY }}
+      REASONING_SIGNER_COMMAND: ${{ secrets.REASONING_SIGNER_COMMAND }}
+      REASONING_INTERFACE_PRIVATE_KEY_PEM: ${{ secrets.REASONING_INTERFACE_PRIVATE_KEY_PEM }}
+      VPS_CHECK_SSH_KEY_ID: ${{ secrets.VPS_CHECK_SSH_KEY_ID }}
+      VPS_CHECK_SSH_PUBLIC_KEY: ${{ secrets.VPS_CHECK_SSH_PUBLIC_KEY }}
+      GMAIL_CREDENTIALS_JSON: ${{ secrets.GMAIL_CREDENTIALS_JSON }}
+      GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
+      MAIL_FROM: ${{ secrets.MAIL_FROM }}
+      REPORT_RECIPIENTS: ${{ secrets.REPORT_RECIPIENTS }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Install the tool
+        run: python -m pip install .
+      - name: Check Bitgo VPS without email
+        if: inputs.send_email != true
+        run: python -m github_ai_daily vps-check --output-dir reports
+      - name: Check Bitgo VPS and send email
+        if: inputs.send_email == true
+        run: python -m github_ai_daily vps-check --output-dir reports --send-email
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitgo-vps-check-${{ github.run_id }}
+          path: reports/
+          if-no-files-found: warn
+          retention-days: 30

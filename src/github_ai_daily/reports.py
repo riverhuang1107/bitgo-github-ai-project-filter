@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .model_check import ModelCheckReport, ModelCheckResult, cache_hit_usage_field
 from .models import ReportItem
+from .vps_check import VPSCheckReport
 
 
 def build_items(repositories, selections, limit: int) -> list[ReportItem]:
@@ -223,6 +224,120 @@ def write_model_check_reports(report: ModelCheckReport, output_dir: Path) -> dic
     markdown_path.write_text(render_model_check_markdown(report), encoding="utf-8")
     html_path.write_text(render_model_check_html(report), encoding="utf-8")
     return {"markdown": markdown_path, "html": html_path}
+
+
+def render_vps_check_markdown(report: VPSCheckReport) -> str:
+    resource = report.resource
+    lines = [
+        "# Bitgo VPS 消费连通性报告",
+        "",
+        f"> 生成时间：{report.generated_at.astimezone().isoformat(timespec='seconds')}",
+        "",
+        "## 总结",
+        "",
+        f"- 状态：{'成功' if report.ok else '失败'}",
+        f"- 实例 ID：`{report.instance_id or '未创建'}`",
+        f"- 实例名称：{report.instance_name or '未创建'}",
+        f"- 实例状态：{report.instance_status or '未获得'}",
+        f"- SSH Key：{'本次创建' if report.ssh_key_created else '复用'}（ID 已脱敏）",
+        f"- 状态轮询次数：{report.status_polls}",
+        f"- 计费轮询次数：{report.billing_polls}",
+        f"- 当前累计计费：{_format_decimal(report.billed_amount)} USD",
+    ]
+    if report.error:
+        lines.append(f"- 错误：{report.error}")
+    lines.extend(["", "## 所选资源", ""])
+    if resource is None:
+        lines.append("未能选择可售 Linux 资源。")
+    else:
+        lines.extend(
+            [
+                f"- 区域：{resource.zone_id}",
+                f"- 规格：{resource.instance_type_id}（{resource.cpu or '未知'} vCPU / {resource.memory or '未知'} GB / {resource.disk or '未知'} GB）",
+                f"- 镜像：{resource.image_name}",
+                f"- 小时价：{_format_decimal(resource.hourly_price)} USD；月价：{_format_decimal(resource.monthly_price)} USD",
+            ]
+        )
+    lines.extend(["", "## VPS 计费记录", ""])
+    if report.billing:
+        for billing in report.billing:
+            lines.append(f"- {billing.created_at or '未提供时间'}：{_format_decimal(billing.charge)} USD")
+    else:
+        lines.append("未返回该实例的可用计费记录。")
+    lines.extend(["", "## 零钱包与 VPS 订单", ""])
+    lines.extend(_markdown_wallet_balance_from_snapshot(report.wallet_balance))
+    if report.vps_orders:
+        for order in report.vps_orders:
+            lines.append(
+                f"- {order.get('created_at', '未提供时间')}：{order.get('amount', '未提供')} USD；{order.get('description', '')}"
+            )
+    else:
+        lines.append("- VPS 消费订单：未返回或尚未产生。")
+    lines.extend(
+        [
+            "",
+            "## 清理提示",
+            "",
+            "实例会保持运行并持续计费。确认数据无需保留后，请使用 `vps-delete --instance-id <ID> --confirm-instance-id <ID>` 显式删除。",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def render_vps_check_html(report: VPSCheckReport) -> str:
+    resource = report.resource
+    status_class = "ok" if report.ok else "fail"
+    resource_html = "未能选择可售 Linux 资源。"
+    if resource is not None:
+        resource_html = (
+            f"<ul><li>区域：{html.escape(resource.zone_id)}</li>"
+            f"<li>规格：{html.escape(resource.instance_type_id)}"
+            f"（{resource.cpu or '未知'} vCPU / {resource.memory or '未知'} GB / {resource.disk or '未知'} GB）</li>"
+            f"<li>镜像：{html.escape(resource.image_name)}</li>"
+            f"<li>小时价：{_format_decimal(resource.hourly_price)} USD；月价：{_format_decimal(resource.monthly_price)} USD</li></ul>"
+        )
+    billings = "".join(
+        f"<li>{html.escape(item.created_at or '未提供时间')}：{_format_decimal(item.charge)} USD</li>"
+        for item in report.billing
+    ) or "<li>未返回该实例的可用计费记录。</li>"
+    orders = "".join(
+        f"<li>{html.escape(item.get('created_at', '未提供时间'))}：{html.escape(item.get('amount', '未提供'))} USD；{html.escape(item.get('description', ''))}</li>"
+        for item in report.vps_orders
+    ) or "<li>VPS 消费订单：未返回或尚未产生。</li>"
+    wallet = "".join(f"<li>{html.escape(line.removeprefix('- '))}</li>" for line in _markdown_wallet_balance_from_snapshot(report.wallet_balance))
+    return f'''<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>Bitgo VPS 消费连通性报告</title><style>
+body{{margin:0;background:#f5f7fb;color:#172033;font:15px/1.55 Arial,"Microsoft YaHei",sans-serif}}.wrap{{max-width:900px;margin:auto;padding:28px 16px 48px}}section{{background:#fff;border:1px solid #dfe5ef;border-radius:8px;padding:16px;margin:16px 0}}.ok{{color:#027a48;font-weight:bold}}.fail{{color:#b42318;font-weight:bold}}code{{font:13px ui-monospace,Consolas,monospace}}li{{margin:5px 0}}
+</style></head><body><main class="wrap"><h1>Bitgo VPS 消费连通性报告</h1>
+<p>生成时间：{html.escape(report.generated_at.astimezone().isoformat(timespec='seconds'))}</p>
+<section><h2>总结</h2><ul><li class="{status_class}">状态：{'成功' if report.ok else '失败'}</li><li>实例 ID：<code>{html.escape(report.instance_id or '未创建')}</code></li><li>实例名称：{html.escape(report.instance_name or '未创建')}</li><li>实例状态：{html.escape(report.instance_status or '未获得')}</li><li>SSH Key：{'本次创建' if report.ssh_key_created else '复用'}（ID 已脱敏）</li><li>当前累计计费：{_format_decimal(report.billed_amount)} USD</li>{f'<li class="fail">错误：{html.escape(report.error)}</li>' if report.error else ''}</ul></section>
+<section><h2>所选资源</h2>{resource_html}</section><section><h2>VPS 计费记录</h2><ul>{billings}</ul></section><section><h2>零钱包与 VPS 订单</h2><ul>{wallet}{orders}</ul></section><section><h2>清理提示</h2><p>实例会保持运行并持续计费。确认数据无需保留后，请使用 <code>vps-delete --instance-id &lt;ID&gt; --confirm-instance-id &lt;ID&gt;</code> 显式删除。</p></section>
+</main></body></html>'''
+
+
+def write_vps_check_reports(report: VPSCheckReport, output_dir: Path) -> dict[str, Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stem = f"bitgo-vps-check_{report.generated_at.strftime('%Y-%m-%d_%H%M%S')}"
+    markdown_path = output_dir / f"{stem}.md"
+    html_path = output_dir / f"{stem}.html"
+    markdown_path.write_text(render_vps_check_markdown(report), encoding="utf-8")
+    html_path.write_text(render_vps_check_html(report), encoding="utf-8")
+    return {"markdown": markdown_path, "html": html_path}
+
+
+def _markdown_wallet_balance_from_snapshot(snapshot) -> list[str]:
+    if snapshot is None:
+        return ["- 最新零钱包余额：未查询。"]
+    if snapshot.error:
+        return [f"- 最新零钱包余额：查询失败（{snapshot.error}）。"]
+    details = [f"- 最新零钱包余额（USD）：{snapshot.balance}"]
+    if snapshot.total_amount:
+        details.append(f"- 零钱包总授权金额（USD）：{snapshot.total_amount}")
+    if snapshot.coin_type:
+        details.append(f"- 充值币种：{snapshot.coin_type}")
+    return details
 
 
 def _markdown_failure_summary(report: ModelCheckReport) -> list[str]:

@@ -377,6 +377,38 @@ money_id = ""
 
 `model-check --send-email` 默认使用 `auto` 后端：已安装并授权 `agently-cli` 时优先通过 Agent Mail 发送；否则使用 Gmail OAuth。可用 `--mail-backend agent` 强制 Agent Mail，或用 `--mail-backend gmail` 强制 Gmail。Gmail 会将 HTML 作为正文；Agent Mail 使用简短通知正文，并附加完整 HTML 和 Markdown 报告，避免模型原始输出触发邮件正文安全过滤。
 
+## Bitgo VPS 连通性检查
+
+`vps-check` 会实时读取可售资源，按小时价、月价、CPU、内存和磁盘选择最低价 Linux VPS（优先 Ubuntu LTS），创建实例并轮询至 `InstanceStatusRunning`。随后最多等待 10 分钟，要求计费接口返回该实例的正数 `charge`。实例**不会**自动停止或删除，成功后仍会持续计费。
+
+如需指定规格，传入资源接口返回的 `instanceTypeId`；可用 `zoneId` 限定区域。镜像仍从该规格当前支持的 Linux 镜像中自动选择：
+
+```powershell
+python -m github_ai_daily vps-check --instance-type-id z2a.usr.c1m1 --zone-id asia-southeast-1a --output-dir reports
+```
+
+执行前必须确认自持私钥钱包的链类型、地址、授权金额与私钥管理方式。不要使用 Binance、OKX、Coinbase 等无法自行签名的交易所地址；私钥、完整签名材料和认证 Header 只能在运行时注入。首次创建或新增零钱包前，命令会以 Tier1 查询主钱包；余额为零会停止，余额低于 5 USD 时需要明确传入 `--allow-low-balance`。
+
+`vps-check` 默认复用命令行、环境变量或当前项目配置中已确认的 `money_id`。如需新建，使用 `--new-money-id`；只有同时传入 `--save-money-id` 才会把它保存为后续 VPS 检查的默认零钱包，作为对默认钱包/金额复用的显式确认。
+
+SSH Key API 不支持删除。请优先设置一个稳定的 `VPS_CHECK_SSH_KEY_ID`；首次没有该 ID 时，工具会自动在用户配置目录创建本地 Ed25519 SSH 私钥，并只上传派生出的公开 OpenSSH 公钥。工具会把返回的 Bitgo SSH Key ID 与本地密钥路径保存到本地配置，供后续复用。也可以显式提供已有公钥：
+
+```powershell
+python -m github_ai_daily vps-check --output-dir reports
+```
+
+后续运行会直接使用本地已保存的 `VPS_CHECK_SSH_KEY_ID`。GitHub Actions 是无状态 runner，应将复用的 SSH Key ID 配置为 `VPS_CHECK_SSH_KEY_ID` Secret，并在首次远端 Key 创建时提供 `VPS_CHECK_SSH_PUBLIC_KEY`。
+
+清理实例需要显式二次确认，且不会影响 SSH Key：
+
+```powershell
+python -m github_ai_daily vps-delete `
+  --instance-id YOUR_INSTANCE_ID `
+  --confirm-instance-id YOUR_INSTANCE_ID
+```
+
+`vps-check` 同样生成 HTML 与 Markdown 报告，并可按需添加 `--send-email`；报告包含选用规格、实例状态、正数计费、零钱包余额和脱敏后的 VPS 消费订单，不包含私钥或完整认证 Header。
+
 Agent Mail 使用项目已有的 `agently-cli` 授权；先按本 README 的 [Agent Mail](#agent-%E7%8E%AF%E5%A2%83agent-mail) 步骤完成登录，然后执行：
 
 ```bash

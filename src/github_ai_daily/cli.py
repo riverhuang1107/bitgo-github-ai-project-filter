@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from .config import (
@@ -53,7 +54,11 @@ from .model_check import (
     wallet_balance_from_response,
 )
 from .reports import build_items, write_model_check_reports, write_reports
+from .reports import write_vps_check_reports
 from .secrets import get_secret_store
+from .vps import DEFAULT_VPS_API_BASE_URL, VPSClient
+from .vps_check import run_vps_check
+from .vps_ssh import ensure_vps_ssh_public_key
 
 
 def parser() -> argparse.ArgumentParser:
@@ -143,6 +148,37 @@ def parser() -> argparse.ArgumentParser:
         help="Generate a new money_id for this run instead of reusing an existing one",
     )
     model_check.add_argument("--key", type=Path, help="Path to the interface ECDSA signing key")
+
+    vps_check = sub.add_parser(
+        "vps-check",
+        help="Create a minimal Bitgo VPS and verify its positive billing record",
+    )
+    vps_check.add_argument("--output-dir", type=Path, help="Directory for HTML and Markdown reports")
+    vps_check.add_argument("--vps-api-base-url", default=os.environ.get("VPS_CHECK_API_BASE_URL", DEFAULT_VPS_API_BASE_URL))
+    vps_check.add_argument("--bff-base-url", default=DEFAULT_BFF_BASE_URL)
+    vps_check.add_argument("--ssh-key-id", help="Existing Bitgo SSH Key ID; it is reused when supplied")
+    vps_check.add_argument("--ssh-public-key", help="OpenSSH public key used only when creating the reusable Bitgo SSH Key")
+    vps_check.add_argument("--ssh-private-key-path", type=Path, help="Local Ed25519 SSH private key path; created when absent")
+    vps_check.add_argument("--ssh-key-display-name", default="bitgo-vps-check")
+    vps_check.add_argument("--instance-type-id", help="Create the specified currently sellable VPS instanceTypeId instead of the cheapest type")
+    vps_check.add_argument("--zone-id", help="Optional zoneId constraint used with --instance-type-id")
+    vps_check.add_argument("--timeout-seconds", type=float, default=600, help="Maximum combined status and billing polling time (default: 600)")
+    vps_check.add_argument("--poll-interval-seconds", type=float, default=5, help="Polling interval in seconds (default: 5)")
+    vps_check.add_argument("--allow-low-balance", action="store_true", help="Continue only after explicitly accepting a verified primary-wallet balance below USD 5")
+    vps_check.add_argument("--send-email", action="store_true", help="Email the completed report")
+    vps_check.add_argument("--to", help="Comma-separated report recipients")
+    vps_check.add_argument("--mail-backend", choices=("auto", "agent", "gmail"), default=os.environ.get("MODEL_CHECK_MAIL_BACKEND", "auto"))
+    _wallet_args(vps_check, money_id_help="Persistent money_id required for the Bitgo VPS authorization", allow_new_wallet=False)
+    vps_check.add_argument("--new-money-id", action="store_true", help="Generate a new money_id after wallet preflight")
+    vps_check.add_argument("--save-money-id", action="store_true", help="Confirm saving a newly created money_id as the default VPS-check wallet")
+    vps_check.add_argument("--key", type=Path, help="Path to the interface ECDSA signing key")
+
+    vps_delete = sub.add_parser("vps-delete", help="Explicitly delete a Bitgo VPS instance")
+    vps_delete.add_argument("--vps-api-base-url", default=os.environ.get("VPS_CHECK_API_BASE_URL", DEFAULT_VPS_API_BASE_URL))
+    vps_delete.add_argument("--instance-id", required=True)
+    vps_delete.add_argument("--confirm-instance-id", required=True, help="Must exactly match --instance-id")
+    _wallet_args(vps_delete, money_id_help="Existing money_id authorizing the VPS instance", allow_new_wallet=False)
+    vps_delete.add_argument("--key", type=Path, help="Path to the interface ECDSA signing key")
 
     gmail_auth = sub.add_parser("gmail-auth", help="Authorize Gmail API report delivery")
     gmail_auth.add_argument("--force", action="store_true")
@@ -273,6 +309,10 @@ def dispatch(args) -> int:
         return 0
     if args.command == "model-check":
         return cmd_model_check(args, settings)
+    if args.command == "vps-check":
+        return cmd_vps_check(args, settings)
+    if args.command == "vps-delete":
+        return cmd_vps_delete(args, settings)
     if args.command == "gmail-auth":
         return cmd_gmail_auth(args)
     if args.command == "mail":
@@ -511,6 +551,142 @@ def cmd_model_check(args, settings: Settings) -> int:
     return 0
 
 
+def cmd_vps_check(args, settings: Settings) -> int:
+    if args.timeout_seconds < 0:
+        raise ValueError("--timeout-seconds must not be negative")
+    if args.poll_interval_seconds < 0:
+        raise ValueError("--poll-interval-seconds must not be negative")
+    requested_money_id = (
+        _arg_or_env(args, "money_id", "REASONING_MONEY_ID", "")
+        or settings.money_id.strip()
+    )
+    if args.new_money_id and requested_money_id:
+        raise ValueError("--new-money-id cannot be combined with --money-id")
+    if not requested_money_id and not args.new_money_id:
+        raise ValueError(
+            "An existing --money-id is required; explicitly pass --new-money-id after confirming the authorized amount"
+        )
+    if args.save_money_id and not args.new_money_id:
+        raise ValueError("--save-money-id requires --new-money-id")
+    # Tier1 preflight does not use money_id.  A harmless placeholder lets the
+    # shared WalletAuth loader resolve the remaining wallet fields without
+    # creating a zero-wallet identifier before the balance check succeeds.
+    if not requested_money_id:
+        args.money_id = "tier1-preflight"
+    preflight_auth = reasoning_auth(
+        settings,
+        args,
+        generate_missing_money_id=False,
+        use_wallet_profiles=False,
+    )
+    _verify_vps_primary_wallet(preflight_auth, args.bff_base_url, args.allow_low_balance)
+    generated_money_id = args.new_money_id
+    args.money_id = generate_money_id() if generated_money_id else requested_money_id
+    auth = reasoning_auth(
+        settings,
+        args,
+        generate_missing_money_id=False,
+        use_wallet_profiles=False,
+    )
+    auth.money_id_created = generated_money_id
+    ssh_key_id = (
+        args.ssh_key_id
+        or os.environ.get("VPS_CHECK_SSH_KEY_ID", "")
+        or settings.vps_ssh_key_id
+    )
+    ssh_public_key = args.ssh_public_key or os.environ.get("VPS_CHECK_SSH_PUBLIC_KEY", "")
+    ssh_private_key_path = (
+        args.ssh_private_key_path
+        or (
+            Path(os.environ["VPS_CHECK_SSH_PRIVATE_KEY_PATH"])
+            if os.environ.get("VPS_CHECK_SSH_PRIVATE_KEY_PATH")
+            else None
+        )
+        or (Path(settings.vps_ssh_private_key_path) if settings.vps_ssh_private_key_path else None)
+        or user_config_dir() / "vps-check-ed25519"
+    )
+    local_ssh_key_created = False
+    if not ssh_key_id and not ssh_public_key:
+        ssh_public_key, local_ssh_key_created = ensure_vps_ssh_public_key(ssh_private_key_path)
+    client = VPSClient(
+        auth,
+        reasoning_interface_key(settings, args),
+        args.vps_api_base_url,
+    )
+    try:
+        report = run_vps_check(
+            client,
+            ssh_key_id=ssh_key_id,
+            ssh_public_key=ssh_public_key,
+            ssh_key_display_name=args.ssh_key_display_name,
+            instance_type_id=getattr(args, "instance_type_id", "") or "",
+            zone_id=getattr(args, "zone_id", "") or "",
+            timeout_seconds=args.timeout_seconds,
+            poll_interval_seconds=args.poll_interval_seconds,
+        )
+    finally:
+        client.close()
+    if report.ssh_key_created:
+        settings.vps_ssh_key_id = report.ssh_key_id
+        if local_ssh_key_created:
+            settings.vps_ssh_private_key_path = str(ssh_private_key_path)
+        settings.save(getattr(args, "config", None) or default_config_path())
+        print("Created and saved a reusable Bitgo SSH Key ID (value redacted).", flush=True)
+    elif local_ssh_key_created:
+        # Defensive branch for future alternate Key-resolution paths: retain the
+        # location, never the private-key material itself.
+        settings.vps_ssh_private_key_path = str(ssh_private_key_path)
+        settings.save(getattr(args, "config", None) or default_config_path())
+    if auth.money_id_created and args.save_money_id:
+        _persist_model_check_money_id(settings, args, auth)
+        print("New money_id saved as the default VPS-check wallet by explicit confirmation.", flush=True)
+    elif auth.money_id_created:
+        print("New money_id was used only for this run and was not saved as a default wallet.", flush=True)
+    report.wallet_balance = fetch_latest_sub_wallet_balance(auth, args.bff_base_url)
+    report.vps_orders = fetch_vps_orders(auth, args.bff_base_url)
+    paths = write_vps_check_reports(report, args.output_dir or Path(settings.output_dir))
+    _print_paths(paths)
+    print(
+        "VPS check complete: "
+        f"status={'OK' if report.ok else 'FAILED'}, instance_id={report.instance_id or 'not-created'}, "
+        f"billing={report.billed_amount:.8f}",
+        flush=True,
+    )
+    if report.instance_id:
+        print(
+            "The VPS remains running and may continue billing. Delete it explicitly with "
+            f"vps-delete --instance-id {report.instance_id} --confirm-instance-id {report.instance_id}",
+            flush=True,
+        )
+    if args.send_email:
+        recipients = parse_recipients(args.to or os.environ.get("REPORT_RECIPIENTS", ""))
+        if not recipients:
+            raise RuntimeError("Email recipients are required via --to or REPORT_RECIPIENTS")
+        backend = send_vps_check_report(
+            settings,
+            paths["html"].read_text(encoding="utf-8"),
+            recipients,
+            f"Bitgo VPS 连通性报告 {report.generated_at.date().isoformat()}",
+            list(paths.values()),
+            args.mail_backend,
+        )
+        print(f"Sent {backend} report to {', '.join(recipients)}")
+    return 0 if report.ok else 1
+
+
+def cmd_vps_delete(args, settings: Settings) -> int:
+    if args.instance_id != args.confirm_instance_id:
+        raise ValueError("--confirm-instance-id must exactly match --instance-id")
+    auth = reasoning_auth(settings, args, allow_new_wallet=False, use_wallet_profiles=False)
+    client = VPSClient(auth, reasoning_interface_key(settings, args), args.vps_api_base_url)
+    try:
+        client.delete_vps(args.instance_id)
+    finally:
+        client.close()
+    print("VPS deletion request accepted.")
+    return 0
+
+
 def _persist_model_check_money_id(settings: Settings, args, auth: WalletAuth) -> None:
     settings.wallet_chain = auth.normalized_chain()
     settings.wallet_address = auth.wallet_address
@@ -549,6 +725,34 @@ def send_model_check_report(
     return "Gmail"
 
 
+def send_vps_check_report(
+    settings: Settings,
+    html_body: str,
+    recipients: list[str],
+    subject: str,
+    attachments: list[Path],
+    backend: str = "auto",
+) -> str:
+    if backend not in {"auto", "agent", "gmail"}:
+        raise ValueError("vps-check mail backend must be auto, agent, or gmail")
+    agent_available = agent_mail_available() if backend in {"auto", "agent"} else False
+    use_agent_mail = backend == "agent" or (backend == "auto" and agent_available)
+    if use_agent_mail:
+        if backend == "agent" and not agent_available:
+            raise RuntimeError("Agent Mail CLI is not available or not authorized")
+        message = create_message(
+            settings.mail_from,
+            ", ".join(recipients),
+            subject,
+            "<p>Bitgo VPS connectivity report is ready. The complete HTML and Markdown reports are attached.</p>",
+            attachments,
+        )
+        send_agent_message(message)
+        return "Agent Mail"
+    send_report_email(html_body, recipients, subject, attachments)
+    return "Gmail"
+
+
 def fetch_latest_sub_wallet_balance(auth: WalletAuth, base_url: str) -> WalletBalance:
     print("Fetching latest Bitgo sub-wallet balance...", flush=True)
     retrieved_at = datetime.now().astimezone()
@@ -571,6 +775,76 @@ def fetch_latest_sub_wallet_balance(auth: WalletAuth, base_url: str) -> WalletBa
             flush=True,
         )
     return snapshot
+
+
+def fetch_vps_orders(auth: WalletAuth, base_url: str) -> list[dict[str, str]]:
+    try:
+        x_params = build_x_params(auth)
+        client = BFFClient(base_url)
+        try:
+            data = client.get_sub_wallet_orders(x_params, category="VPS")
+        finally:
+            client.close()
+    except Exception as exc:
+        print(f"VPS order query unavailable: {exc}", flush=True)
+        return []
+    rows = data.get("orders") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return []
+    return [
+        {
+            "created_at": str(row.get("createdAt", "")),
+            "amount": str(row.get("amount", "")),
+            "description": str(row.get("description", "")),
+        }
+        for row in rows
+        if isinstance(row, dict)
+    ]
+
+
+def _verify_vps_primary_wallet(auth: WalletAuth, base_url: str, allow_low_balance: bool) -> None:
+    tier1 = BFFTier1Auth(
+        chain=auth.chain,
+        wallet_address=auth.wallet_address,
+        private_key=auth.private_key,
+        signer_command=auth.signer_command,
+    )
+    x_params = build_tier1_x_params(tier1)
+    client = BFFClient(base_url)
+    try:
+        data = client.get_wallet(x_params)
+    finally:
+        client.close()
+    wallet = _find_wallet(data)
+    if wallet is None:
+        raise RuntimeError("Primary Bitgo wallet account was not found; recharge before creating a VPS")
+    balance = _decimal_amount(wallet.get("balance"))
+    if balance is None or balance <= 0:
+        raise RuntimeError("Primary Bitgo wallet balance is zero or unavailable; recharge before creating a VPS")
+    if balance < Decimal("5") and not allow_low_balance:
+        raise RuntimeError(
+            f"Primary Bitgo wallet balance is low ({balance} USD). Recharge first, or explicitly pass --allow-low-balance to continue."
+        )
+    print(f"Primary Bitgo wallet balance verified: {balance} USD", flush=True)
+
+
+def _find_wallet(value):
+    if not isinstance(value, dict):
+        return None
+    if "balance" in value:
+        return value
+    for key in ("wallet", "body", "data"):
+        found = _find_wallet(value.get(key))
+        if found is not None:
+            return found
+    return None
+
+
+def _decimal_amount(value) -> Decimal | None:
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
 
 
 def cmd_gmail_auth(args) -> int:
