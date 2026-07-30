@@ -9,6 +9,8 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+import httpx
+
 from .config import (
     DEFAULT_MODEL,
     Settings,
@@ -28,6 +30,8 @@ from .crypto import (
 )
 from .gmail import authorize_gmail, parse_recipients, send_report_email
 from .github import GitHubClient
+from .hackernews import HackerNewsClient, SOURCE_NAME as HACKER_NEWS_SOURCE_NAME
+from .lobsters import LobstersClient, SOURCE_NAME as LOBSTERS_SOURCE_NAME
 from .mail import (
     SMTP_KEY,
     agent_mail_available,
@@ -39,6 +43,7 @@ from .mail import (
     send_message,
 )
 from .reasoning import ReasoningClient
+from .npm import NpmClient, SOURCE_NAME as NPM_SOURCE_NAME
 from .model_check import (
     LOCAL_MODEL_SOURCE,
     MODEL_GUIDE_URL,
@@ -239,6 +244,12 @@ def parser() -> argparse.ArgumentParser:
 def _report_args(command: argparse.ArgumentParser) -> None:
     command.add_argument("--limit", type=int, default=10)
     command.add_argument(
+        "--candidate-limit",
+        type=int,
+        default=10,
+        help="Maximum combined candidates sent to the reasoning model (default: 10)",
+    )
+    command.add_argument(
         "--format", choices=["markdown", "html", "both"], default="both"
     )
     command.add_argument(
@@ -359,19 +370,48 @@ def cmd_init(args, settings: Settings) -> int:
 def generate(settings: Settings, args) -> dict[str, Path]:
     if args.limit < 1:
         raise ValueError("--limit must be greater than zero")
+    if args.candidate_limit < args.limit:
+        raise ValueError("--candidate-limit must be greater than or equal to --limit")
     if not settings.model:
         raise RuntimeError("Tool is not initialized; run `github-ai-daily init`")
     github = GitHubClient(os.environ.get("GITHUB_TOKEN"))
+    external_sources = [
+        (HACKER_NEWS_SOURCE_NAME, HackerNewsClient()),
+        (LOBSTERS_SOURCE_NAME, LobstersClient()),
+        (NPM_SOURCE_NAME, NpmClient()),
+    ]
     auth = reasoning_auth(settings, args)
+    _print_reasoning_wallet(auth)
     reasoning = ReasoningClient(
         reasoning_endpoint(settings), settings.model, auth, reasoning_interface_key(settings)
     )
     try:
-        repos = github.enrich(github.trending())
+        github_repos = github.trending()
+        candidate_groups = [github_repos]
+        source_counts = [f"GitHub Trending ({len(github_repos)})"]
+        for source_name, client in external_sources:
+            try:
+                repositories = client.trending_repositories(args.candidate_limit)
+            except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+                print(f"Warning: {source_name} is unavailable: {exc}", file=sys.stderr)
+                repositories = []
+            candidate_groups.append(repositories)
+            source_counts.append(f"{source_name} ({len(repositories)})")
+        candidates = _combine_candidate_repositories(candidate_groups, args.candidate_limit)
+        repos = github.enrich(
+            candidates, skip_missing=True, tolerate_rate_limit=True
+        )
+        if github.enrichment_warning:
+            print(f"Warning: {github.enrichment_warning}", file=sys.stderr)
+        print(
+            f"Candidate sources: {', '.join(source_counts)}; sent to model {len(repos)}"
+        )
         selections = reasoning.select(repos)
     finally:
         print(reasoning.last_usage.format_json())
         github.close()
+        for _, client in external_sources:
+            client.close()
         reasoning.close()
     items = build_items(repos, selections, args.limit)
     if not items:
@@ -384,6 +424,42 @@ def generate(settings: Settings, args) -> dict[str, Path]:
         )
     output_dir = args.output_dir or Path(settings.output_dir)
     return write_reports(items, output_dir, args.format, generated_at)
+
+
+def _combine_candidate_repositories(groups, candidate_limit: int):
+    """Deduplicate sources, then use a weighted rotation to keep them represented."""
+    seen: set[str] = set()
+    source_groups = []
+    for group in groups:
+        unique_group = []
+        for repository in group:
+            name = repository.full_name.casefold()
+            if name not in seen:
+                seen.add(name)
+                unique_group.append(repository)
+        source_groups.append(unique_group)
+
+    candidates = []
+    positions = [0] * len(source_groups)
+    for index, group in enumerate(source_groups):
+        if group and len(candidates) < candidate_limit:
+            candidates.append(group[0])
+            positions[index] = 1
+
+    rotation = [0, 0, 0, 0, 1, 1, 2, 3]
+    while len(candidates) < candidate_limit:
+        added = False
+        for index in rotation:
+            if index >= len(source_groups) or positions[index] >= len(source_groups[index]):
+                continue
+            candidates.append(source_groups[index][positions[index]])
+            positions[index] += 1
+            added = True
+            if len(candidates) == candidate_limit:
+                break
+        if not added:
+            break
+    return candidates
 
 
 def send_existing(
@@ -1158,6 +1234,12 @@ def _chain_env_name(chain: str, suffix: str) -> str:
 def _print_paths(paths: dict[str, Path]) -> None:
     for kind, path in paths.items():
         print(f"{kind}: {path}")
+
+
+def _print_reasoning_wallet(auth: WalletAuth) -> None:
+    """Print non-secret wallet context for a reasoning-backed command."""
+    print(f"Wallet address: {auth.wallet_address}")
+    print(f"Money ID: {auth.money_id}")
 
 
 if __name__ == "__main__":

@@ -109,6 +109,7 @@ class ReasoningClient:
                 "topics": repo.topics,
                 "stars": repo.stars,
                 "stars_today": repo.stars_today,
+                "source": repo.source,
             }
             for repo in repos
         ]
@@ -119,7 +120,7 @@ class ReasoningClient:
             "messages": [
                 {
                     "role": "user",
-                    "content": "筛选以下 GitHub Trending 候选：\n"
+                    "content": "筛选以下今日收集的 GitHub 项目候选：\n"
                     + json.dumps(candidates, ensure_ascii=False),
                 }
             ],

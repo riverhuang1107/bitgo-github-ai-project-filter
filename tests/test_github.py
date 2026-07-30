@@ -1,6 +1,7 @@
 import httpx
 
 from github_ai_daily.github import GitHubClient
+from github_ai_daily.models import Repository
 
 
 TRENDING_HTML = """
@@ -38,3 +39,45 @@ def test_parse_and_enrich_trending():
     assert repos[0].stars == 10000
     assert repos[0].topics == ["ai", "agents"]
 
+
+def test_enrich_can_skip_removed_external_repository():
+    github = GitHubClient()
+    github.client = httpx.Client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(404))
+    )
+
+    repositories = github.enrich(
+        [Repository("removed/repository", "https://github.com/removed/repository")],
+        skip_missing=True,
+    )
+
+    assert repositories == []
+
+
+def test_enrich_continues_with_unenriched_candidates_after_rate_limit():
+    def handler(request: httpx.Request):
+        if request.url.path.endswith("/one"):
+            return httpx.Response(
+                200,
+                json={
+                    "description": "Enriched",
+                    "stargazers_count": 10,
+                    "forks_count": 2,
+                },
+            )
+        return httpx.Response(403, text="API rate limit exceeded")
+
+    github = GitHubClient()
+    github.client = httpx.Client(transport=httpx.MockTransport(handler))
+    second = Repository("owner/two", "https://github.com/owner/two", description="From npm")
+
+    repositories = github.enrich(
+        [Repository("owner/one", "https://github.com/owner/one"), second],
+        tolerate_rate_limit=True,
+    )
+
+    assert len(repositories) == 2
+    assert repositories[0].description == "Enriched"
+    assert repositories[1].description == "From npm"
+    assert github.enrichment_warning is not None
+    assert "GITHUB_TOKEN" in github.enrichment_warning

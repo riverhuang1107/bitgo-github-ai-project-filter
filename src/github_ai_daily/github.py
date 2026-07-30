@@ -22,6 +22,7 @@ class GitHubClient:
         if token:
             headers["Authorization"] = f"Bearer {token}"
         self.client = httpx.Client(headers=headers, timeout=timeout, follow_redirects=True)
+        self.enrichment_warning: str | None = None
 
     def trending(self, since: str = "daily") -> list[Repository]:
         response = self.client.get(TRENDING_URL, params={"since": since})
@@ -54,10 +55,28 @@ class GitHubClient:
             raise RuntimeError("GitHub Trending returned no repositories; page structure may have changed")
         return repos
 
-    def enrich(self, repos: list[Repository]) -> list[Repository]:
+    def enrich(
+        self,
+        repos: list[Repository],
+        *,
+        skip_missing: bool = False,
+        tolerate_rate_limit: bool = False,
+    ) -> list[Repository]:
         enriched: list[Repository] = []
-        for repo in repos:
+        self.enrichment_warning = None
+        for index, repo in enumerate(repos):
             response = self.client.get(f"{API_URL}/{repo.full_name}")
+            if skip_missing and response.status_code in {404, 410}:
+                continue
+            if tolerate_rate_limit and _is_rate_limited(response):
+                remaining = len(repos) - index
+                self.enrichment_warning = (
+                    "GitHub REST API rate limit reached; continuing with "
+                    f"{remaining} candidate(s) without GitHub enrichment. "
+                    "Set GITHUB_TOKEN to increase the API quota."
+                )
+                enriched.extend(repos[index:])
+                break
             response.raise_for_status()
             data = response.json()
             repo.description = data.get("description") or repo.description
@@ -73,3 +92,12 @@ class GitHubClient:
     def close(self) -> None:
         self.client.close()
 
+
+def _is_rate_limited(response: httpx.Response) -> bool:
+    return response.status_code == 429 or (
+        response.status_code == 403
+        and (
+            response.headers.get("X-RateLimit-Remaining") == "0"
+            or "rate limit" in response.text.casefold()
+        )
+    )

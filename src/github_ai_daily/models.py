@@ -15,6 +15,7 @@ class Repository:
     topics: list[str] = field(default_factory=list)
     updated_at: str = ""
     trending_rank: int = 0
+    source: str = "GitHub Trending"
 
 
 @dataclass(slots=True)
@@ -30,4 +31,3 @@ class Selection:
 class ReportItem:
     repository: Repository
     selection: Selection
-

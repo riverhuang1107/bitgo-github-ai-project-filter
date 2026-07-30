@@ -4,6 +4,8 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from github_ai_daily.cli import (
+    _combine_candidate_repositories,
+    _print_reasoning_wallet,
     _persist_model_check_money_id,
     cmd_init,
     cmd_model_check,
@@ -13,6 +15,7 @@ from github_ai_daily.cli import (
 )
 from github_ai_daily.config import DEFAULT_MAIL_FROM, Settings, WalletProfile
 from github_ai_daily.crypto import WalletAuth
+from github_ai_daily.models import Repository
 from github_ai_daily.model_check import (
     ModelCheckReport,
     ModelCheckResult,
@@ -20,6 +23,54 @@ from github_ai_daily.model_check import (
     load_model_catalog,
     save_model_catalog,
 )
+
+
+def test_generate_wallet_context_printer_excludes_private_key(capsys):
+    _print_reasoning_wallet(
+        WalletAuth("eth", "0xwallet", "10", "money_20260730_example", "private-key")
+    )
+
+    output = capsys.readouterr().out
+
+    assert "Wallet address: 0xwallet" in output
+    assert "Money ID: money_20260730_example" in output
+    assert "private-key" not in output
+
+
+def test_candidate_pool_reserves_space_for_external_source_and_deduplicates():
+    github = [
+        Repository("owner/one", "https://github.com/owner/one"),
+        Repository("owner/two", "https://github.com/owner/two"),
+        Repository("owner/three", "https://github.com/owner/three"),
+        Repository("owner/four", "https://github.com/owner/four"),
+    ]
+    external = [
+        Repository("OWNER/TWO", "https://github.com/OWNER/TWO", source="Hacker News Top Stories"),
+        Repository("other/five", "https://github.com/other/five", source="Hacker News Top Stories"),
+    ]
+
+    candidates = _combine_candidate_repositories([github, external], candidate_limit=4)
+
+    assert [repository.full_name for repository in candidates] == [
+        "owner/one", "other/five", "owner/two", "owner/three",
+    ]
+    assert candidates[1].source == "Hacker News Top Stories"
+
+
+def test_candidate_pool_rotates_across_all_available_sources():
+    groups = [
+        [Repository(f"github/{index}", f"https://github.com/github/{index}") for index in range(5)],
+        [Repository(f"hn/{index}", f"https://github.com/hn/{index}") for index in range(5)],
+        [Repository(f"lobsters/{index}", f"https://github.com/lobsters/{index}") for index in range(5)],
+        [Repository(f"reddit/{index}", f"https://github.com/reddit/{index}") for index in range(5)],
+    ]
+
+    candidates = _combine_candidate_repositories(groups, candidate_limit=10)
+
+    assert {repository.full_name.split("/")[0] for repository in candidates} == {
+        "github", "hn", "lobsters", "reddit"
+    }
+    assert len(candidates) == 10
 
 
 def test_init_does_not_require_mail_from(monkeypatch, tmp_path):
@@ -606,6 +657,13 @@ def test_parser_supports_model_check_and_gmail_auth():
     assert parser().parse_args(["model-check", "--protocol", "all"]).protocol == ["all"]
     assert parser().parse_args(["model-check", "--protocol", "messages,responses", "--protocol", "chat"]).protocol == ["messages,responses", "chat"]
     assert parser().parse_args(["gmail-auth", "--console"]).command == "gmail-auth"
+
+
+def test_generate_parser_supports_candidate_limit():
+    args = parser().parse_args(["generate", "--candidate-limit", "50", "--limit", "10"])
+
+    assert args.candidate_limit == 50
+    assert args.limit == 10
 
 
 def test_model_check_email_auto_prefers_agent_mail(monkeypatch, tmp_path):

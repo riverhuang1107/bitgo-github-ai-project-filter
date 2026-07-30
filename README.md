@@ -217,6 +217,7 @@ export GITHUB_AI_SECRET_DELETE_CMD="/opt/secrets/delete"
 ```bash
 .venv/bin/github-ai-daily generate
 .venv/bin/github-ai-daily generate --limit 20 --format html --output-dir reports
+.venv/bin/github-ai-daily generate --candidate-limit 50 --limit 10
 .venv/bin/github-ai-daily run --to reader@example.com
 .venv/bin/github-ai-daily send output/report.html --to reader@example.com
 
@@ -234,6 +235,11 @@ export REASONING_PRIVATE_KEY="..."
 ```
 
 `bff sub-wallet` 使用 Tier2 钱包签名，返回配置中 `money_id` 对应的零钱包余额与消费/退款订单。
+
+`generate` 会合并 GitHub Trending、Hacker News Top Stories、Lobsters Hottest 和 npm AI 包搜索中指向 GitHub 仓库的链接，并按仓库名去重。`--candidate-limit` 控制发送给模型的候选项目上限，默认是 10；`--limit` 控制最终报告项目上限，默认也是 10。候选池按来源轮换，外部来源暂时不可用时仍会仅使用其余可用来源继续生成报告。
+
+候选项目会通过 GitHub REST API 补全 Stars、Forks、主题等信息。未设置 `GITHUB_TOKEN` 或额度耗尽时，命令会保留未补全的候选继续筛选，并打印警告；设置有效 Token 可以提高 API 配额。
+
 当配置包含 BTC、LTC、ETH 等多个币种时，命令会按 `money_id` 自动识别币种；同一个 ID
 匹配多个币种时必须显式传入 `--chain`。可用
 `--page`、`--page-size`、`--category TOKEN|VPS`、`--type deduct|refund`、

@@ -15,6 +15,7 @@ def item() -> ReportItem:
             forks=100,
             language="Python",
             updated_at="2026-06-25T00:00:00Z",
+            source="Hacker News Top Stories",
         ),
         Selection("owner/repo", True, "智能体", "项目简介", "增长快且属于 AI"),
     )
@@ -25,8 +26,9 @@ def test_report_rendering_and_files(tmp_path: Path):
     markdown = render_markdown([item()], now)
     html = render_html([item()], now)
     assert "1,200" in markdown
+    assert "Hacker News Top Stories" in markdown
     assert "owner/repo" in html
+    assert "Hacker News Top Stories" in html
     paths = write_reports([item()], tmp_path, "both", now)
     assert paths["markdown"].exists()
     assert paths["html"].exists()
-

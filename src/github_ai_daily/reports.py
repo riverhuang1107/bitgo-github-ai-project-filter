@@ -35,6 +35,7 @@ def render_markdown(items: list[ReportItem], generated_at: datetime) -> str:
                 f"## {rank}. [{repo.full_name}]({repo.url})",
                 "",
                 f"- **简介：** {choice.summary_zh or repo.description}",
+                f"- **来源：** {repo.source}",
                 f"- **AI 分类：** {choice.category}",
                 f"- **入选原因：** {choice.reason_zh}",
                 f"- **Stars：** {repo.stars:,}（今日 +{repo.stars_today:,}）",
@@ -57,6 +58,7 @@ def render_html(items: list[ReportItem], generated_at: datetime) -> str:
 <div class="rank">{rank}</div>
 <h2><a href="{html.escape(repo.url)}">{html.escape(repo.full_name)}</a></h2>
 <p class="summary">{html.escape(choice.summary_zh or repo.description)}</p>
+<p class="meta">来源：{html.escape(repo.source)}</p>
 <p><strong>AI 分类：</strong>{html.escape(choice.category)}</p>
 <p><strong>入选原因：</strong>{html.escape(choice.reason_zh)}</p>
 <div class="stats"><span>★ {repo.stars:,}</span><span>今日 +{repo.stars_today:,}</span>
