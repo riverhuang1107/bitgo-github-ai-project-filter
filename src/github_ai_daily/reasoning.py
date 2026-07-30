@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from time import perf_counter
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
@@ -84,6 +85,16 @@ class ReasoningResponse:
     text: str
 
 
+@dataclass(slots=True)
+class ReasoningCall:
+    protocol: str
+    model: str
+    status_code: int | None
+    duration_ms: int
+    data: dict | None = None
+    text: str = ""
+
+
 class ReasoningClient:
     def __init__(
         self,
@@ -99,6 +110,7 @@ class ReasoningClient:
         self.interface_key = interface_key
         self.client = httpx.Client(timeout=timeout)
         self.last_usage = TokenUsage()
+        self.last_call: ReasoningCall | None = None
 
     def select(self, repos: list[Repository]) -> list[Selection]:
         candidates = [
@@ -126,9 +138,27 @@ class ReasoningClient:
             ],
         }
         headers = wallet_signed_headers(self.auth, self.interface_key)
-        response = self.client.post(self.endpoint, headers=headers, json=body)
+        started = perf_counter()
+        try:
+            response = self.client.post(self.endpoint, headers=headers, json=body)
+        except httpx.HTTPError:
+            self.last_call = ReasoningCall(
+                protocol="Anthropic Messages",
+                model=self.model,
+                status_code=None,
+                duration_ms=_duration_ms(started),
+            )
+            raise
         response_data = _response_json(response)
         self.last_usage = TokenUsage.from_response(response_data)
+        self.last_call = ReasoningCall(
+            protocol="Anthropic Messages",
+            model=self.model,
+            status_code=response.status_code,
+            duration_ms=_duration_ms(started),
+            data=response_data,
+            text=response.text,
+        )
         _raise_for_status(response, response_data)
         result = _extract_json(response_data)
         return _validate_selections(result, {repo.full_name for repo in repos}, strict=False)
@@ -320,6 +350,10 @@ def _integer(value) -> int | None:
 
 def _display(value: int | None) -> str:
     return str(value) if value is not None else "服务端未提供"
+
+
+def _duration_ms(started: float) -> int:
+    return round((perf_counter() - started) * 1000)
 
 
 def _response_json(response: httpx.Response) -> dict:

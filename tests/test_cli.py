@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from github_ai_daily.cli import (
     _combine_candidate_repositories,
+    _print_reasoning_call_result,
     _print_reasoning_wallet,
     _persist_model_check_money_id,
     cmd_init,
@@ -13,6 +14,7 @@ from github_ai_daily.cli import (
     reasoning_auth,
     send_model_check_report,
 )
+from github_ai_daily.reasoning import ReasoningCall
 from github_ai_daily.config import DEFAULT_MAIL_FROM, Settings, WalletProfile
 from github_ai_daily.crypto import WalletAuth
 from github_ai_daily.models import Repository
@@ -35,6 +37,38 @@ def test_generate_wallet_context_printer_excludes_private_key(capsys):
     assert "Wallet address: 0xwallet" in output
     assert "Money ID: money_20260730_example" in output
     assert "private-key" not in output
+
+
+def test_reasoning_call_result_printer_reports_success(capsys):
+    reasoning = SimpleNamespace(
+        model="anthropic/claude-4.8-opus",
+        last_call=ReasoningCall(
+            "Anthropic Messages", "anthropic/claude-4.8-opus", 200, 6771
+        ),
+    )
+
+    _print_reasoning_call_result(reasoning)
+
+    assert capsys.readouterr().out == "OK anthropic/claude-4.8-opus HTTP 200 6771ms\n"
+
+
+def test_reasoning_call_result_printer_reports_server_error(capsys):
+    reasoning = SimpleNamespace(
+        model="openai/gpt-5.4",
+        last_call=ReasoningCall(
+            "Anthropic Messages",
+            "openai/gpt-5.4",
+            502,
+            15531,
+            {"error": {"message": "Model resources are currently busy."}},
+        ),
+    )
+
+    _print_reasoning_call_result(reasoning, RuntimeError("Reasoning API returned HTTP 502"))
+
+    output = capsys.readouterr().out
+    assert output.startswith("FAILED openai/gpt-5.4 HTTP 502 15531ms category=服务端错误")
+    assert "message=Model resources are currently busy." in output
 
 
 def test_candidate_pool_reserves_space_for_external_source_and_deduplicates():

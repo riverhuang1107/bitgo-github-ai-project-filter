@@ -134,6 +134,38 @@ def test_http_error_includes_safe_server_detail():
         _raise_for_status(response, {"error": {"message": "invalid model"}})
 
 
+def test_select_records_http_status_and_response_on_failure(monkeypatch):
+    class FakeClient:
+        def post(self, endpoint, headers, json):
+            request = httpx.Request("POST", endpoint)
+            return httpx.Response(
+                502,
+                request=request,
+                json={"error": {"message": "Model resources are currently busy."}},
+            )
+
+    monkeypatch.setattr("github_ai_daily.reasoning.wallet_signed_headers", lambda auth, key: {})
+    client = ReasoningClient(
+        "https://example.test/v1/messages",
+        "openai/gpt-5.4",
+        WalletAuth("ltc", "wallet", "10", "id", "private"),
+        ec.generate_private_key(ec.SECP256R1()),
+    )
+    client.client = FakeClient()
+
+    with pytest.raises(RuntimeError, match="HTTP 502"):
+        client.select([])
+
+    assert client.last_call is not None
+    assert client.last_call.protocol == "Anthropic Messages"
+    assert client.last_call.model == "openai/gpt-5.4"
+    assert client.last_call.status_code == 502
+    assert client.last_call.duration_ms >= 0
+    assert client.last_call.data == {
+        "error": {"message": "Model resources are currently busy."}
+    }
+
+
 def test_reasoning_client_uses_x_params_headers(monkeypatch):
     captured = {}
 

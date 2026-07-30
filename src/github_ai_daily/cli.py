@@ -56,6 +56,7 @@ from .model_check import (
     save_model_catalog,
     select_models,
     select_protocols,
+    classify_error,
     wallet_balance_from_response,
 )
 from .reports import build_items, write_model_check_reports, write_reports
@@ -406,7 +407,13 @@ def generate(settings: Settings, args) -> dict[str, Path]:
         print(
             f"Candidate sources: {', '.join(source_counts)}; sent to model {len(repos)}"
         )
-        selections = reasoning.select(repos)
+        print(f"Calling Anthropic Messages {settings.model}", flush=True)
+        try:
+            selections = reasoning.select(repos)
+        except Exception as exc:
+            _print_reasoning_call_result(reasoning, exc)
+            raise
+        _print_reasoning_call_result(reasoning)
     finally:
         print(reasoning.last_usage.format_json())
         github.close()
@@ -424,6 +431,39 @@ def generate(settings: Settings, args) -> dict[str, Path]:
         )
     output_dir = args.output_dir or Path(settings.output_dir)
     return write_reports(items, output_dir, args.format, generated_at)
+
+
+def _print_reasoning_call_result(
+    reasoning: ReasoningClient, error: Exception | None = None
+) -> None:
+    call = reasoning.last_call
+    model = call.model if call else reasoning.model
+    duration_ms = call.duration_ms if call else 0
+    status_code = call.status_code if call else None
+
+    if error is None and status_code is not None and 200 <= status_code < 300:
+        print(f"OK {model} HTTP {status_code} {duration_ms}ms", flush=True)
+        return
+
+    if status_code is None:
+        category = "网络/超时" if isinstance(error, httpx.HTTPError) else "客户端错误"
+        message = str(error) if error else "请求未完成"
+        status = "n/a"
+    elif 200 <= status_code < 300:
+        category = "响应格式异常"
+        message = str(error) if error else "响应校验失败"
+        status = str(status_code)
+    else:
+        category, message = classify_error(
+            status_code, call.data if call else None, call.text if call else ""
+        )
+        status = str(status_code)
+
+    print(
+        f"FAILED {model} HTTP {status} {duration_ms}ms "
+        f"category={category} message={message}",
+        flush=True,
+    )
 
 
 def _combine_candidate_repositories(groups, candidate_limit: int):
