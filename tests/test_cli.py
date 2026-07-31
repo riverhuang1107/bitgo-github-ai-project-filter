@@ -12,6 +12,7 @@ from github_ai_daily.cli import (
     cmd_model_check,
     parser,
     reasoning_auth,
+    reasoning_model,
     send_model_check_report,
 )
 from github_ai_daily.reasoning import ReasoningCall
@@ -37,6 +38,12 @@ def test_generate_wallet_context_printer_excludes_private_key(capsys):
     assert "Wallet address: 0xwallet" in output
     assert "Money ID: money_20260730_example" in output
     assert "private-key" not in output
+
+
+def test_reasoning_model_environment_variable_overrides_config(monkeypatch):
+    monkeypatch.setenv("REASONING_API_MODEL", "openai/gpt-5.4-nano")
+
+    assert reasoning_model(Settings(model="claude-4.6-opus")) == "openai/gpt-5.4-nano"
 
 
 def test_reasoning_call_result_printer_reports_success(capsys):

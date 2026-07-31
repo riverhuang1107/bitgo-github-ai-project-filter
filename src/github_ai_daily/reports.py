@@ -97,6 +97,21 @@ def write_reports(
     return paths
 
 
+def write_reasoning_request(
+    request_body: dict, output_dir: Path, generated_at: datetime
+) -> Path:
+    """Persist the JSON body only; authentication headers are intentionally excluded."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / (
+        f"github-ai-trending_request_{generated_at.strftime('%Y-%m-%d_%H%M%S')}.json"
+    )
+    path.write_text(
+        json.dumps(request_body, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def render_model_check_markdown(report: ModelCheckReport) -> str:
     lines = [
         "# Bitgo 大模型连通性报告",

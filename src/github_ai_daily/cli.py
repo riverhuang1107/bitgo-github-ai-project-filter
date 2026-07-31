@@ -59,7 +59,12 @@ from .model_check import (
     classify_error,
     wallet_balance_from_response,
 )
-from .reports import build_items, write_model_check_reports, write_reports
+from .reports import (
+    build_items,
+    write_model_check_reports,
+    write_reasoning_request,
+    write_reports,
+)
 from .reports import write_vps_check_reports
 from .secrets import get_secret_store
 from .vps import DEFAULT_VPS_API_BASE_URL, VPSClient
@@ -347,9 +352,7 @@ def cmd_init(args, settings: Settings) -> int:
     if not key_path.exists():
         generate_private_key(key_path)
     settings.private_key_path = str(key_path)
-    settings.model = (
-        os.environ.get("REASONING_API_MODEL") or settings.model or DEFAULT_MODEL
-    )
+    settings.model = reasoning_model(settings)
     settings.mail_from = os.environ.get("GITHUB_AI_MAIL_FROM") or settings.mail_from
     settings.mail_test_to = settings.mail_test_to or os.environ.get(
         "GITHUB_AI_MAIL_TEST_TO", ""
@@ -373,8 +376,10 @@ def generate(settings: Settings, args) -> dict[str, Path]:
         raise ValueError("--limit must be greater than zero")
     if args.candidate_limit < args.limit:
         raise ValueError("--candidate-limit must be greater than or equal to --limit")
-    if not settings.model:
+    model = reasoning_model(settings)
+    if not model:
         raise RuntimeError("Tool is not initialized; run `github-ai-daily init`")
+    output_dir = args.output_dir or Path(settings.output_dir)
     github = GitHubClient(os.environ.get("GITHUB_TOKEN"))
     external_sources = [
         (HACKER_NEWS_SOURCE_NAME, HackerNewsClient()),
@@ -384,7 +389,7 @@ def generate(settings: Settings, args) -> dict[str, Path]:
     auth = reasoning_auth(settings, args)
     _print_reasoning_wallet(auth)
     reasoning = ReasoningClient(
-        reasoning_endpoint(settings), settings.model, auth, reasoning_interface_key(settings)
+        reasoning_endpoint(settings), model, auth, reasoning_interface_key(settings)
     )
     try:
         github_repos = github.trending()
@@ -407,9 +412,14 @@ def generate(settings: Settings, args) -> dict[str, Path]:
         print(
             f"Candidate sources: {', '.join(source_counts)}; sent to model {len(repos)}"
         )
-        print(f"Calling Anthropic Messages {settings.model}", flush=True)
+        request_body = reasoning.selection_request(repos)
+        request_path = write_reasoning_request(
+            request_body, output_dir, datetime.now().astimezone()
+        )
+        print(f"Raw reasoning request: {request_path}", flush=True)
+        print(f"Calling Messages API {model}", flush=True)
         try:
-            selections = reasoning.select(repos)
+            selections = reasoning.select(repos, request_body)
         except Exception as exc:
             _print_reasoning_call_result(reasoning, exc)
             raise
@@ -429,8 +439,9 @@ def generate(settings: Settings, args) -> dict[str, Path]:
         generated_at = generated_at.replace(
             year=requested.year, month=requested.month, day=requested.day
         )
-    output_dir = args.output_dir or Path(settings.output_dir)
-    return write_reports(items, output_dir, args.format, generated_at)
+    paths = write_reports(items, output_dir, args.format, generated_at)
+    paths["request"] = request_path
+    return paths
 
 
 def _print_reasoning_call_result(
@@ -1129,6 +1140,11 @@ def reasoning_interface_key(settings: Settings, args=None):
 
 def reasoning_endpoint(settings: Settings) -> str:
     return os.environ.get("REASONING_API_ENDPOINT") or settings.endpoint
+
+
+def reasoning_model(settings: Settings) -> str:
+    """Resolve the model consistently for every reasoning request."""
+    return os.environ.get("REASONING_API_MODEL") or settings.model or DEFAULT_MODEL
 
 
 def _arg_or_env(args, attr: str, env_name: str, default: str) -> str:

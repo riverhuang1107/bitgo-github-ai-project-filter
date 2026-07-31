@@ -112,7 +112,8 @@ class ReasoningClient:
         self.last_usage = TokenUsage()
         self.last_call: ReasoningCall | None = None
 
-    def select(self, repos: list[Repository]) -> list[Selection]:
+    def selection_request(self, repos: list[Repository]) -> dict:
+        """Build the exact JSON body used by the project-selection request."""
         candidates = [
             {
                 "full_name": repo.full_name,
@@ -125,7 +126,7 @@ class ReasoningClient:
             }
             for repo in repos
         ]
-        body = {
+        return {
             "model": self.model,
             "max_tokens": 4096,
             "system": SYSTEM_PROMPT,
@@ -137,6 +138,11 @@ class ReasoningClient:
                 }
             ],
         }
+
+    def select(
+        self, repos: list[Repository], request_body: dict | None = None
+    ) -> list[Selection]:
+        body = request_body or self.selection_request(repos)
         headers = wallet_signed_headers(self.auth, self.interface_key)
         started = perf_counter()
         try:
