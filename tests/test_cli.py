@@ -78,6 +78,32 @@ def test_reasoning_call_result_printer_reports_server_error(capsys):
     assert "message=Model resources are currently busy." in output
 
 
+def test_reasoning_call_result_printer_includes_raw_json_response(capsys):
+    reasoning = SimpleNamespace(
+        model="openai/gpt-5.4",
+        last_call=ReasoningCall(
+            "Messages API",
+            "openai/gpt-5.4",
+            200,
+            123,
+            {
+                "id": "response-1",
+                "signature": "must-not-print",
+                "content": [{"type": "text", "text": "not JSON"}],
+            },
+        ),
+    )
+
+    _print_reasoning_call_result(reasoning, ValueError("Reasoning API did not return valid JSON"))
+
+    output = capsys.readouterr().out
+    assert "Response JSON (sensitive fields redacted):" in output
+    assert '"id": "response-1"' in output
+    assert '"text": "not JSON"' in output
+    assert "must-not-print" not in output
+    assert '"signature": "<redacted>"' in output
+
+
 def test_candidate_pool_reserves_space_for_external_source_and_deduplicates():
     github = [
         Repository("owner/one", "https://github.com/owner/one"),

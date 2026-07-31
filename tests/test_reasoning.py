@@ -3,11 +3,14 @@ import httpx
 from cryptography.hazmat.primitives.asymmetric import ec
 
 from github_ai_daily.crypto import WalletAuth
+from github_ai_daily.models import Repository
 from github_ai_daily.reasoning import (
     ReasoningClient,
     TokenUsage,
     _extract_json,
     _openai_chat_endpoint,
+    _is_deepseek_v4,
+    _selection_max_tokens,
     _raise_for_status,
     _validate_selections,
 )
@@ -132,6 +135,35 @@ def test_http_error_includes_safe_server_detail():
     response = httpx.Response(400, request=request)
     with pytest.raises(RuntimeError, match="invalid model"):
         _raise_for_status(response, {"error": {"message": "invalid model"}})
+
+
+def test_deepseek_v4_selection_request_disables_thinking():
+    client = ReasoningClient(
+        "https://example.test/v1/messages",
+        "deepseek/deepseek-v4-flash",
+        WalletAuth("ltc", "wallet", "10", "id", "private"),
+        ec.generate_private_key(ec.SECP256R1()),
+    )
+
+    assert client.selection_request([])["thinking"] == {"type": "disabled"}
+    assert _is_deepseek_v4("deepseek-v4-pro") is True
+    assert _is_deepseek_v4("openai/gpt-5.4-nano") is False
+
+
+def test_selection_request_scales_output_tokens_for_large_candidate_set():
+    client = ReasoningClient(
+        "https://example.test/v1/messages",
+        "openai/gpt-5.4-nano",
+        WalletAuth("ltc", "wallet", "10", "id", "private"),
+        ec.generate_private_key(ec.SECP256R1()),
+    )
+    repositories = [
+        Repository(f"owner/repo-{index}", f"https://github.com/owner/repo-{index}")
+        for index in range(50)
+    ]
+
+    assert client.selection_request(repositories)["max_tokens"] == 13312
+    assert _selection_max_tokens(10) == 4096
 
 
 def test_select_records_http_status_and_response_on_failure(monkeypatch):

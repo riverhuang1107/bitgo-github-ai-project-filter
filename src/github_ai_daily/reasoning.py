@@ -12,6 +12,12 @@ from .crypto import WalletAuth, wallet_signed_headers
 from .models import Repository, Selection
 
 
+MIN_SELECTION_MAX_TOKENS = 4096
+SELECTION_OUTPUT_TOKEN_OVERHEAD = 512
+SELECTION_OUTPUT_TOKENS_PER_CANDIDATE = 256
+MAX_SELECTION_MAX_TOKENS = 16384
+
+
 SYSTEM_PROMPT = """你是 GitHub AI 项目筛选器。只判断输入候选，不得创造仓库。
 返回纯 JSON 对象，结构为 {"items":[{"full_name":"owner/repo","is_ai":true,
 "category":"类别","summary_zh":"中文简介","reason_zh":"入选原因"}]}。
@@ -126,9 +132,9 @@ class ReasoningClient:
             }
             for repo in repos
         ]
-        return {
+        body = {
             "model": self.model,
-            "max_tokens": 4096,
+            "max_tokens": _selection_max_tokens(len(repos)),
             "system": SYSTEM_PROMPT,
             "messages": [
                 {
@@ -138,6 +144,11 @@ class ReasoningClient:
                 }
             ],
         }
+        if _is_deepseek_v4(self.model):
+            # V4 enables thinking by default. It can consume the entire output
+            # budget before it emits the final structured selection.
+            body["thinking"] = {"type": "disabled"}
+        return body
 
     def select(
         self, repos: list[Repository], request_body: dict | None = None
@@ -310,6 +321,20 @@ def _extract_json(response: dict) -> dict:
     if not isinstance(value, dict):
         raise ValueError("Reasoning API JSON root must be an object")
     return value
+
+
+def _is_deepseek_v4(model: str) -> bool:
+    normalized = model.strip().casefold().rsplit("/", 1)[-1]
+    return normalized in {"deepseek-v4-flash", "deepseek-v4-pro"}
+
+
+def _selection_max_tokens(candidate_count: int) -> int:
+    """Reserve enough output for every candidate's structured result."""
+    requested = (
+        SELECTION_OUTPUT_TOKEN_OVERHEAD
+        + max(candidate_count, 0) * SELECTION_OUTPUT_TOKENS_PER_CANDIDATE
+    )
+    return min(MAX_SELECTION_MAX_TOKENS, max(MIN_SELECTION_MAX_TOKENS, requested))
 
 
 def _validate_selections(

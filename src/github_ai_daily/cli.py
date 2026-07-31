@@ -475,6 +475,45 @@ def _print_reasoning_call_result(
         f"category={category} message={message}",
         flush=True,
     )
+    if call and call.data is not None:
+        print("Response JSON (sensitive fields redacted):", flush=True)
+        print(
+            json.dumps(
+                _redact_sensitive_response_fields(call.data),
+                ensure_ascii=False,
+                indent=2,
+            ),
+            flush=True,
+        )
+    elif call and call.text:
+        print("Raw response text:", flush=True)
+        print(call.text, flush=True)
+
+
+def _redact_sensitive_response_fields(value):
+    sensitive_names = {
+        "signature",
+        "x-signature",
+        "x-params",
+        "x-public-key",
+        "private_key",
+        "private-key",
+        "token",
+        "api_key",
+        "api-key",
+    }
+    if isinstance(value, dict):
+        return {
+            key: (
+                "<redacted>"
+                if str(key).casefold() in sensitive_names
+                else _redact_sensitive_response_fields(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_sensitive_response_fields(item) for item in value]
+    return value
 
 
 def _combine_candidate_repositories(groups, candidate_limit: int):
