@@ -464,13 +464,12 @@ def test_select_models_supports_names_ids_commas_and_deduplication():
     assert [model.model_id for model in selected] == ["ok", "bad", "plain"]
 
 
-def test_select_models_rejects_unknown_values_before_requesting_models():
-    try:
-        select_models(_models(), ["missing-model"])
-    except ValueError as exc:
-        assert "missing-model" in str(exc)
-    else:
-        raise AssertionError("Expected an unknown model selector error")
+def test_select_models_keeps_unknown_values_for_endpoint_validation():
+    selected = select_models(_models(), ["missing-model"])
+
+    assert [model.model_id for model in selected] == ["missing-model"]
+    assert selected[0].provider == "Unknown"
+    assert selected[0].input_price_usd_per_million == Decimal("0")
 
 
 def test_select_protocols_defaults_to_messages_and_chat_and_supports_combinations():

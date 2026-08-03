@@ -692,6 +692,42 @@ def cmd_model_check(args, settings: Settings) -> int:
     report.money_id = auth.money_id
     report.money_id_created_for_run = auth.money_id_created
     report.wallet_balance = fetch_latest_sub_wallet_balance(auth, args.bff_base_url)
+    discovered = {}
+    for result in report.results:
+        if not (result.ok and result.status_code == 200 and result.model.provider == "Unknown"):
+            continue
+        usage = result.usage.raw if result.usage else None
+        if not isinstance(usage, dict):
+            continue
+        try:
+            input_price = Decimal(str(usage["input_token_unit_price"])) * Decimal("0.01")
+            output_price = Decimal(str(usage["output_token_unit_price"])) * Decimal("0.01")
+        except (KeyError, TypeError, InvalidOperation):
+            continue
+        discovered[result.model.model_id] = type(result.model)(
+            result.model.model_id,
+            result.model.name,
+            result.model.provider,
+            input_price,
+            output_price,
+        )
+    if discovered:
+        catalog_models = catalog.models if catalog is not None else MODELS
+        merged = tuple(
+            list(catalog_models)
+            + [model for model_id, model in discovered.items()
+               if not any(existing.model_id.casefold() == model_id.casefold() for existing in catalog_models)]
+        )
+        save_model_catalog(
+            catalog_path,
+            merged,
+            source_url=catalog.source_url if catalog is not None else MODEL_GUIDE_URL,
+        )
+        print(
+            f"Updated local model catalog with {len(discovered)} verified model(s): "
+            f"{', '.join(discovered)}",
+            flush=True,
+        )
     output_dir = args.output_dir or Path(settings.output_dir)
     paths = write_model_check_reports(report, output_dir)
     _print_paths(paths)

@@ -428,7 +428,6 @@ def select_models(
         return models
     selected: list[ModelDefinition] = []
     selected_ids: set[str] = set()
-    unknown: list[str] = []
     for selector in requested:
         normalized = selector.casefold()
         matches = [
@@ -437,14 +436,22 @@ def select_models(
             if model.model_id.casefold() == normalized or model.name.casefold() == normalized
         ]
         if not matches:
-            unknown.append(selector)
-            continue
+            # A caller may know about a newly deployed model before the local
+            # catalog is refreshed. Keep it as a provisional definition so the
+            # endpoint itself can validate the model.
+            matches = [
+                ModelDefinition(
+                    selector,
+                    selector,
+                    "Unknown",
+                    Decimal("0"),
+                    Decimal("0"),
+                )
+            ]
         for model in matches:
             if model.model_id not in selected_ids:
                 selected.append(model)
                 selected_ids.add(model.model_id)
-    if unknown:
-        raise ValueError(f"Unknown model name or ID: {', '.join(unknown)}")
     return tuple(selected)
 
 
