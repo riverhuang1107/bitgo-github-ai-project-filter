@@ -13,6 +13,7 @@ DEFAULT_MODEL = "claude-4.6-opus"
 DEFAULT_MAIL_ADDRESS = "hhq4326@agent.qq.com"
 DEFAULT_MAIL_DISPLAY_NAME = "Agent Mail"
 DEFAULT_MAIL_FROM = f"{DEFAULT_MAIL_DISPLAY_NAME} <{DEFAULT_MAIL_ADDRESS}>"
+DEFAULT_MODEL_CHECK_TIMEOUT_SECONDS = 180.0
 
 
 def user_config_dir() -> Path:
@@ -42,6 +43,7 @@ class Settings:
     money: str = ""
     money_id: str = ""
     signer_command: str = ""
+    model_check_timeout_seconds: float = DEFAULT_MODEL_CHECK_TIMEOUT_SECONDS
     vps_ssh_key_id: str = ""
     vps_ssh_private_key_path: str = ""
     wallets: dict[str, WalletProfile] = field(default_factory=dict)
@@ -86,6 +88,9 @@ class Settings:
             money=str(reasoning.get("money", "")),
             money_id=str(reasoning.get("money_id", "")),
             signer_command=reasoning.get("signer_command", ""),
+            model_check_timeout_seconds=float(
+                reasoning.get("model_check_timeout_seconds", DEFAULT_MODEL_CHECK_TIMEOUT_SECONDS)
+            ),
             vps_ssh_key_id=str(vps_check.get("ssh_key_id", "")),
             vps_ssh_private_key_path=str(vps_check.get("ssh_private_key_path", "")),
             wallets=wallets,
@@ -112,6 +117,7 @@ class Settings:
             f'money = "{_escape(self.money)}"\n'
             f'money_id = "{_escape(self.money_id)}"\n'
             f'signer_command = "{_escape(self.signer_command)}"\n'
+            f"model_check_timeout_seconds = {self.model_check_timeout_seconds}\n"
         )
         if self.wallets:
             for name, wallet in sorted(self.wallets.items()):

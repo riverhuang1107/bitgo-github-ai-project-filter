@@ -18,6 +18,7 @@ def test_config_round_trip(tmp_path: Path):
         money="20",
         money_id="money-id",
         signer_command="custom-signer",
+        model_check_timeout_seconds=240,
         wallets={
             "eth": WalletProfile(
                 chain="eth",
@@ -38,6 +39,7 @@ def test_config_round_trip(tmp_path: Path):
     assert actual.money == expected.money
     assert actual.money_id == expected.money_id
     assert actual.signer_command == expected.signer_command
+    assert actual.model_check_timeout_seconds == expected.model_check_timeout_seconds
     assert actual.wallets == expected.wallets
     assert actual.mail_from == expected.mail_from
     assert actual.mail_backend == expected.mail_backend
@@ -97,6 +99,10 @@ def test_empty_mail_from_loads_default(tmp_path: Path):
 
 def test_default_model_is_verified_model():
     assert Settings().model == DEFAULT_MODEL == "claude-4.6-opus"
+
+
+def test_model_check_timeout_defaults_to_180_seconds():
+    assert Settings().model_check_timeout_seconds == 180
 
 
 def test_money_has_no_default_amount():

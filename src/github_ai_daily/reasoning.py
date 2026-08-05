@@ -108,7 +108,7 @@ class ReasoningClient:
         model: str,
         auth: WalletAuth,
         interface_key: ec.EllipticCurvePrivateKey,
-        timeout: float = 90,
+        timeout: float = 180,
     ):
         self.endpoint = endpoint
         self.model = model

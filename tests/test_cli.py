@@ -566,6 +566,7 @@ def test_model_check_command_reports_partial_failure_without_failing(monkeypatch
         lambda auth, base_url: SimpleNamespace(error="BFF unavailable"),
     )
     args = Namespace(
+        config=tmp_path / "config.toml",
         output_dir=tmp_path,
         max_tokens=128,
         send_email=False,
@@ -588,8 +589,9 @@ def test_model_check_reuses_the_configured_money_id(monkeypatch, tmp_path):
     )
 
     class FakeClient:
-        def __init__(self, endpoint, model, auth, interface_key):
+        def __init__(self, endpoint, model, auth, interface_key, timeout):
             captured["money_id"] = auth.money_id
+            captured["timeout"] = timeout
 
         def close(self):
             pass
@@ -604,8 +606,10 @@ def test_model_check_reuses_the_configured_money_id(monkeypatch, tmp_path):
         lambda auth, base_url: SimpleNamespace(error="BFF unavailable"),
     )
     args = Namespace(
+        config=tmp_path / "config.toml",
         output_dir=tmp_path,
         max_tokens=128,
+        timeout_seconds=240,
         send_email=False,
         to=None,
         money_id="old-id",
@@ -614,6 +618,8 @@ def test_model_check_reuses_the_configured_money_id(monkeypatch, tmp_path):
 
     assert cmd_model_check(args, Settings()) == 0
     assert captured["money_id"] == "old-id"
+    assert captured["timeout"] == 240
+    assert Settings.load(tmp_path / "config.toml").model_check_timeout_seconds == 240
 
 
 def test_model_check_reads_web_models_and_updates_local_catalog(monkeypatch, tmp_path):
@@ -720,6 +726,8 @@ def test_parser_supports_model_check_and_gmail_auth():
     assert parser().parse_args(["model-check", "--mail-backend", "agent"]).mail_backend == "agent"
     assert parser().parse_args(["model-check", "--new-money-id"]).new_money_id is True
     assert parser().parse_args(["model-check", "--check-input-cache"]).check_input_cache is True
+    assert parser().parse_args(["model-check"]).timeout_seconds is None
+    assert parser().parse_args(["model-check", "--timeout-seconds", "240"]).timeout_seconds == 240
     assert parser().parse_args(["model-check"]).protocol == []
     assert parser().parse_args(["model-check", "--protocol", "all"]).protocol == ["all"]
     assert parser().parse_args(["model-check", "--protocol", "messages,responses", "--protocol", "chat"]).protocol == ["messages,responses", "chat"]

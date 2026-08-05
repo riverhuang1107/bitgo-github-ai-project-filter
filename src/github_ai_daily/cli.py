@@ -114,6 +114,11 @@ def parser() -> argparse.ArgumentParser:
     model_check.add_argument("--output-dir", type=Path, help="Directory for the HTML and Markdown reports")
     model_check.add_argument("--max-tokens", type=int, default=128, help="Maximum output tokens per model request (default: 128)")
     model_check.add_argument(
+        "--timeout-seconds",
+        type=float,
+        help="Network timeout for each model request in seconds; saves it as the default (initially: 180)",
+    )
+    model_check.add_argument(
         "--protocol",
         action="append",
         default=[],
@@ -633,6 +638,19 @@ def cmd_reasoning(args, settings: Settings) -> int:
 
 
 def cmd_model_check(args, settings: Settings) -> int:
+    configured_timeout = getattr(args, "timeout_seconds", None)
+    timeout_seconds = (
+        configured_timeout
+        if configured_timeout is not None
+        else settings.model_check_timeout_seconds
+    )
+    if timeout_seconds <= 0:
+        raise ValueError("--timeout-seconds must be greater than zero")
+    config_path = getattr(args, "config", None) or default_config_path()
+    if configured_timeout is not None:
+        settings.model_check_timeout_seconds = timeout_seconds
+        settings.save(config_path)
+        print(f"Saved model-check default timeout: {timeout_seconds:g}s", flush=True)
     new_money_id = getattr(args, "new_money_id", False)
     if new_money_id and getattr(args, "money_id", None):
         raise ValueError("--new-money-id cannot be combined with --money-id")
@@ -646,7 +664,7 @@ def cmd_model_check(args, settings: Settings) -> int:
         print(f"Money ID: {auth.money_id} (generated and saved for reuse)", flush=True)
     else:
         print(f"Money ID: {auth.money_id} (reused for every model-check run and call)", flush=True)
-    catalog_path = model_catalog_path(getattr(args, "config", None) or default_config_path())
+    catalog_path = model_catalog_path(config_path)
     models = MODELS
     model_source = LOCAL_MODEL_SOURCE
     if getattr(args, "read_web_models", False):
@@ -676,7 +694,8 @@ def cmd_model_check(args, settings: Settings) -> int:
             raise ValueError("--check-input-cache requires exactly one --model")
     print(f"Testing protocols: {', '.join(protocols)}", flush=True)
     client = ReasoningClient(
-        reasoning_endpoint(settings), settings.model or DEFAULT_MODEL, auth, reasoning_interface_key(settings, args)
+        reasoning_endpoint(settings), settings.model or DEFAULT_MODEL, auth,
+        reasoning_interface_key(settings, args), timeout_seconds,
     )
     try:
         report = run_model_check(
