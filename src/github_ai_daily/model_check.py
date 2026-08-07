@@ -9,7 +9,7 @@ from decimal import Decimal
 from pathlib import Path
 from time import perf_counter
 from typing import Any
-from urllib.parse import quote_plus
+from urllib.parse import parse_qs, quote_plus, urlsplit
 from xml.etree import ElementTree
 
 import httpx
@@ -33,6 +33,10 @@ WEB_SEARCH_PROMPT = (
 MAX_WEB_SEARCH_CONTINUATIONS = 3
 WEB_SEARCH_FALLBACK_QUERY = "AI news past 24 hours"
 WEB_SEARCH_URL_PATTERN = re.compile(r'https?://[^\s<>\]\[\)\}"]+')
+WEB_SEARCH_FINALIZATION_INSTRUCTION = (
+    "检索已完成。不要再调用任何工具；请只基于以上结果，直接输出最终中文新闻报告。"
+    "每条必须包含标题、来源、发布时间、关键事实和原文 URL。"
+)
 # 2,048 repeated ASCII tokens provides margin above common prompt-cache minimums while
 # keeping the cache scenario to exactly two Messages requests.
 INPUT_CACHE_PREFIX = "cache " * 2048
@@ -128,6 +132,7 @@ class ModelCheckResult:
     input_cache_hit: bool | None = None
     web_search_evidence: list[str] | None = None
     web_search_sources: list[str] | None = None
+    web_search_candidate_sources: list[str] | None = None
     web_search_continuations: int = 0
 
 
@@ -434,6 +439,21 @@ def _run_web_search_check(
                         break
                     if isinstance(response.data, dict):
                         response_history.append(response.data)
+                if _is_web_search_tool_use(response):
+                    content = (response.data or {}).get("content")
+                    if isinstance(content, list):
+                        tool_results = _execute_web_search_tool_uses(content)
+                        response_history.append({"content": tool_results})
+                        continuations += 1
+                        response = client.continue_model_with_web_search_tool_results(
+                            model.model_id,
+                            WEB_SEARCH_PROMPT,
+                            max_tokens,
+                            content,
+                            tool_results,
+                        )
+                        if isinstance(response.data, dict):
+                            response_history.append(response.data)
             else:
                 response = client.test_model_openai_responses_with_web_search(
                     model.model_id, WEB_SEARCH_PROMPT, max_tokens
@@ -525,21 +545,23 @@ def _web_search_query(tool_use: dict[str, Any]) -> str:
 def _web_search_tool_text(query: str) -> str:
     results, error = _run_web_search_query(query)
     if error:
-        return f"Search query: {query}\nSearch failed: {error}"
+        return f"Search query: {query}\nSearch failed: {error}\n\n{WEB_SEARCH_FINALIZATION_INSTRUCTION}"
     if not results:
-        return f"Search query: {query}\nNo parseable results returned."
+        return f"Search query: {query}\nNo parseable results returned.\n\n{WEB_SEARCH_FINALIZATION_INSTRUCTION}"
     lines = [f"Search query: {query}", "Results:"]
     for index, result in enumerate(results[:5], start=1):
         lines.append(
             f"{index}. {result['title']}\n   URL: {result['url']}\n   Snippet: {result['snippet']}"
         )
-    return "\n".join(lines)
+    return "\n".join([*lines, "", WEB_SEARCH_FINALIZATION_INSTRUCTION])
 
 
 def _run_web_search_query(query: str) -> tuple[list[dict[str, str]], str]:
     try:
         response = httpx.get(
-            "https://www.bing.com/search?format=rss&q=" + quote_plus(query),
+            "https://www.bing.com/news/search?format=rss&q="
+            + quote_plus(query)
+            + "&qft=interval%3D%228%22",
             headers={"User-Agent": "Mozilla/5.0 github-ai-daily/1.0"},
             timeout=20,
             follow_redirects=True,
@@ -602,7 +624,16 @@ def _validate_web_search_result(
         evidence.extend(found_evidence)
         sources.extend(found_sources)
     result.web_search_evidence = list(dict.fromkeys(evidence))
-    result.web_search_sources = list(dict.fromkeys(sources))
+    result.web_search_candidate_sources = _web_search_candidate_urls(
+        result.protocol, response_history or [data]
+    )
+    local_tool_execution = "content.tool_result" in result.web_search_evidence
+    if local_tool_execution:
+        report_urls = _urls_in(result.response_text)
+        candidates = set(result.web_search_candidate_sources)
+        result.web_search_sources = [url for url in report_urls if url in candidates]
+    else:
+        result.web_search_sources = result.web_search_candidate_sources
     if not result.ok:
         return
     if result.protocol == ANTHROPIC_PROTOCOL and data.get("stop_reason") == "pause_turn":
@@ -612,15 +643,33 @@ def _validate_web_search_result(
             f"Messages API returned pause_turn after {MAX_WEB_SEARCH_CONTINUATIONS} continuation attempts"
         )
         return
+    if result.protocol == ANTHROPIC_PROTOCOL and data.get("stop_reason") == "tool_use":
+        result.ok = False
+        result.error_category = "联网搜索未完成"
+        result.error_message = (
+            "Messages API still returned tool_use after the bounded search continuations "
+            "and one finalization request"
+        )
+        return
     if not result.response_text.strip():
         result.ok = False
         result.error_category = "联网搜索报告为空"
         result.error_message = "联网搜索调用成功，但未返回新闻报告文本"
         return
+    if _is_web_search_refusal(result.response_text):
+        result.ok = False
+        result.error_category = "联网搜索报告不合格"
+        result.error_message = "模型未生成新闻报告，而是说明无法获得可核验的新闻来源"
+        return
     if not result.web_search_evidence:
         result.ok = False
         result.error_category = "未检测到联网搜索证据"
         result.error_message = "响应未包含该协议要求的 web_search 工具调用、结果或引用证据"
+        return
+    if local_tool_execution and not result.web_search_sources:
+        result.ok = False
+        result.error_category = "联网搜索来源无效"
+        result.error_message = "最终报告未引用本次检索返回的可核验新闻 URL"
 
 
 def _web_search_evidence(
@@ -668,20 +717,80 @@ def _positive_integer(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
+def _is_web_search_refusal(text: str) -> bool:
+    normalized = text.casefold()
+    return any(
+        phrase in normalized
+        for phrase in (
+            "无法完成",
+            "不能完成",
+            "无法生成",
+            "无有效新闻",
+            "无法保证",
+            "未经核实",
+            "仅供参考",
+            "时间异常",
+            "来源可疑",
+            "unable to complete",
+            "cannot complete",
+            "cannot generate",
+        )
+    )
+
+
+def _unique_urls(values: list[str]) -> list[str]:
+    normalized = [_normalize_url(value) for value in values]
+    return list(dict.fromkeys(value for value in normalized if value))
+
+
+def _web_search_candidate_urls(
+    protocol: str, response_history: list[dict[str, Any]]
+) -> list[str]:
+    if protocol != ANTHROPIC_PROTOCOL:
+        sources: list[str] = []
+        for response_data in response_history:
+            _, found_sources = _web_search_evidence(protocol, response_data)
+            sources.extend(found_sources)
+        return _unique_urls(sources)
+    sources = []
+    for response_data in response_history:
+        content = response_data.get("content", [])
+        if not isinstance(content, list):
+            continue
+        for item in content:
+            if not isinstance(item, dict) or item.get("type") not in {
+                "tool_result",
+                "web_search_tool_result",
+            }:
+                continue
+            sources.extend(_urls_in(item.get("content", item)))
+    return _unique_urls(sources)
+
+
+def _normalize_url(value: str) -> str:
+    normalized = value.strip().rstrip(".,;:!?，。；：！？")
+    parsed = urlsplit(normalized)
+    if parsed.hostname and parsed.hostname.casefold().endswith("bing.com") and parsed.path.casefold() == "/news/apiclick.aspx":
+        target = parse_qs(parsed.query).get("url", [""])[0]
+        if target:
+            return _normalize_url(target)
+    return normalized
+
+
 def _urls_in(value: Any) -> list[str]:
     urls: list[str] = []
     if isinstance(value, dict):
         for key, item in value.items():
             if key == "url" and isinstance(item, str) and item:
-                urls.append(item)
+                urls.append(_normalize_url(item))
             else:
                 urls.extend(_urls_in(item))
     elif isinstance(value, list):
         for item in value:
             urls.extend(_urls_in(item))
     elif isinstance(value, str):
-        urls.extend(WEB_SEARCH_URL_PATTERN.findall(value))
-    return list(dict.fromkeys(urls))
+        urls.extend(_normalize_url(url) for url in WEB_SEARCH_URL_PATTERN.findall(value))
+    return list(dict.fromkeys(url for url in urls if url))
 
 
 def _cached_protocol_attempt(client: ReasoningClient, protocol: str):

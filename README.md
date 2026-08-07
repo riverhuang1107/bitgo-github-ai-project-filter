@@ -301,6 +301,13 @@ When that endpoint returns a regular `tool_use` event, the CLI runs a Bing RSS
 search (using the model query, or the fixed recent-AI-news query when it is
 empty), returns a `tool_result`, and then requests the final report. The report
 aggregates usage and cost across these Messages turns.
+It unwraps Bing redirect links before reporting candidate URLs, and records
+`Web search sources` only when the final report actually cites a candidate URL.
+A refusal, a final report without a cited candidate URL, or an exhausted tool
+continuation limit fails the verification. Messages permits up to three regular
+search continuations, then sends one no-more-tools finalization request using
+the collected results. Candidate URLs are drawn only from tool results; URLs
+written by the final model response cannot make the check pass by themselves.
 Responses returns a `web_search_call` with results or source URLs. The normal
 model-check Markdown and HTML reports include this evidence, source URLs,
 continuation count, request body, response, usage, and cost.

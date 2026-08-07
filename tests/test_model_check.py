@@ -473,6 +473,7 @@ def test_web_search_check_uses_documented_messages_and_responses_shapes():
     assert len(client.continuations) == 1
     assert report.results[0].web_search_continuations == 1
     assert report.results[0].web_search_sources == ["https://news.example.test/ai"]
+    assert report.results[0].web_search_candidate_sources == ["https://news.example.test/ai"]
     assert report.results[1].web_search_sources == ["https://source.example.test/ai"]
     assert report.results[0].request_url == "https://api.example.test/v1/messages"
     assert report.results[1].request_url == "https://api.example.test/bypass/openai/v1/responses"
@@ -526,7 +527,12 @@ def test_web_search_check_executes_messages_tool_use_and_returns_tool_result(mon
                 status_code=200,
                 data={
                     "stop_reason": "end_turn",
-                    "content": [{"type": "text", "text": "AI news report"}],
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "AI news report: https://news.example.test/ai",
+                        }
+                    ],
                     "usage": {"input_tokens": 3, "output_tokens": 2},
                 },
                 text="{}",
@@ -545,13 +551,153 @@ def test_web_search_check_executes_messages_tool_use_and_returns_tool_result(mon
         {
             "type": "tool_result",
             "tool_use_id": "tool-1",
-            "content": "Search query: AI news past 24 hours\nResults:\n1. AI headline\n   URL: https://news.example.test/ai\n   Snippet: details",
+            "content": (
+                "Search query: AI news past 24 hours\nResults:\n1. AI headline\n"
+                "   URL: https://news.example.test/ai\n   Snippet: details\n\n"
+                + model_check.WEB_SEARCH_FINALIZATION_INSTRUCTION
+            ),
         }
     ]
     assert report.results[0].web_search_sources == ["https://news.example.test/ai"]
+    assert report.results[0].web_search_candidate_sources == ["https://news.example.test/ai"]
     assert report.results[0].web_search_continuations == 1
     assert report.results[0].usage.input_tokens == 5
     assert report.results[0].usage.output_tokens == 3
+
+
+def test_web_search_check_rejects_local_tool_result_without_cited_news_source(monkeypatch):
+    model = ModelDefinition("search-model", "Search Model", "Test", Decimal("1"), Decimal("2"))
+    monkeypatch.setattr(
+        model_check,
+        "_run_web_search_query",
+        lambda query: ([{"title": "AI headline", "url": "https://news.example.test/ai", "snippet": "details"}], ""),
+    )
+
+    class FakeClient:
+        endpoint = "https://api.example.test/v1/messages"
+
+        def test_model_with_web_search(self, name, prompt, max_tokens):
+            return SimpleNamespace(
+                status_code=200,
+                data={
+                    "stop_reason": "tool_use",
+                    "content": [{"id": "tool-1", "type": "tool_use", "name": "web_search", "input": {}}],
+                    "usage": {},
+                },
+                text="{}",
+            )
+
+        def continue_model_with_web_search_tool_results(self, *args):
+            return SimpleNamespace(
+                status_code=200,
+                data={
+                    "stop_reason": "end_turn",
+                    "content": [{"type": "text", "text": "无法完成这项任务，搜索结果没有新闻。"}],
+                    "usage": {},
+                },
+                text="{}",
+            )
+
+    report = run_model_check(
+        FakeClient(),
+        models=(model,),
+        protocols=(model_check.ANTHROPIC_PROTOCOL,),
+        web_search_check=True,
+    )
+
+    assert report.results[0].ok is False
+    assert report.results[0].error_category == "联网搜索报告不合格"
+    assert report.results[0].web_search_sources == []
+    assert report.results[0].web_search_candidate_sources == ["https://news.example.test/ai"]
+
+
+def test_web_search_check_does_not_treat_final_response_urls_as_candidates():
+    model = ModelDefinition("search-model", "Search Model", "Test", Decimal("1"), Decimal("2"))
+    final_response = {
+        "stop_reason": "end_turn",
+        "content": [{"type": "text", "text": "Report https://model.example.test/self-citation"}],
+    }
+    result = model_check.ModelCheckResult(
+        model=model,
+        started_at=datetime(2026, 8, 7, tzinfo=timezone.utc),
+        duration_ms=1,
+        ok=True,
+        protocol=model_check.ANTHROPIC_PROTOCOL,
+        response_text="Report https://model.example.test/self-citation",
+        raw_response_json=final_response,
+    )
+
+    model_check._validate_web_search_result(
+        result,
+        [
+            {"content": [{"id": "tool-1", "type": "tool_use", "name": "web_search"}]},
+            {
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "tool-1",
+                        "content": "URL: https://search.example.test/article",
+                    }
+                ]
+            },
+            final_response,
+        ],
+    )
+
+    assert result.ok is False
+    assert result.error_category == "联网搜索来源无效"
+    assert result.web_search_candidate_sources == ["https://search.example.test/article"]
+    assert result.web_search_sources == []
+
+
+def test_web_search_refusal_detection_covers_unverified_results():
+    assert model_check._is_web_search_refusal("这些结果未经核实，仅供参考，无法保证真实性。")
+
+
+def test_web_search_sources_unwrap_bing_news_redirects():
+    wrapped = (
+        "https://www.bing.com/news/apiclick.aspx?ref=FexRss&url="
+        "https%3A%2F%2Fnews.example.test%2Fai%2Fstory%3Fid%3D1"
+    )
+
+    assert model_check._unique_urls([wrapped]) == ["https://news.example.test/ai/story?id=1"]
+
+
+def test_web_search_check_marks_exhausted_tool_use_as_incomplete(monkeypatch):
+    model = ModelDefinition("search-model", "Search Model", "Test", Decimal("1"), Decimal("2"))
+    monkeypatch.setattr(model_check, "_run_web_search_query", lambda query: ([], ""))
+
+    class FakeClient:
+        endpoint = "https://api.example.test/v1/messages"
+
+        @staticmethod
+        def _tool_use():
+            return SimpleNamespace(
+                status_code=200,
+                data={
+                    "stop_reason": "tool_use",
+                    "content": [{"id": "tool-1", "type": "tool_use", "name": "web_search", "input": {}}],
+                    "usage": {},
+                },
+                text="{}",
+            )
+
+        def test_model_with_web_search(self, *args):
+            return self._tool_use()
+
+        def continue_model_with_web_search_tool_results(self, *args):
+            return self._tool_use()
+
+    report = run_model_check(
+        FakeClient(),
+        models=(model,),
+        protocols=(model_check.ANTHROPIC_PROTOCOL,),
+        web_search_check=True,
+    )
+
+    assert report.results[0].ok is False
+    assert report.results[0].error_category == "联网搜索未完成"
+    assert report.results[0].web_search_continuations == model_check.MAX_WEB_SEARCH_CONTINUATIONS + 1
 
 
 def test_web_search_check_rejects_missing_evidence_and_exhausted_pause_turns():

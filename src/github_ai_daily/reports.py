@@ -176,6 +176,8 @@ def render_model_check_markdown(report: ModelCheckReport) -> str:
                         + (", ".join(result.web_search_evidence) or "none"),
                         "- Web search sources: "
                         + (", ".join(result.web_search_sources or []) or "none"),
+                        "- Web search candidate URLs: "
+                        + (", ".join(result.web_search_candidate_sources or []) or "none"),
                         f"- Web search continuations: {result.web_search_continuations}",
                     ]
                     if result.web_search_evidence is not None
@@ -448,9 +450,11 @@ def _model_check_row(index: int, result: ModelCheckResult) -> str:
     if result.web_search_evidence is not None:
         evidence = ", ".join(result.web_search_evidence) or "none"
         sources = ", ".join(result.web_search_sources or []) or "none"
+        candidates = ", ".join(result.web_search_candidate_sources or []) or "none"
         cache_detail += (
             f"<br><small>Web search evidence: {html.escape(evidence)}"
             f"<br>Web search sources: {html.escape(sources)}"
+            f"<br>Web search candidate URLs: {html.escape(candidates)}"
             f"<br>Web search continuations: {result.web_search_continuations}</small>"
         )
     usage = _format_json(result.usage.raw if result.usage else None)
