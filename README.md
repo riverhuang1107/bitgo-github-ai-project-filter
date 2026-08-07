@@ -278,77 +278,53 @@ export REASONING_PRIVATE_KEY="..."
 .venv/bin/github-ai-daily model-check --protocol all
 ```
 
-### Web-search verification
+### 联网搜索验证
 
-Use `--web-search` to verify one selected model can use Modelink's documented
-web-search tools to produce a report of AI news from the last 24 hours. The
-option requires exactly one explicitly selected `--model`, is mutually exclusive
-with `--check-input-cache`, and makes one initial request per selected protocol.
-Anthropic Messages may issue up to three continuation requests when the server
-returns `pause_turn`. Omitting `--max-tokens` uses 4096 tokens for this report;
-provide the option to override it.
+使用 `--web-search` 验证一个指定模型能否通过 Modelink 文档定义的联网搜索工具，生成最近 24 小时 AI 动态新闻报告。该选项必须显式且恰好指定一个 `--model`，不能与 `--check-input-cache` 同时使用；每个所选协议都会先发起一次初始请求。未指定 `--max-tokens` 时，此报告默认使用 4096 token；可显式传入该参数覆盖。
 
-Only `messages` and `responses` are supported. Modelink's OpenAI Chat
-Completions documentation does not define web-search parameters, so the
-default protocol combination and `--protocol chat` / `--protocol all` are
-rejected before wallet setup or any API request. A successful check requires a
-non-empty report plus protocol-specific web-search evidence: Messages returns
-a server-tool event, tool result, or positive
-`usage.server_tool_use.web_search_requests`. Messages requests use
-the configured `/v1/messages` endpoint with string message content,
-`web_search_20260209`, `max_uses: 8`, and `stream: false`.
-When that endpoint returns a regular `tool_use` event, the CLI runs a Bing RSS
-search (using the model query, or the fixed recent-AI-news query when it is
-empty), returns a `tool_result`, and then requests the final report. The report
-aggregates usage and cost across these Messages turns.
-It unwraps Bing redirect links before reporting candidate URLs, and records
-`Web search sources` only when the final report actually cites a candidate URL.
-A refusal, a final report without a cited candidate URL, or an exhausted tool
-continuation limit fails the verification. Messages permits up to three regular
-search continuations, then sends one no-more-tools finalization request using
-the collected results. Candidate URLs are drawn only from tool results; URLs
-written by the final model response cannot make the check pass by themselves.
-Responses returns a `web_search_call` with results or source URLs. The normal
-model-check Markdown and HTML reports include this evidence, source URLs,
-continuation count, request body, response, usage, and cost.
+仅支持 `messages` 和 `responses`。Modelink 的 OpenAI Chat Completions 文档没有定义联网搜索参数，因此默认协议组合、`--protocol chat` 与 `--protocol all` 都会在创建钱包认证或发起 API 请求前被拒绝。成功验证需要返回非空报告以及协议对应的联网搜索证据：Messages 需要 `tool_use`、服务端工具事件、工具结果或正数 `usage.server_tool_use.web_search_requests`；Responses 需要包含结果或来源 URL 的 `web_search_call`。
+
+Messages 请求使用已配置的 `/v1/messages` endpoint、字符串格式的消息内容、`web_search_20260209`、`max_uses: 8` 与 `stream: false`。当 endpoint 返回普通 `tool_use` 时，CLI 会执行 Bing News RSS 搜索（优先使用模型给出的查询；为空时使用固定的近期 AI 新闻查询），将结果通过 `tool_result` 回传，再请求最终报告。Messages 最多执行三次常规搜索续接，并在达到上限后基于已收集结果额外发送一次“停止调用工具并生成最终报告”的收尾请求。报告会汇总这些 Messages 调用的用量和费用。
+
+候选 URL 会先解包 Bing 跳转链接；只有最终报告实际引用了工具结果中的候选 URL，才会记录为 `Web search sources`。拒答、最终报告未引用候选 URL，或工具续接次数耗尽仍无法结束，都会使验证失败。候选 URL 仅来自工具结果，最终模型正文中的链接不能单独使验证通过。Responses 会返回带结果或来源 URL 的 `web_search_call`。常规 model-check 的 Markdown 与 HTML 报告会记录上述证据、来源 URL、续接次数、请求体、响应、用量与费用。
+
+#### 以 `anthropic/claude-4.8-opus` 为例的实际调用链
+
+1. CLI 向 `/v1/messages` 发送初始请求，携带字符串 `content`、`web_search_20260209` 工具、`max_uses: 8` 和 `stream: false`。
+2. 模型以 `stop_reason: tool_use` 返回 `web_search` 调用；CLI 读取其查询词，并从 Bing News RSS 获取候选新闻链接。
+3. CLI 保留该轮 assistant 的工具调用上下文，使用相同的 `tool_use_id` 把 RSS 结果作为 `tool_result` 回传；随后继续请求模型生成中文报告。
+4. 模型以 `end_turn` 返回最终文本。报告汇总全部 Messages 轮次的用量和费用，并校验工具调用证据及最终文本中实际引用的候选 URL。
+
+这里的“成功”表示协议已完成联网搜索调用链、得到非空报告，并有可追溯的工具来源引用；它不会自动保证新闻条数，也不会仅凭 RSS 摘要推断或核验每条新闻的精确发布时间。对“最近 24 小时”、发布时间完整性或新闻质量有更严格要求时，应人工复核报告，或另行增加内容质量校验。
 
 ```bash
-# Anthropic Messages only
+# 仅 Anthropic Messages
 .venv/bin/github-ai-daily model-check \
   --model claude-4.6-opus \
   --web-search \
   --protocol messages \
   --max-tokens 4096
 
-# OpenAI Responses only
+# 仅 OpenAI Responses
 .venv/bin/github-ai-daily model-check \
   --model openai/gpt-5-mini \
   --web-search \
   --protocol responses
 
-# Both documented web-search protocols
+# 同时测试两个已文档化的联网搜索协议
 .venv/bin/github-ai-daily model-check \
   --model openai/gpt-5-mini \
   --web-search \
   --protocol messages,responses
 ```
 
-### Input-cache verification
+### 输入缓存验证
 
-Use `--check-input-cache` to run the smallest cache test for one selected model.
-Each selected protocol sends exactly two requests with the same unique long
-input prefix: a `warmup` request followed by a `read` request. The read request
-is successful only when the selected protocol returns a positive cache-read
-token count. Messages uses an Anthropic ephemeral cache
-breakpoint. Chat Completions uses the Modelink-compatible OpenAI message content
-block with `cache_control: {"type":"ephemeral"}` and verifies
-`usage.prompt_tokens_details.cached_tokens`; Responses uses its native
-`prompt_cache_key` plus `prompt_cache_retention: "in_memory"`, a repeated input
-prefix, and verifies `usage.input_tokens_details.cached_tokens`. The option intentionally requires one `--model` to avoid
-unintended multi-model spend. `--protocol` controls which cache scenarios run,
-so `chat`, `chat,messages`, and `all` test one, two, and three protocols. See
-[Modelink Claude Prompt Caching](https://docs.modelink.ai/models-capabilities/claude-prompt-caching#openai-%E5%8D%8F%E8%AE%AE%E8%B0%83%E7%94%A8%E6%96%B9%E5%BC%8F)
-for the OpenAI-compatible request and usage fields.
+使用 `--check-input-cache` 对一个指定模型执行最小化缓存测试。每个所选协议会使用同一个唯一的长输入前缀，严格发送两次请求：先发送 `warmup` 请求，再发送 `read` 请求。仅当所选协议返回正数的缓存读取 token 数时，`read` 请求才算成功。
+
+Messages 使用 Anthropic 临时缓存断点。Chat Completions 使用带有 `cache_control: {"type":"ephemeral"}` 的 Modelink 兼容 OpenAI 消息内容块，并验证 `usage.prompt_tokens_details.cached_tokens`。Responses 使用原生 `prompt_cache_key`、`prompt_cache_retention: "in_memory"` 和重复输入前缀，并验证 `usage.input_tokens_details.cached_tokens`。
+
+该选项刻意要求恰好一个 `--model`，避免无意触发多模型消费。`--protocol` 决定执行哪些缓存场景：`chat`、`chat,messages` 与 `all` 分别测试 1、2、3 种协议。OpenAI 兼容请求及用量字段说明见 [Modelink Claude Prompt Caching](https://docs.modelink.ai/models-capabilities/claude-prompt-caching#openai-%E5%8D%8F%E8%AE%AE%E8%B0%83%E7%94%A8%E6%96%B9%E5%BC%8F)。
 
 ```bash
 .venv/bin/github-ai-daily model-check \
@@ -356,13 +332,13 @@ for the OpenAI-compatible request and usage fields.
   --check-input-cache \
   --output-dir reports
 
-# Only Chat Completions
+# 仅 Chat Completions
 .venv/bin/github-ai-daily model-check \
   --model openai/gpt-5-mini \
   --check-input-cache \
   --protocol chat
 
-# All three protocols, six requests total
+# 三种协议全部测试，共六次请求
 .venv/bin/github-ai-daily model-check \
   --model openai/gpt-5-mini \
   --check-input-cache \
