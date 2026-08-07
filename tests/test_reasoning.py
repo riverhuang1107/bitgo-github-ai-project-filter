@@ -268,6 +268,39 @@ def test_reasoning_client_uses_openai_chat_completions_protocol(monkeypatch):
     assert _openai_chat_endpoint("https://example.test/v1/messages/") == "https://example.test/v1/chat/completions"
 
 
+def test_reasoning_client_uses_standard_messages_web_search_contract(monkeypatch):
+    captured = {}
+
+    class FakeClient:
+        def post(self, endpoint, headers, json):
+            captured["endpoint"] = endpoint
+            captured["body"] = json
+            request = httpx.Request("POST", endpoint)
+            return httpx.Response(200, request=request, json={"content": []})
+
+    monkeypatch.setattr("github_ai_daily.reasoning.wallet_signed_headers", lambda auth, key: {})
+    client = ReasoningClient(
+        "https://example.test/v1/messages",
+        "model-a",
+        WalletAuth("ltc", "wallet", "10", "id", "private"),
+        ec.generate_private_key(ec.SECP256R1()),
+    )
+    client.client = FakeClient()
+
+    client.test_model_with_web_search("claude-4.6-opus", "search recent AI news", 4096)
+
+    assert captured["endpoint"] == "https://example.test/v1/messages"
+    assert captured["body"] == {
+        "model": "claude-4.6-opus",
+        "max_tokens": 4096,
+        "stream": False,
+        "messages": [{"role": "user", "content": "search recent AI news"}],
+        "tools": [
+            {"type": "web_search_20260209", "name": "web_search", "max_uses": 8}
+        ],
+    }
+
+
 def test_reasoning_client_uses_modelink_openai_cache_extension(monkeypatch):
     captured = {}
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from uuid import uuid4
 from dataclasses import dataclass
 from datetime import datetime
@@ -8,16 +9,30 @@ from decimal import Decimal
 from pathlib import Path
 from time import perf_counter
 from typing import Any
+from urllib.parse import quote_plus
+from xml.etree import ElementTree
 
 import httpx
 from bs4 import BeautifulSoup
 
-from .reasoning import ReasoningClient, TokenUsage, _openai_chat_endpoint, _openai_responses_endpoint
+from .reasoning import (
+    ReasoningClient,
+    TokenUsage,
+    _openai_chat_endpoint,
+    _openai_responses_endpoint,
+)
 
 
 TEST_PROMPT = "你好。这个工具测试bitgo后端大模型的连通性。"
 CACHE_WARMUP_PROMPT = "Reply with exactly: cache-warmup"
 CACHE_READ_PROMPT = "Reply with exactly: cache-hit"
+WEB_SEARCH_PROMPT = (
+    "请使用联网搜索查找最近24小时的AI动态新闻，并整理成简明报告。"
+    "每条新闻必须包含标题、来源、发布时间、关键事实，以及原文链接或引用。"
+)
+MAX_WEB_SEARCH_CONTINUATIONS = 3
+WEB_SEARCH_FALLBACK_QUERY = "AI news past 24 hours"
+WEB_SEARCH_URL_PATTERN = re.compile(r'https?://[^\s<>\]\[\)\}"]+')
 # 2,048 repeated ASCII tokens provides margin above common prompt-cache minimums while
 # keeping the cache scenario to exactly two Messages requests.
 INPUT_CACHE_PREFIX = "cache " * 2048
@@ -111,6 +126,9 @@ class ModelCheckResult:
     protocol: str = "Anthropic Messages"
     cache_stage: str = ""
     input_cache_hit: bool | None = None
+    web_search_evidence: list[str] | None = None
+    web_search_sources: list[str] | None = None
+    web_search_continuations: int = 0
 
 
 @dataclass(slots=True)
@@ -137,6 +155,7 @@ class ModelCheckReport:
     wallet_balance: WalletBalance | None = None
     protocols: tuple[str, ...] = DEFAULT_PROTOCOLS
     input_cache_check: bool = False
+    web_search_check: bool = False
 
     @property
     def success_count(self) -> int:
@@ -208,6 +227,7 @@ def run_model_check(
     model_source: str = LOCAL_MODEL_SOURCE,
     protocols: tuple[str, ...] = DEFAULT_PROTOCOLS,
     input_cache_check: bool = False,
+    web_search_check: bool = False,
 ) -> ModelCheckReport:
     if max_tokens < 1:
         raise ValueError("--max-tokens must be greater than zero")
@@ -215,9 +235,23 @@ def run_model_check(
     if not models:
         raise ValueError("Model list is empty")
     if input_cache_check:
+        if web_search_check:
+            raise ValueError("--check-input-cache cannot be combined with --web-search")
         if len(models) != 1:
             raise ValueError("--check-input-cache requires exactly one --model")
         return _run_input_cache_check(
+            client,
+            models[0],
+            max_tokens,
+            protocols,
+            now=now,
+            model_source=model_source,
+        )
+    if web_search_check:
+        if len(models) != 1:
+            raise ValueError("--web-search requires exactly one --model")
+        validate_web_search_protocols(protocols)
+        return _run_web_search_check(
             client,
             models[0],
             max_tokens,
@@ -341,6 +375,313 @@ def _run_input_cache_check(
         protocols=protocols,
         input_cache_check=True,
     )
+
+
+def _run_web_search_check(
+    client: ReasoningClient,
+    model: ModelDefinition,
+    max_tokens: int,
+    protocols: tuple[str, ...],
+    *,
+    now: datetime | None,
+    model_source: str,
+) -> ModelCheckReport:
+    validate_web_search_protocols(protocols)
+    results: list[ModelCheckResult] = []
+    for index, protocol in enumerate(protocols, start=1):
+        started_at = datetime.now().astimezone()
+        started = perf_counter()
+        continuations = 0
+        response_history: list[dict[str, Any]] = []
+        raw_request = _web_search_request_body(
+            protocol, model.model_id, WEB_SEARCH_PROMPT, max_tokens
+        )
+        print(
+            f"[{index}/{len(protocols)}] Calling {protocol} web-search: {model.model_id}",
+            flush=True,
+        )
+        try:
+            if protocol == ANTHROPIC_PROTOCOL:
+                response = client.test_model_with_web_search(
+                    model.model_id, WEB_SEARCH_PROMPT, max_tokens
+                )
+                if isinstance(response.data, dict):
+                    response_history.append(response.data)
+                while continuations < MAX_WEB_SEARCH_CONTINUATIONS:
+                    content = (response.data or {}).get("content")
+                    if not isinstance(content, list):
+                        break
+                    if _is_web_search_tool_use(response):
+                        tool_results = _execute_web_search_tool_uses(content)
+                        response_history.append({"content": tool_results})
+                        continuations += 1
+                        response = client.continue_model_with_web_search_tool_results(
+                            model.model_id,
+                            WEB_SEARCH_PROMPT,
+                            max_tokens,
+                            content,
+                            tool_results,
+                        )
+                    elif _is_pause_turn(response):
+                        continuations += 1
+                        response = client.continue_model_with_web_search(
+                            model.model_id,
+                            WEB_SEARCH_PROMPT,
+                            max_tokens,
+                            content,
+                        )
+                    else:
+                        break
+                    if isinstance(response.data, dict):
+                        response_history.append(response.data)
+            else:
+                response = client.test_model_openai_responses_with_web_search(
+                    model.model_id, WEB_SEARCH_PROMPT, max_tokens
+                )
+                if isinstance(response.data, dict):
+                    response_history.append(response.data)
+            result = _result_from_response(model, protocol, response, started_at, started)
+            if protocol == ANTHROPIC_PROTOCOL:
+                _aggregate_web_search_usage(result, response_history)
+        except httpx.TimeoutException as exc:
+            result = _transport_failure(model, protocol, started_at, started, "网络/超时", str(exc))
+        except httpx.HTTPError as exc:
+            result = _transport_failure(model, protocol, started_at, started, "网络/超时", str(exc))
+        except Exception as exc:
+            result = _transport_failure(model, protocol, started_at, started, "客户端错误", str(exc))
+        result.raw_request = raw_request
+        result.request_url = _web_search_request_url(client, protocol)
+        result.web_search_continuations = continuations
+        _validate_web_search_result(result, response_history)
+        results.append(result)
+        print(_progress_line(index, len(protocols), result), flush=True)
+    return ModelCheckReport(
+        generated_at=now or datetime.now().astimezone(),
+        prompt=WEB_SEARCH_PROMPT,
+        max_tokens=max_tokens,
+        results=results,
+        model_source=model_source,
+        protocols=protocols,
+        web_search_check=True,
+    )
+
+
+def validate_web_search_protocols(protocols: tuple[str, ...]) -> None:
+    if not protocols:
+        raise ValueError("--web-search requires at least one protocol")
+    unsupported = [protocol for protocol in protocols if protocol == OPENAI_PROTOCOL]
+    if unsupported:
+        raise ValueError(
+            "--web-search supports only --protocol messages and/or responses; "
+            "OpenAI Chat Completions does not document web_search support"
+        )
+
+
+def _is_pause_turn(response) -> bool:
+    return (
+        response.status_code < 400
+        and isinstance(response.data, dict)
+        and response.data.get("stop_reason") == "pause_turn"
+    )
+
+
+def _is_web_search_tool_use(response) -> bool:
+    if response.status_code >= 400 or not isinstance(response.data, dict):
+        return False
+    return any(
+        isinstance(item, dict)
+        and item.get("type") == "tool_use"
+        and item.get("name") == "web_search"
+        and isinstance(item.get("id"), str)
+        for item in response.data.get("content", [])
+    )
+
+
+def _execute_web_search_tool_uses(content: list[dict[str, Any]]) -> list[dict[str, str]]:
+    return [
+        {
+            "type": "tool_result",
+            "tool_use_id": item["id"],
+            "content": _web_search_tool_text(_web_search_query(item)),
+        }
+        for item in content
+        if isinstance(item, dict)
+        and item.get("type") == "tool_use"
+        and item.get("name") == "web_search"
+        and isinstance(item.get("id"), str)
+    ]
+
+
+def _web_search_query(tool_use: dict[str, Any]) -> str:
+    tool_input = tool_use.get("input")
+    if isinstance(tool_input, dict):
+        for key in ("query", "q", "search_query"):
+            value = tool_input.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return WEB_SEARCH_FALLBACK_QUERY
+
+
+def _web_search_tool_text(query: str) -> str:
+    results, error = _run_web_search_query(query)
+    if error:
+        return f"Search query: {query}\nSearch failed: {error}"
+    if not results:
+        return f"Search query: {query}\nNo parseable results returned."
+    lines = [f"Search query: {query}", "Results:"]
+    for index, result in enumerate(results[:5], start=1):
+        lines.append(
+            f"{index}. {result['title']}\n   URL: {result['url']}\n   Snippet: {result['snippet']}"
+        )
+    return "\n".join(lines)
+
+
+def _run_web_search_query(query: str) -> tuple[list[dict[str, str]], str]:
+    try:
+        response = httpx.get(
+            "https://www.bing.com/search?format=rss&q=" + quote_plus(query),
+            headers={"User-Agent": "Mozilla/5.0 github-ai-daily/1.0"},
+            timeout=20,
+            follow_redirects=True,
+        )
+        response.raise_for_status()
+        root = ElementTree.fromstring(response.text)
+    except (httpx.HTTPError, ElementTree.ParseError) as exc:
+        return [], str(exc)
+    results = []
+    for item in root.findall("./channel/item")[:5]:
+        title = (item.findtext("title") or "").strip()
+        url = (item.findtext("link") or "").strip()
+        snippet = (item.findtext("description") or "").strip()
+        if title and url:
+            results.append({"title": title, "url": url, "snippet": snippet})
+    return results, ""
+
+
+def _aggregate_web_search_usage(
+    result: ModelCheckResult, response_history: list[dict[str, Any]]
+) -> None:
+    usages = [data["usage"] for data in response_history if isinstance(data.get("usage"), dict)]
+    if len(usages) <= 1:
+        return
+    summed_keys = (
+        "input_tokens",
+        "output_tokens",
+        "cache_creation_input_tokens",
+        "cache_read_input_tokens",
+        "consume_amount",
+    )
+    aggregate: dict[str, Any] = {"calls": usages}
+    for key in summed_keys:
+        values = [value for usage in usages if isinstance((value := usage.get(key)), int) and not isinstance(value, bool)]
+        if values:
+            aggregate[key] = sum(values)
+    if "input_tokens" in aggregate and "output_tokens" in aggregate:
+        aggregate["total_tokens"] = aggregate["input_tokens"] + aggregate["output_tokens"]
+    latest_balance = next(
+        (
+            usage["balance"]
+            for usage in reversed(usages)
+            if isinstance(usage.get("balance"), int) and not isinstance(usage["balance"], bool)
+        ),
+        None,
+    )
+    if latest_balance is not None:
+        aggregate["balance"] = latest_balance
+    result.usage = TokenUsage.from_response({"usage": aggregate})
+
+
+def _validate_web_search_result(
+    result: ModelCheckResult, response_history: list[dict[str, Any]] | None = None
+) -> None:
+    data = result.raw_response_json or {}
+    evidence: list[str] = []
+    sources: list[str] = []
+    for response_data in response_history or [data]:
+        found_evidence, found_sources = _web_search_evidence(result.protocol, response_data)
+        evidence.extend(found_evidence)
+        sources.extend(found_sources)
+    result.web_search_evidence = list(dict.fromkeys(evidence))
+    result.web_search_sources = list(dict.fromkeys(sources))
+    if not result.ok:
+        return
+    if result.protocol == ANTHROPIC_PROTOCOL and data.get("stop_reason") == "pause_turn":
+        result.ok = False
+        result.error_category = "联网搜索未完成"
+        result.error_message = (
+            f"Messages API returned pause_turn after {MAX_WEB_SEARCH_CONTINUATIONS} continuation attempts"
+        )
+        return
+    if not result.response_text.strip():
+        result.ok = False
+        result.error_category = "联网搜索报告为空"
+        result.error_message = "联网搜索调用成功，但未返回新闻报告文本"
+        return
+    if not result.web_search_evidence:
+        result.ok = False
+        result.error_category = "未检测到联网搜索证据"
+        result.error_message = "响应未包含该协议要求的 web_search 工具调用、结果或引用证据"
+
+
+def _web_search_evidence(
+    protocol: str, data: dict[str, Any]
+) -> tuple[list[str], list[str]]:
+    if protocol == ANTHROPIC_PROTOCOL:
+        evidence = []
+        for item in data.get("content", []):
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") == "server_tool_use" and item.get("name") == "web_search":
+                evidence.append("content.server_tool_use:web_search")
+            if item.get("type") == "tool_use" and item.get("name") == "web_search":
+                evidence.append("content.tool_use:web_search")
+            if item.get("type") == "web_search_tool_result":
+                evidence.append("content.web_search_tool_result")
+            if item.get("type") == "tool_result":
+                evidence.append("content.tool_result")
+        usage = data.get("usage")
+        server_tool_use = usage.get("server_tool_use") if isinstance(usage, dict) else None
+        if isinstance(server_tool_use, dict) and _positive_integer(
+            server_tool_use.get("web_search_requests")
+        ):
+            evidence.append("usage.server_tool_use.web_search_requests")
+        return evidence, _urls_in(data.get("content", []))
+    calls = [
+        item
+        for item in data.get("output", [])
+        if isinstance(item, dict) and item.get("type") == "web_search_call"
+    ]
+    evidence = []
+    sources: list[str] = []
+    for call in calls:
+        if call.get("results"):
+            evidence.append("output.web_search_call.results")
+            sources.extend(_urls_in(call.get("results")))
+        action = call.get("action")
+        if isinstance(action, dict) and action.get("sources"):
+            evidence.append("output.web_search_call.action.sources")
+            sources.extend(_urls_in(action.get("sources")))
+    return evidence, list(dict.fromkeys(sources))
+
+
+def _positive_integer(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _urls_in(value: Any) -> list[str]:
+    urls: list[str] = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key == "url" and isinstance(item, str) and item:
+                urls.append(item)
+            else:
+                urls.extend(_urls_in(item))
+    elif isinstance(value, list):
+        for item in value:
+            urls.extend(_urls_in(item))
+    elif isinstance(value, str):
+        urls.extend(WEB_SEARCH_URL_PATTERN.findall(value))
+    return list(dict.fromkeys(urls))
 
 
 def _cached_protocol_attempt(client: ReasoningClient, protocol: str):
@@ -678,6 +1019,29 @@ def _model_request_body(
     }
 
 
+def _web_search_request_body(
+    protocol: str, model_id: str, prompt: str, max_tokens: int
+) -> dict[str, Any]:
+    if protocol == ANTHROPIC_PROTOCOL:
+        return {
+            "model": model_id,
+            "max_tokens": max_tokens,
+            "stream": False,
+            "messages": [{"role": "user", "content": prompt}],
+            "tools": [
+                {"type": "web_search_20260209", "name": "web_search", "max_uses": 8}
+            ],
+        }
+    if protocol == OPENAI_RESPONSES_PROTOCOL:
+        return {
+            "model": model_id,
+            "max_output_tokens": max_tokens,
+            "input": prompt,
+            "tools": [{"type": "web_search"}],
+        }
+    raise ValueError(f"--web-search does not support protocol: {protocol}")
+
+
 def _cached_request_body(
     protocol: str,
     model_id: str,
@@ -755,6 +1119,15 @@ def _model_request_url(client: ReasoningClient, protocol: str) -> str:
     if protocol == OPENAI_RESPONSES_PROTOCOL:
         return _openai_responses_endpoint(endpoint)
     return endpoint
+
+
+def _web_search_request_url(client: ReasoningClient, protocol: str) -> str:
+    endpoint = str(getattr(client, "endpoint", ""))
+    if not endpoint:
+        return ""
+    if protocol == ANTHROPIC_PROTOCOL:
+        return endpoint
+    return _model_request_url(client, protocol)
 
 
 def _openai_content_text(data: dict[str, Any]) -> str:

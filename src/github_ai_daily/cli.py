@@ -56,6 +56,7 @@ from .model_check import (
     save_model_catalog,
     select_models,
     select_protocols,
+    validate_web_search_protocols,
     classify_error,
     wallet_balance_from_response,
 )
@@ -112,7 +113,12 @@ def parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     model_check.add_argument("--output-dir", type=Path, help="Directory for the HTML and Markdown reports")
-    model_check.add_argument("--max-tokens", type=int, default=128, help="Maximum output tokens per model request (default: 128)")
+    model_check.add_argument(
+        "--max-tokens",
+        type=int,
+        default=None,
+        help="Maximum output tokens per model request (default: 128; 4096 with --web-search)",
+    )
     model_check.add_argument(
         "--timeout-seconds",
         type=float,
@@ -142,6 +148,14 @@ def parser() -> argparse.ArgumentParser:
         help=(
             "Run the minimal two-request input-cache verification for exactly one "
             "model on every selected protocol"
+        ),
+    )
+    model_check.add_argument(
+        "--web-search",
+        action="store_true",
+        help=(
+            "Verify documented web_search connectivity for exactly one model on "
+            "the selected Messages and/or Responses protocols"
         ),
     )
     model_check.add_argument("--bff-base-url", default=DEFAULT_BFF_BASE_URL, help="Bitgo BFF base URL used to read the final sub-wallet balance")
@@ -638,6 +652,7 @@ def cmd_reasoning(args, settings: Settings) -> int:
 
 
 def cmd_model_check(args, settings: Settings) -> int:
+    _validate_model_check_mode_args(args)
     configured_timeout = getattr(args, "timeout_seconds", None)
     timeout_seconds = (
         configured_timeout
@@ -689,22 +704,29 @@ def cmd_model_check(args, settings: Settings) -> int:
         print(f"Testing selected models: {', '.join(model.model_id for model in models)}", flush=True)
     protocols = select_protocols(getattr(args, "protocol", []))
     input_cache_check = getattr(args, "check_input_cache", False)
+    web_search_check = getattr(args, "web_search", False)
     if input_cache_check:
         if len(models) != 1:
             raise ValueError("--check-input-cache requires exactly one --model")
+    if web_search_check and len(models) != 1:
+        raise ValueError("--web-search requires exactly one --model")
     print(f"Testing protocols: {', '.join(protocols)}", flush=True)
     client = ReasoningClient(
         reasoning_endpoint(settings), settings.model or DEFAULT_MODEL, auth,
         reasoning_interface_key(settings, args), timeout_seconds,
     )
     try:
+        max_tokens = args.max_tokens
+        if max_tokens is None:
+            max_tokens = 4096 if web_search_check else 128
         report = run_model_check(
             client,
-            max_tokens=args.max_tokens,
+            max_tokens=max_tokens,
             models=models,
             model_source=model_source,
             protocols=protocols,
             input_cache_check=input_cache_check,
+            web_search_check=web_search_check,
         )
     finally:
         client.close()
@@ -770,6 +792,25 @@ def cmd_model_check(args, settings: Settings) -> int:
         )
         print(f"Sent {backend} report to {', '.join(recipients)}")
     return 0
+
+
+def _validate_model_check_mode_args(args) -> None:
+    """Reject incompatible model-check modes before wallet setup or HTTP calls."""
+    input_cache_check = getattr(args, "check_input_cache", False)
+    web_search_check = getattr(args, "web_search", False)
+    if input_cache_check and web_search_check:
+        raise ValueError("--check-input-cache cannot be combined with --web-search")
+    if not web_search_check:
+        return
+    selectors = [
+        item.strip()
+        for value in getattr(args, "model", [])
+        for item in value.split(",")
+        if item.strip()
+    ]
+    if len({selector.casefold() for selector in selectors}) != 1:
+        raise ValueError("--web-search requires exactly one --model")
+    validate_web_search_protocols(select_protocols(getattr(args, "protocol", [])))
 
 
 def cmd_vps_check(args, settings: Settings) -> int:

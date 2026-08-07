@@ -394,6 +394,254 @@ def test_input_cache_check_requires_each_selected_protocol_to_hit():
     assert report.fully_supported_model_count == 0
 
 
+def test_web_search_check_uses_documented_messages_and_responses_shapes():
+    model = ModelDefinition("search-model", "Search Model", "Test", Decimal("1"), Decimal("2"))
+
+    class FakeClient:
+        endpoint = "https://api.example.test/v1/messages"
+
+        def __init__(self):
+            self.messages_calls = 0
+            self.continuations = []
+
+        def test_model_with_web_search(self, name, prompt, max_tokens):
+            self.messages_calls += 1
+            assert (name, prompt, max_tokens) == (
+                "search-model", model_check.WEB_SEARCH_PROMPT, 128
+            )
+            return SimpleNamespace(
+                status_code=200,
+                data={
+                    "stop_reason": "pause_turn",
+                    "content": [{"type": "server_tool_use", "name": "web_search"}],
+                    "usage": {"server_tool_use": {"web_search_requests": 1}},
+                },
+                text="{}",
+            )
+
+        def continue_model_with_web_search(self, name, prompt, max_tokens, content):
+            self.continuations.append((name, prompt, max_tokens, content))
+            return SimpleNamespace(
+                status_code=200,
+                data={
+                    "stop_reason": "end_turn",
+                    "content": [
+                        {"type": "text", "text": "AI news report"},
+                        {
+                            "type": "web_search_tool_result",
+                            "content": [{"url": "https://news.example.test/ai"}],
+                        },
+                    ],
+                    "usage": {"server_tool_use": {"web_search_requests": 1}},
+                },
+                text="{}",
+            )
+
+        def test_model_openai_responses_with_web_search(self, name, prompt, max_tokens):
+            assert (name, prompt, max_tokens) == (
+                "search-model", model_check.WEB_SEARCH_PROMPT, 128
+            )
+            return SimpleNamespace(
+                status_code=200,
+                data={
+                    "output": [
+                        {
+                            "type": "web_search_call",
+                            "action": {"sources": [{"url": "https://source.example.test/ai"}]},
+                        },
+                        {
+                            "type": "message",
+                            "content": [{"type": "output_text", "text": "Responses AI news report"}],
+                        },
+                    ],
+                    "usage": {"input_tokens": 12, "output_tokens": 8},
+                },
+                text="{}",
+            )
+
+    client = FakeClient()
+    report = run_model_check(
+        client,
+        models=(model,),
+        protocols=(model_check.ANTHROPIC_PROTOCOL, model_check.OPENAI_RESPONSES_PROTOCOL),
+        web_search_check=True,
+    )
+
+    assert report.web_search_check is True
+    assert report.success_count == 2
+    assert report.fully_supported_model_count == 1
+    assert len(client.continuations) == 1
+    assert report.results[0].web_search_continuations == 1
+    assert report.results[0].web_search_sources == ["https://news.example.test/ai"]
+    assert report.results[1].web_search_sources == ["https://source.example.test/ai"]
+    assert report.results[0].request_url == "https://api.example.test/v1/messages"
+    assert report.results[1].request_url == "https://api.example.test/bypass/openai/v1/responses"
+    assert report.results[0].raw_request == {
+        "model": "search-model",
+        "max_tokens": 128,
+        "stream": False,
+        "messages": [{"role": "user", "content": model_check.WEB_SEARCH_PROMPT}],
+        "tools": [{"type": "web_search_20260209", "name": "web_search", "max_uses": 8}],
+    }
+    assert report.results[1].raw_request == {
+        "model": "search-model",
+        "max_output_tokens": 128,
+        "input": model_check.WEB_SEARCH_PROMPT,
+        "tools": [{"type": "web_search"}],
+    }
+    assert "Web search evidence" in render_model_check_markdown(report)
+    assert "Web search sources" in render_model_check_html(report)
+
+
+def test_web_search_check_executes_messages_tool_use_and_returns_tool_result(monkeypatch):
+    model = ModelDefinition("search-model", "Search Model", "Test", Decimal("1"), Decimal("2"))
+    monkeypatch.setattr(
+        model_check,
+        "_run_web_search_query",
+        lambda query: ([{"title": "AI headline", "url": "https://news.example.test/ai", "snippet": "details"}], ""),
+    )
+
+    class FakeClient:
+        endpoint = "https://api.example.test/v1/messages"
+
+        def __init__(self):
+            self.tool_results = []
+
+        def test_model_with_web_search(self, name, prompt, max_tokens):
+            return SimpleNamespace(
+                status_code=200,
+                data={
+                    "stop_reason": "tool_use",
+                    "content": [{"id": "tool-1", "type": "tool_use", "name": "web_search", "input": {}}],
+                    "usage": {"input_tokens": 2, "output_tokens": 1},
+                },
+                text="{}",
+            )
+
+        def continue_model_with_web_search_tool_results(
+            self, name, prompt, max_tokens, assistant_content, tool_results
+        ):
+            self.tool_results = tool_results
+            return SimpleNamespace(
+                status_code=200,
+                data={
+                    "stop_reason": "end_turn",
+                    "content": [{"type": "text", "text": "AI news report"}],
+                    "usage": {"input_tokens": 3, "output_tokens": 2},
+                },
+                text="{}",
+            )
+
+    client = FakeClient()
+    report = run_model_check(
+        client,
+        models=(model,),
+        protocols=(model_check.ANTHROPIC_PROTOCOL,),
+        web_search_check=True,
+    )
+
+    assert report.success_count == 1
+    assert client.tool_results == [
+        {
+            "type": "tool_result",
+            "tool_use_id": "tool-1",
+            "content": "Search query: AI news past 24 hours\nResults:\n1. AI headline\n   URL: https://news.example.test/ai\n   Snippet: details",
+        }
+    ]
+    assert report.results[0].web_search_sources == ["https://news.example.test/ai"]
+    assert report.results[0].web_search_continuations == 1
+    assert report.results[0].usage.input_tokens == 5
+    assert report.results[0].usage.output_tokens == 3
+
+
+def test_web_search_check_rejects_missing_evidence_and_exhausted_pause_turns():
+    model = ModelDefinition("search-model", "Search Model", "Test", Decimal("1"), Decimal("2"))
+
+    class NoEvidenceClient:
+        endpoint = "https://api.example.test/v1/messages"
+
+        def test_model_with_web_search(self, name, prompt, max_tokens):
+            return SimpleNamespace(
+                status_code=200,
+                data={"content": [{"type": "text", "text": "report"}], "usage": {}},
+                text="{}",
+            )
+
+    missing = run_model_check(
+        NoEvidenceClient(),
+        models=(model,),
+        protocols=(model_check.ANTHROPIC_PROTOCOL,),
+        web_search_check=True,
+    )
+    assert missing.results[0].ok is False
+    assert missing.results[0].error_category == "未检测到联网搜索证据"
+
+    class PauseClient:
+        endpoint = "https://api.example.test/v1/messages"
+
+        def __init__(self):
+            self.calls = 0
+
+        def test_model_with_web_search(self, name, prompt, max_tokens):
+            self.calls += 1
+            return self._paused()
+
+        def continue_model_with_web_search(self, name, prompt, max_tokens, content):
+            self.calls += 1
+            return self._paused()
+
+        @staticmethod
+        def _paused():
+            return SimpleNamespace(
+                status_code=200,
+                data={
+                    "stop_reason": "pause_turn",
+                    "content": [{"type": "server_tool_use", "name": "web_search"}],
+                    "usage": {"server_tool_use": {"web_search_requests": 1}},
+                },
+                text="{}",
+            )
+
+    client = PauseClient()
+    paused = run_model_check(
+        client,
+        models=(model,),
+        protocols=(model_check.ANTHROPIC_PROTOCOL,),
+        web_search_check=True,
+    )
+    assert client.calls == 1 + model_check.MAX_WEB_SEARCH_CONTINUATIONS
+    assert paused.results[0].ok is False
+    assert paused.results[0].error_category == "联网搜索未完成"
+
+
+def test_web_search_check_rejects_chat_and_conflicting_cache_mode():
+    model = ModelDefinition("search-model", "Search Model", "Test", Decimal("1"), Decimal("2"))
+    try:
+        run_model_check(
+            object(),
+            models=(model,),
+            protocols=(model_check.OPENAI_PROTOCOL,),
+            web_search_check=True,
+        )
+    except ValueError as exc:
+        assert "messages and/or responses" in str(exc)
+    else:
+        raise AssertionError("Expected web-search Chat Completions validation failure")
+
+    try:
+        run_model_check(
+            object(),
+            models=(model,),
+            protocols=(model_check.ANTHROPIC_PROTOCOL,),
+            input_cache_check=True,
+            web_search_check=True,
+        )
+    except ValueError as exc:
+        assert "cannot be combined" in str(exc)
+    else:
+        raise AssertionError("Expected incompatible mode validation failure")
+
+
 def test_product_guide_catalog_has_all_34_models():
     assert len(model_check.MODELS) == 34
     assert model_check.MODELS[0].model_id == "deepseek-v3"

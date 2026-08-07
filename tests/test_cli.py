@@ -726,12 +726,36 @@ def test_parser_supports_model_check_and_gmail_auth():
     assert parser().parse_args(["model-check", "--mail-backend", "agent"]).mail_backend == "agent"
     assert parser().parse_args(["model-check", "--new-money-id"]).new_money_id is True
     assert parser().parse_args(["model-check", "--check-input-cache"]).check_input_cache is True
+    assert parser().parse_args(["model-check", "--web-search"]).web_search is True
+    assert parser().parse_args(["model-check"]).max_tokens is None
+    assert parser().parse_args(["model-check", "--max-tokens", "512"]).max_tokens == 512
     assert parser().parse_args(["model-check"]).timeout_seconds is None
     assert parser().parse_args(["model-check", "--timeout-seconds", "240"]).timeout_seconds == 240
     assert parser().parse_args(["model-check"]).protocol == []
     assert parser().parse_args(["model-check", "--protocol", "all"]).protocol == ["all"]
     assert parser().parse_args(["model-check", "--protocol", "messages,responses", "--protocol", "chat"]).protocol == ["messages,responses", "chat"]
     assert parser().parse_args(["gmail-auth", "--console"]).command == "gmail-auth"
+
+
+def test_web_search_cli_validation_happens_before_wallet_setup(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "github_ai_daily.cli.reasoning_auth",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("wallet setup must not run")),
+    )
+    args = Namespace(
+        config=tmp_path / "config.toml",
+        model=["openai/gpt-5-mini"],
+        protocol=[],
+        web_search=True,
+        check_input_cache=False,
+    )
+
+    try:
+        cmd_model_check(args, Settings())
+    except ValueError as exc:
+        assert "messages and/or responses" in str(exc)
+    else:
+        raise AssertionError("Expected default web-search protocol validation failure")
 
 
 def test_generate_parser_supports_candidate_limit():

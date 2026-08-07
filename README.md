@@ -278,6 +278,54 @@ export REASONING_PRIVATE_KEY="..."
 .venv/bin/github-ai-daily model-check --protocol all
 ```
 
+### Web-search verification
+
+Use `--web-search` to verify one selected model can use Modelink's documented
+web-search tools to produce a report of AI news from the last 24 hours. The
+option requires exactly one explicitly selected `--model`, is mutually exclusive
+with `--check-input-cache`, and makes one initial request per selected protocol.
+Anthropic Messages may issue up to three continuation requests when the server
+returns `pause_turn`. Omitting `--max-tokens` uses 4096 tokens for this report;
+provide the option to override it.
+
+Only `messages` and `responses` are supported. Modelink's OpenAI Chat
+Completions documentation does not define web-search parameters, so the
+default protocol combination and `--protocol chat` / `--protocol all` are
+rejected before wallet setup or any API request. A successful check requires a
+non-empty report plus protocol-specific web-search evidence: Messages returns
+a server-tool event, tool result, or positive
+`usage.server_tool_use.web_search_requests`. Messages requests use
+the configured `/v1/messages` endpoint with string message content,
+`web_search_20260209`, `max_uses: 8`, and `stream: false`.
+When that endpoint returns a regular `tool_use` event, the CLI runs a Bing RSS
+search (using the model query, or the fixed recent-AI-news query when it is
+empty), returns a `tool_result`, and then requests the final report. The report
+aggregates usage and cost across these Messages turns.
+Responses returns a `web_search_call` with results or source URLs. The normal
+model-check Markdown and HTML reports include this evidence, source URLs,
+continuation count, request body, response, usage, and cost.
+
+```bash
+# Anthropic Messages only
+.venv/bin/github-ai-daily model-check \
+  --model claude-4.6-opus \
+  --web-search \
+  --protocol messages \
+  --max-tokens 4096
+
+# OpenAI Responses only
+.venv/bin/github-ai-daily model-check \
+  --model openai/gpt-5-mini \
+  --web-search \
+  --protocol responses
+
+# Both documented web-search protocols
+.venv/bin/github-ai-daily model-check \
+  --model openai/gpt-5-mini \
+  --web-search \
+  --protocol messages,responses
+```
+
 ### Input-cache verification
 
 Use `--check-input-cache` to run the smallest cache test for one selected model.

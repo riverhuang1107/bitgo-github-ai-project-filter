@@ -142,6 +142,8 @@ def render_model_check_markdown(report: ModelCheckReport) -> str:
         else "- money_id：未复用。",
         "",
     ]
+    if report.web_search_check:
+        lines.insert(-1, "- Web-search verification: each successful protocol has report text and tool evidence")
     lines[-1:-1] = _markdown_wallet_balance(report)
     lines.extend(_markdown_failure_summary(report))
     lines.extend(["## 调用明细", ""])
@@ -166,6 +168,17 @@ def render_model_check_markdown(report: ModelCheckReport) -> str:
                         + f"（{cache_hit_usage_field(result.protocol)}={result.usage.cache_read_input_tokens if result.usage else '未提供'}）"
                     ]
                     if result.input_cache_hit is not None
+                    else []
+                ),
+                *(
+                    [
+                        "- Web search evidence: "
+                        + (", ".join(result.web_search_evidence) or "none"),
+                        "- Web search sources: "
+                        + (", ".join(result.web_search_sources or []) or "none"),
+                        f"- Web search continuations: {result.web_search_continuations}",
+                    ]
+                    if result.web_search_evidence is not None
                     else []
                 ),
                 f"- 请求 URL：{result.request_url or '未捕获'}",
@@ -432,6 +445,14 @@ def _model_check_row(index: int, result: ModelCheckResult) -> str:
         )
     elif result.cache_stage:
         cache_detail = f"<br><small>Input-cache stage: {html.escape(result.cache_stage)}</small>"
+    if result.web_search_evidence is not None:
+        evidence = ", ".join(result.web_search_evidence) or "none"
+        sources = ", ".join(result.web_search_sources or []) or "none"
+        cache_detail += (
+            f"<br><small>Web search evidence: {html.escape(evidence)}"
+            f"<br>Web search sources: {html.escape(sources)}"
+            f"<br>Web search continuations: {result.web_search_continuations}</small>"
+        )
     usage = _format_json(result.usage.raw if result.usage else None)
     raw_request = _format_json(result.raw_request)
     raw_response = _format_json(result.raw_response_json)

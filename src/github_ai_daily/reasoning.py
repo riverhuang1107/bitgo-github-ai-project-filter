@@ -284,6 +284,76 @@ class ReasoningClient:
         }
         return self._test_request(_openai_responses_endpoint(self.endpoint), body)
 
+    def test_model_with_web_search(
+        self, model: str, prompt: str, max_tokens: int
+    ) -> ReasoningResponse:
+        """Call the configured Anthropic Messages endpoint with web search."""
+        body = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "stream": False,
+            "messages": [{"role": "user", "content": prompt}],
+            "tools": [
+                {"type": "web_search_20260209", "name": "web_search", "max_uses": 8}
+            ],
+        }
+        return self._test_request(self.endpoint, body)
+
+    def continue_model_with_web_search(
+        self,
+        model: str,
+        prompt: str,
+        max_tokens: int,
+        assistant_content: list[dict],
+    ) -> ReasoningResponse:
+        """Continue a configured Anthropic Messages web-search turn after ``pause_turn``."""
+        body = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "stream": False,
+            "messages": [
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": assistant_content},
+            ],
+            "tools": [
+                {"type": "web_search_20260209", "name": "web_search", "max_uses": 8}
+            ],
+        }
+        return self._test_request(self.endpoint, body)
+
+    def continue_model_with_web_search_tool_results(
+        self,
+        model: str,
+        prompt: str,
+        max_tokens: int,
+        assistant_content: list[dict],
+        tool_results: list[dict],
+    ) -> ReasoningResponse:
+        """Return locally executed web-search results to a Messages tool call."""
+        body = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "stream": False,
+            "messages": [
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": assistant_content},
+                {"role": "user", "content": tool_results},
+            ],
+        }
+        return self._test_request(self.endpoint, body)
+
+    def test_model_openai_responses_with_web_search(
+        self, model: str, prompt: str, max_tokens: int
+    ) -> ReasoningResponse:
+        """Call the Modelink OpenAI Responses bypass endpoint with web search."""
+        body = {
+            "model": model,
+            "max_output_tokens": max_tokens,
+            "input": prompt,
+            "tools": [{"type": "web_search"}],
+        }
+        return self._test_request(_openai_responses_endpoint(self.endpoint), body)
+
     def _test_request(self, endpoint: str, body: dict) -> ReasoningResponse:
         headers = wallet_signed_headers(self.auth, self.interface_key)
         response = self.client.post(endpoint, headers=headers, json=body)
